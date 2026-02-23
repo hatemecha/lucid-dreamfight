@@ -306,6 +306,11 @@
     dirLight.position.set(18, 26, 6);
     scene.add(dirLight);
 
+    const mapHalfSize = 52;
+    const mapFloorSize = mapHalfSize * 2;
+    const mapWallThickness = 2.2;
+    const mapWallHeight = 24.0;
+
     const skyMat = new THREE.ShaderMaterial({
       uniforms: {
         topColor: { value: new THREE.Color(0xcfc0ff) },
@@ -344,6 +349,52 @@
     const skyDome = new THREE.Mesh(new THREE.SphereGeometry(260, 24, 16), skyMat);
     scene.add(skyDome);
 
+    const fireflyGroup = new THREE.Group();
+    scene.add(fireflyGroup);
+    const fireflies = [];
+    const fireflyCount = 110;
+    const fireflyArea = mapHalfSize - 1.2;
+    const fireflyGlowMat = new THREE.SpriteMaterial({
+      color: 0xe8ff8a,
+      transparent: true,
+      opacity: 0.78,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    });
+
+    for (let i = 0; i < fireflyCount; i++) {
+      const sprite = new THREE.Sprite(fireflyGlowMat.clone());
+      const x = (Math.random() * 2 - 1) * fireflyArea;
+      const z = (Math.random() * 2 - 1) * fireflyArea;
+      const y = 0.9 + Math.random() * (mapWallHeight - 1.8);
+      sprite.position.set(x, y, z);
+      const s = 0.08 + Math.random() * 0.08;
+      sprite.scale.set(s, s, s);
+      fireflyGroup.add(sprite);
+
+      let light = null;
+      if (i < 40) {
+        light = new THREE.PointLight(0xc9ff7a, 0.34 + Math.random() * 0.22, 11 + Math.random() * 5, 2);
+        light.position.copy(sprite.position);
+        scene.add(light);
+      }
+
+      fireflies.push({
+        sprite,
+        light,
+        baseX: x,
+        baseY: y,
+        baseZ: z,
+        driftRadius: 0.9 + Math.random() * 1.8,
+        speed: 0.42 + Math.random() * 0.9,
+        phase: Math.random() * Math.PI * 2,
+        bobPhase: Math.random() * Math.PI * 2,
+        bobSpeed: 0.9 + Math.random() * 1.4,
+        flickerPhase: Math.random() * Math.PI * 2,
+        flickerSpeed: 3.0 + Math.random() * 4.5
+      });
+    }
+
     const pixelWidth = 320;
     const pixelHeight = 240;
 
@@ -364,10 +415,6 @@
     const screenQuad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), screenMat);
     postScene.add(screenQuad);
 
-    const mapHalfSize = 52;
-    const mapFloorSize = mapHalfSize * 2;
-    const mapWallThickness = 2.2;
-    const mapWallHeight = 24.0;
     const grid = new THREE.GridHelper(mapFloorSize + mapWallThickness * 2, mapFloorSize / 2, 0x2f3d54, 0x1a1f2c);
     scene.add(grid);
 
@@ -439,6 +486,10 @@
     ];
     const dynamicTerrainTiles = [];
     const dynamicColliderSet = new Set();
+    const destructibleBlockStates = [];
+    const colliderToBlockState = new Map();
+    let nextBlockId = 1;
+
 
     const addArenaBlock = (sx, sy, sz, x, y, z, matIndex = 0, shootable = false, motionPreset = null) => {
       const mesh = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), platformMats[matIndex % platformMats.length]);
@@ -446,19 +497,56 @@
       mesh.userData.shootable = shootable;
       boxes.add(mesh);
       mesh.updateMatrixWorld(true);
+
       const collider = new THREE.Box3().setFromObject(mesh);
       boxColliders.push(collider);
+
+      const halfX = sx * 0.5;
+      const halfY = sy * 0.5;
+      const halfZ = sz * 0.5;
+      const fractureLayers = THREE.MathUtils.clamp(Math.round(Math.max(8, sy / 1.5)), 8, 32);
+      const durabilityBase = Math.round(
+        160 +
+        sy * 5 +
+        (sx + sz) * 15 +
+        (shootable ? 25 : 0) +
+        (motionPreset ? 60 : 0)
+      );
+
+      const blockState = {
+        id: nextBlockId++,
+        mesh,
+        collider,
+        halfX,
+        halfY,
+        halfZ,
+        baseHalfY: halfY,
+        currentHalfY: halfY,
+        fractureLayers,
+        brokenLayers: 0,
+        layerHealth: Math.max(1, durabilityBase / fractureLayers),
+        pendingDamage: 0,
+        health: durabilityBase,
+        maxHealth: durabilityBase,
+        destroyed: false,
+        dynamicTile: null
+      };
+      mesh.userData.blockState = blockState;
+      colliderToBlockState.set(collider, blockState);
+      destructibleBlockStates.push(blockState);
+
       if (motionPreset) {
         dynamicColliderSet.add(collider);
-        dynamicTerrainTiles.push({
+        const tile = {
           mesh,
           collider,
+          blockState,
           baseY: y,
           lastY: y,
           deltaY: 0,
-          halfX: sx * 0.5,
-          halfY: sy * 0.5,
-          halfZ: sz * 0.5,
+          halfX,
+          halfY,
+          halfZ,
           minY: motionPreset.minY,
           maxY: motionPreset.maxY,
           targetY: motionPreset.targetY,
@@ -470,8 +558,11 @@
           pauseMax: motionPreset.pauseMax,
           moveUp: motionPreset.moveUp,
           travelRange: motionPreset.maxY - motionPreset.minY
-        });
+        };
+        blockState.dynamicTile = tile;
+        dynamicTerrainTiles.push(tile);
       }
+
       return mesh;
     };
 
@@ -753,6 +844,7 @@
         name: "PUNOS",
         fireType: "melee",
         damage: 52,
+        structureDamage: 20,
         range: 2.2,
         clipSize: 0,
         reserveAmmo: 0,
@@ -767,6 +859,7 @@
         name: "REVOLVER",
         fireType: "hitscan",
         damage: 34,
+        structureDamage: 34,
         range: 170,
         clipSize: 6,
         reserveAmmo: 36,
@@ -783,6 +876,7 @@
         name: "ESCOPETA",
         fireType: "hitscan",
         damage: 16,
+        structureDamage: 12,
         range: 58,
         clipSize: 2,
         reserveAmmo: 24,
@@ -799,6 +893,7 @@
         name: "SNIPER",
         fireType: "hitscan",
         damage: 125,
+        structureDamage: 120,
         range: 260,
         clipSize: 1,
         reserveAmmo: 16,
@@ -815,6 +910,7 @@
         name: "BAZOOKA",
         fireType: "projectile",
         damage: 120,
+        structureDamage: 260,
         explosionRadius: 5.4,
         clipSize: 1,
         reserveAmmo: 8,
@@ -863,6 +959,7 @@
     const projectiles = [];
     const impactMarks = [];
     const hitFlashStates = [];
+    const debrisChunks = [];
     const raycaster = new THREE.Raycaster();
     const bulletTargets = [boxes, boundaryWalls, ground];
 
@@ -934,6 +1031,10 @@
     const tempNormal = new THREE.Vector3();
     const tempClosest = new THREE.Vector3();
     const tempWallNormal = new THREE.Vector3();
+    const tempTraceStart = new THREE.Vector3();
+    const tempTraceEnd = new THREE.Vector3();
+    const tempTracePos = new THREE.Vector3();
+    const tempImpactDir = new THREE.Vector3();
 
     const getActiveWeapon = () => weapons[currentWeaponIndex];
 
@@ -1141,7 +1242,216 @@
       }
     };
 
-    const doHitscanRay = (origin, direction, range) => {
+    const getBlockStateFromObject = (object3d) => {
+      let node = object3d;
+      while (node) {
+        if (node.userData?.blockState) return node.userData.blockState;
+        node = node.parent;
+      }
+      return null;
+    };
+
+    const removeColliderFromWorld = (collider) => {
+      const colliderIndex = boxColliders.indexOf(collider);
+      if (colliderIndex >= 0) boxColliders.splice(colliderIndex, 1);
+      dynamicColliderSet.delete(collider);
+      colliderToBlockState.delete(collider);
+    };
+
+    const spawnBlockDebris = (blockState, hitPoint, hitNormal, impactDir, energy = 1) => {
+      const sourceMaterial = blockState.mesh.material;
+      const baseColor = sourceMaterial?.color ? sourceMaterial.color : new THREE.Color(0x8d93a2);
+      const pieceCount = THREE.MathUtils.clamp(Math.round(2 + energy * 2 + Math.random() * 2), 2, 7);
+      const normal = hitNormal.clone().normalize();
+      const push = impactDir.clone().normalize();
+
+      for (let i = 0; i < pieceCount; i++) {
+        const size = 0.16 + Math.random() * 0.28;
+        const piece = new THREE.Mesh(
+          new THREE.BoxGeometry(size, size, size),
+          new THREE.MeshStandardMaterial({
+            color: baseColor.clone().offsetHSL((Math.random() - 0.5) * 0.04, 0, (Math.random() - 0.5) * 0.08),
+            roughness: 0.85,
+            metalness: 0.05,
+            transparent: true,
+            opacity: 0.95
+          })
+        );
+
+        piece.position.copy(hitPoint)
+          .addScaledVector(normal, 0.08 + Math.random() * 0.1)
+          .add(new THREE.Vector3((Math.random() - 0.5) * 0.32, Math.random() * 0.2, (Math.random() - 0.5) * 0.32));
+        piece.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
+        scene.add(piece);
+
+        const velocity = new THREE.Vector3()
+          .copy(normal)
+          .multiplyScalar((2.2 + Math.random() * 2.4) * energy)
+          .addScaledVector(push, (1.6 + Math.random() * 2.2) * energy)
+          .add(new THREE.Vector3((Math.random() - 0.5) * 1.8, 2.8 + Math.random() * 2.2, (Math.random() - 0.5) * 1.8));
+
+        debrisChunks.push({
+          mesh: piece,
+          velocity,
+          spin: new THREE.Vector3((Math.random() - 0.5) * 8, (Math.random() - 0.5) * 8, (Math.random() - 0.5) * 8),
+          life: 0.65 + Math.random() * 0.55,
+          maxLife: 1.05,
+          bounce: 0.24 + Math.random() * 0.12,
+          drag: 2.6 + Math.random() * 1.2
+        });
+      }
+    };
+
+    const syncBlockCollider = (blockState) => {
+      const halfY = blockState.dynamicTile ? blockState.dynamicTile.halfY : blockState.currentHalfY;
+      blockState.collider.min.set(
+        blockState.mesh.position.x - blockState.halfX,
+        blockState.mesh.position.y - halfY,
+        blockState.mesh.position.z - blockState.halfZ
+      );
+      blockState.collider.max.set(
+        blockState.mesh.position.x + blockState.halfX,
+        blockState.mesh.position.y + halfY,
+        blockState.mesh.position.z + blockState.halfZ
+      );
+    };
+
+    const chipBlockLayer = (blockState, hitPoint, hitNormal, impactDir, energy = 1) => {
+      if (!blockState || blockState.destroyed) return false;
+
+      blockState.brokenLayers += 1;
+      const remainingLayers = Math.max(0, blockState.fractureLayers - blockState.brokenLayers);
+      const remainingRatio = remainingLayers / blockState.fractureLayers;
+
+      if (remainingLayers <= 0 || remainingRatio <= 0.02) {
+        destroyBlockState(blockState, hitPoint, hitNormal, impactDir, energy * 1.15);
+        return true;
+      }
+
+      blockState.currentHalfY = blockState.baseHalfY * remainingRatio;
+      const newScaleY = Math.max(0.02, blockState.currentHalfY / blockState.baseHalfY);
+      blockState.mesh.scale.y = newScaleY;
+
+      if (blockState.dynamicTile) {
+        blockState.dynamicTile.halfY = blockState.currentHalfY;
+      }
+      syncBlockCollider(blockState);
+
+      blockState.health = blockState.maxHealth * remainingRatio;
+      spawnBlockDebris(blockState, hitPoint, hitNormal, impactDir, Math.max(0.45, energy * 0.55));
+      return true;
+    };
+
+    const destroyBlockState = (blockState, hitPoint, hitNormal, impactDir, energy = 1) => {
+      if (!blockState || blockState.destroyed) return false;
+
+      blockState.destroyed = true;
+      blockState.health = 0;
+
+      if (blockState.dynamicTile) {
+        const tileIndex = dynamicTerrainTiles.indexOf(blockState.dynamicTile);
+        if (tileIndex >= 0) dynamicTerrainTiles.splice(tileIndex, 1);
+      }
+
+      removeColliderFromWorld(blockState.collider);
+      spawnBlockDebris(blockState, hitPoint, hitNormal, impactDir, energy);
+
+      boxes.remove(blockState.mesh);
+      blockState.mesh.visible = false;
+      if (blockState.mesh.geometry) blockState.mesh.geometry.dispose();
+      return true;
+    };
+
+    const applyDamageToBlockState = (blockState, damage, hitPoint, hitNormal, impactDir, energy = 1) => {
+      if (!blockState || blockState.destroyed) return false;
+      if (!Number.isFinite(damage) || damage <= 0) return false;
+
+      blockState.pendingDamage += damage;
+      const maxLayersPerHit = 4;
+      let layersBrokenThisHit = 0;
+      while (
+        blockState.pendingDamage >= blockState.layerHealth &&
+        !blockState.destroyed &&
+        layersBrokenThisHit < maxLayersPerHit
+      ) {
+        blockState.pendingDamage -= blockState.layerHealth;
+        chipBlockLayer(blockState, hitPoint, hitNormal, impactDir, energy * (0.95 + layersBrokenThisHit * 0.08));
+        layersBrokenThisHit += 1;
+      }
+
+      if (layersBrokenThisHit === 0) {
+        const healthLoss = Math.min(blockState.health, damage * 0.18);
+        blockState.health = Math.max(0, blockState.health - healthLoss);
+        flashShootableMesh(blockState.mesh);
+      }
+
+      return blockState.destroyed;
+    };
+
+    const applyBlockHitDamage = (hit, weaponDef, impactDir) => {
+      if (!weaponDef) return;
+      const blockState = getBlockStateFromObject(hit.object);
+      if (!blockState || blockState.destroyed) return;
+
+      const structureDamage = weaponDef.structureDamage || 0;
+      if (structureDamage <= 0) return;
+
+      const range = Math.max(1, weaponDef.range || 1);
+      const distFactor = THREE.MathUtils.clamp((hit.distance || 0) / range, 0, 1);
+      const minFalloff = weaponDef.pellets && weaponDef.pellets > 1 ? 0.45 : 0.58;
+      const falloff = THREE.MathUtils.lerp(1, minFalloff, distFactor);
+      const damage = structureDamage * falloff;
+
+      if (hit.face) {
+        tempNormal.copy(hit.face.normal).transformDirection(hit.object.matrixWorld).normalize();
+      } else {
+        tempNormal.copy(impactDir).multiplyScalar(-1).normalize();
+      }
+
+      applyDamageToBlockState(blockState, damage, hit.point, tempNormal, impactDir, 1.0 + damage / 180);
+    };
+
+    const applyExplosionBlockDamage = (center, radius, maxDamage, impulseDir) => {
+      if (radius <= 0 || maxDamage <= 0) return;
+      const radiusSq = radius * radius;
+
+      for (const blockState of destructibleBlockStates) {
+        if (!blockState || blockState.destroyed) continue;
+
+        const box = blockState.collider;
+        tempClosest.set(
+          THREE.MathUtils.clamp(center.x, box.min.x, box.max.x),
+          THREE.MathUtils.clamp(center.y, box.min.y, box.max.y),
+          THREE.MathUtils.clamp(center.z, box.min.z, box.max.z)
+        );
+
+        const distSq = tempClosest.distanceToSquared(center);
+        if (distSq > radiusSq) continue;
+
+        const dist = Math.sqrt(distSq);
+        const t = 1 - THREE.MathUtils.clamp(dist / radius, 0, 1);
+        const damage = maxDamage * t * t;
+        if (damage <= 0.5) continue;
+
+        if (distSq > 0.0001) {
+          tempNormal.copy(tempClosest).sub(center).normalize();
+        } else {
+          tempNormal.copy(impulseDir).normalize();
+          if (tempNormal.lengthSq() < 0.0001) tempNormal.set(0, 1, 0);
+        }
+
+        applyDamageToBlockState(
+          blockState,
+          damage,
+          tempClosest,
+          tempNormal,
+          tempNormal,
+          0.9 + t * 1.4
+        );
+      }
+    };
+
+    const doHitscanRay = (origin, direction, range, weaponDef) => {
       raycaster.set(origin, direction);
       raycaster.far = range;
       const hits = raycaster.intersectObjects(bulletTargets, true);
@@ -1153,13 +1463,17 @@
       } else {
         tempNormal.copy(direction).multiplyScalar(-1);
       }
-      createImpactMark(hit.point, tempNormal);
+
+      const markSize = weaponDef?.pellets && weaponDef.pellets > 1 ? 0.065 : 0.085;
+      createImpactMark(hit.point, tempNormal, markSize, 0.32);
+      applyBlockHitDamage(hit, weaponDef, direction);
+
       if (hit.object.userData.shootable) {
         flashShootableMesh(hit.object);
       }
     };
 
-    const doMeleeStrike = (range) => {
+    const doMeleeStrike = (range, weaponDef) => {
       camera.getWorldPosition(tempOrigin);
       camera.getWorldDirection(tempDir).normalize();
       raycaster.set(tempOrigin, tempDir);
@@ -1174,6 +1488,8 @@
         tempNormal.copy(tempDir).multiplyScalar(-1);
       }
       createImpactMark(hit.point, tempNormal, 0.12, 0.2, 0xf4d49a);
+
+      applyBlockHitDamage(hit, weaponDef || getActiveWeapon(), tempDir);
       if (hit.object.userData.shootable) {
         flashShootableMesh(hit.object);
       }
@@ -1219,7 +1535,7 @@
           tempDir.addScaledVector(tempRight, spreadX);
           tempDir.addScaledVector(tempUp, spreadY).normalize();
         }
-        doHitscanRay(tempOrigin, tempDir, weaponDef.range);
+        doHitscanRay(tempOrigin, tempDir, weaponDef.range, weaponDef);
       }
     };
 
@@ -1240,20 +1556,80 @@
         velocity: tempDir.clone().multiplyScalar(weaponDef.projectileSpeed || 34),
         radius: 0.12,
         life: 4.2,
-        explosionRadius: weaponDef.explosionRadius || 4.8
+        explosionRadius: weaponDef.explosionRadius || 4.8,
+        structureDamage: weaponDef.structureDamage || 210,
+        damage: weaponDef.damage || 120
       });
     };
 
     const explodeProjectile = (projectile, normal = new THREE.Vector3(0, 1, 0)) => {
       createImpactMark(projectile.mesh.position, normal, 0.28, 0.46, 0xff9f5a);
-      for (const cube of boxes.children) {
-        if (cube.position.distanceTo(projectile.mesh.position) <= projectile.explosionRadius) {
-          flashShootableMesh(cube);
-        }
-      }
+      tempImpactDir.copy(projectile.velocity || normal).normalize();
+      if (tempImpactDir.lengthSq() < 0.0001) tempImpactDir.copy(normal).normalize();
+      applyExplosionBlockDamage(
+        projectile.mesh.position,
+        projectile.explosionRadius,
+        projectile.structureDamage || projectile.damage || 120,
+        tempImpactDir
+      );
       scene.remove(projectile.mesh);
       projectile.mesh.geometry.dispose();
       projectile.mesh.material.dispose();
+    };
+
+    const traceProjectileImpact = (start, end, radius) => {
+      const distance = start.distanceTo(end);
+      const stepSize = Math.max(0.08, radius * 0.7);
+      const steps = Math.max(1, Math.min(28, Math.ceil(distance / stepSize)));
+
+      for (let step = 1; step <= steps; step++) {
+        const t = step / steps;
+        tempTracePos.lerpVectors(start, end, t);
+
+        if (tempTracePos.y <= 0) {
+          return {
+            point: tempTracePos.clone().setY(0.001),
+            normal: new THREE.Vector3(0, 1, 0)
+          };
+        }
+
+        for (const box of boxColliders) {
+          tempClosest.set(
+            THREE.MathUtils.clamp(tempTracePos.x, box.min.x, box.max.x),
+            THREE.MathUtils.clamp(tempTracePos.y, box.min.y, box.max.y),
+            THREE.MathUtils.clamp(tempTracePos.z, box.min.z, box.max.z)
+          );
+
+          const distSq = tempClosest.distanceToSquared(tempTracePos);
+          if (distSq > radius * radius) continue;
+
+          if (distSq > 0.0001) {
+            tempNormal.copy(tempTracePos).sub(tempClosest).normalize();
+          } else {
+            const toMinX = Math.abs(tempTracePos.x - box.min.x);
+            const toMaxX = Math.abs(box.max.x - tempTracePos.x);
+            const toMinY = Math.abs(tempTracePos.y - box.min.y);
+            const toMaxY = Math.abs(box.max.y - tempTracePos.y);
+            const toMinZ = Math.abs(tempTracePos.z - box.min.z);
+            const toMaxZ = Math.abs(box.max.z - tempTracePos.z);
+            const minPen = Math.min(toMinX, toMaxX, toMinY, toMaxY, toMinZ, toMaxZ);
+
+            if (minPen === toMinX) tempNormal.set(-1, 0, 0);
+            else if (minPen === toMaxX) tempNormal.set(1, 0, 0);
+            else if (minPen === toMinY) tempNormal.set(0, -1, 0);
+            else if (minPen === toMaxY) tempNormal.set(0, 1, 0);
+            else if (minPen === toMinZ) tempNormal.set(0, 0, -1);
+            else tempNormal.set(0, 0, 1);
+          }
+
+          return {
+            point: tempTracePos.clone(),
+            normal: tempNormal.clone()
+          };
+        }
+      }
+
+      return null;
     };
 
     const updateFistAnimation = (fistModel, dt) => {
@@ -1351,7 +1727,7 @@
 
       if (fistPendingHit && strike >= 0.62) {
         const activeWeapon = getActiveWeapon();
-        doMeleeStrike(activeWeapon.range);
+        doMeleeStrike(activeWeapon.range, activeWeapon);
         fistPendingHit = false;
       }
     };
@@ -1657,7 +2033,7 @@
     const dashDuration = 0.12;
     const dashCooldown = 0.4;
     const dashSpeed = 28.0;
-    const wallJumpMaxCharges = 3;
+    const wallJumpMaxCharges = Number.POSITIVE_INFINITY;
     const wallJumpVerticalVelocity = 9.8;
     const wallJumpPushSpeed = 9.8;
     const wallJumpTangentCarry = 0.92;
@@ -2022,6 +2398,29 @@
       }
     };
 
+    const updateFireflies = (dt) => {
+      for (const bug of fireflies) {
+        bug.phase += dt * bug.speed;
+        bug.bobPhase += dt * bug.bobSpeed;
+        bug.flickerPhase += dt * bug.flickerSpeed;
+
+        const px = bug.baseX + Math.cos(bug.phase) * bug.driftRadius;
+        const pz = bug.baseZ + Math.sin(bug.phase * 0.92) * bug.driftRadius;
+        const py = bug.baseY + Math.sin(bug.bobPhase) * 0.45;
+        bug.sprite.position.set(px, py, pz);
+
+        const pulse = 0.55 + 0.45 * (0.5 + 0.5 * Math.sin(bug.flickerPhase));
+        const s = 0.06 + pulse * 0.14;
+        bug.sprite.scale.set(s, s, s);
+        bug.sprite.material.opacity = 0.36 + pulse * 0.58;
+
+        if (bug.light) {
+          bug.light.position.copy(bug.sprite.position);
+          bug.light.intensity = 0.2 + pulse * 0.55;
+        }
+      }
+    };
+
     const updatePlayerPhysics = (dt) => {
       jumpBufferTime = Math.max(0, jumpBufferTime - dt);
       autoJumpCooldown = Math.max(0, autoJumpCooldown - dt);
@@ -2092,35 +2491,47 @@
           continue;
         }
 
+        tempTraceStart.copy(projectile.mesh.position);
         projectile.velocity.y -= 4.2 * dt;
         projectile.mesh.position.addScaledVector(projectile.velocity, dt);
+        tempTraceEnd.copy(projectile.mesh.position);
 
-        let exploded = false;
-        if (projectile.mesh.position.y <= 0) {
-          explodeProjectile(projectile, new THREE.Vector3(0, 1, 0));
-          exploded = true;
-        } else {
-          for (let colliderIndex = 0; colliderIndex < boxColliders.length; colliderIndex++) {
-            const box = boxColliders[colliderIndex];
-            tempClosest.set(
-              THREE.MathUtils.clamp(projectile.mesh.position.x, box.min.x, box.max.x),
-              THREE.MathUtils.clamp(projectile.mesh.position.y, box.min.y, box.max.y),
-              THREE.MathUtils.clamp(projectile.mesh.position.z, box.min.z, box.max.z)
-            );
-            const distSq = tempClosest.distanceToSquared(projectile.mesh.position);
-            if (distSq <= projectile.radius * projectile.radius) {
-              tempNormal.copy(projectile.mesh.position).sub(tempClosest);
-              if (tempNormal.lengthSq() < 0.0001) tempNormal.set(0, 1, 0);
-              tempNormal.normalize();
-              explodeProjectile(projectile, tempNormal);
-              exploded = true;
-              break;
-            }
+        const impact = traceProjectileImpact(tempTraceStart, tempTraceEnd, projectile.radius);
+        if (impact) {
+          projectile.mesh.position.copy(impact.point);
+          explodeProjectile(projectile, impact.normal);
+          projectiles.splice(i, 1);
+        }
+      }
+
+      for (let i = debrisChunks.length - 1; i >= 0; i--) {
+        const chunk = debrisChunks[i];
+        chunk.life -= dt;
+
+        chunk.velocity.y -= 17.5 * dt;
+        const drag = Math.max(0, 1 - chunk.drag * dt);
+        chunk.velocity.multiplyScalar(drag);
+        chunk.mesh.position.addScaledVector(chunk.velocity, dt);
+        chunk.mesh.rotation.x += chunk.spin.x * dt;
+        chunk.mesh.rotation.y += chunk.spin.y * dt;
+        chunk.mesh.rotation.z += chunk.spin.z * dt;
+
+        if (chunk.mesh.position.y <= 0.05) {
+          chunk.mesh.position.y = 0.05;
+          if (chunk.velocity.y < 0) {
+            chunk.velocity.y *= -chunk.bounce;
+            chunk.velocity.x *= 0.75;
+            chunk.velocity.z *= 0.75;
+            if (Math.abs(chunk.velocity.y) < 0.18) chunk.velocity.y = 0;
           }
         }
 
-        if (exploded) {
-          projectiles.splice(i, 1);
+        chunk.mesh.material.opacity = THREE.MathUtils.clamp(chunk.life / chunk.maxLife, 0, 1);
+        if (chunk.life <= 0) {
+          scene.remove(chunk.mesh);
+          chunk.mesh.geometry.dispose();
+          chunk.mesh.material.dispose();
+          debrisChunks.splice(i, 1);
         }
       }
 
@@ -2400,6 +2811,8 @@
 
       const frameDt = Math.min(clock.getDelta(), 0.1);
 
+      updateFireflies(frameDt);
+
       if (controls.isLocked && !isPaused) {
         physicsAccumulator = Math.min(physicsAccumulator + frameDt, fixedDelta * maxSubSteps);
         let subSteps = 0;
@@ -2431,6 +2844,8 @@
   </script>
 </body>
 </html>
+
+
 
 
 
