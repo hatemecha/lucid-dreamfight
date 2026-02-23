@@ -1,0 +1,2435 @@
+﻿<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lucid Dreamfight</title>
+  <link rel="icon" href="data:,">
+  <style>
+    :root {
+      --bg: #07090d;
+      --panel: #0f1520;
+      --text: #d6deeb;
+      --accent: #57a5ff;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: radial-gradient(circle at 20% 10%, #162033, var(--bg) 60%);
+      color: var(--text);
+      font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+    }
+
+    #app {
+      width: 100%;
+      height: 100%;
+    }
+
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+    }
+
+    #menuScreen {
+      position: fixed;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      background: rgba(5, 8, 14, 0.42);
+      backdrop-filter: blur(7px) saturate(1.08);
+      -webkit-backdrop-filter: blur(7px) saturate(1.08);
+      z-index: 20;
+      user-select: none;
+      text-align: center;
+      padding: 24px 16px;
+    }
+
+    #menuScreen.hidden {
+      display: none;
+    }
+
+    .hidden {
+      display: none;
+    }
+
+    .menuRoot {
+      width: min(900px, calc(100vw - 32px));
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 14px;
+    }
+
+    #crosshair {
+      position: fixed;
+      left: 50%;
+      top: 50%;
+      width: 14px;
+      height: 14px;
+      margin-left: -7px;
+      margin-top: -7px;
+      pointer-events: none;
+      z-index: 10;
+    }
+
+    #crosshair::before,
+    #crosshair::after {
+      content: "";
+      position: absolute;
+      background: #e9f0ff;
+      opacity: 0.9;
+    }
+
+    #crosshair::before {
+      left: 6px;
+      top: 0;
+      width: 2px;
+      height: 14px;
+    }
+
+    #crosshair::after {
+      left: 0;
+      top: 6px;
+      width: 14px;
+      height: 2px;
+    }
+
+    #menuTitle {
+      margin: 0;
+      font-size: clamp(2.4rem, 11vw, 7.2rem);
+      letter-spacing: 0.06em;
+      font-weight: 300;
+      color: #f2f7ff;
+      text-transform: uppercase;
+    }
+
+    .pauseBtn {
+      appearance: none;
+      border: none;
+      background: transparent;
+      color: rgba(233, 240, 255, 0.9);
+      padding: 8px 14px;
+      cursor: pointer;
+      font: inherit;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      text-shadow: 2px 2px #000;
+    }
+
+    .pauseBtn:hover {
+      color: #57a5ff;
+    }
+
+    #controlsToggle {
+      margin-top: 6px;
+      min-width: 220px;
+    }
+
+    #controlsSection {
+      margin-top: 8px;
+      width: min(760px, 100%);
+      border: 1px solid rgba(233, 240, 255, 0.32);
+      background: rgba(8, 12, 20, 0.62);
+      box-shadow: 0 12px 28px rgba(0, 0, 0, 0.3);
+      padding: 16px;
+      text-align: left;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    }
+
+    .controlRow {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 6px 0;
+      border-bottom: 1px dashed rgba(233, 240, 255, 0.14);
+      color: rgba(233, 240, 255, 0.9);
+      font-size: 0.9rem;
+    }
+
+    .controlRow:last-child {
+      border-bottom: 0;
+    }
+
+    .bindBtn {
+      appearance: none;
+      border: 1px solid rgba(233, 240, 255, 0.34);
+      background: rgba(16, 22, 34, 0.84);
+      color: rgba(233, 240, 255, 0.96);
+      padding: 4px 9px;
+      min-width: 116px;
+      text-align: center;
+      cursor: pointer;
+      font: inherit;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+    }
+
+    .bindBtn:hover {
+      border-color: rgba(87, 165, 255, 0.72);
+      color: #cfe4ff;
+    }
+
+    .bindBtn.waiting {
+      border-color: rgba(255, 208, 119, 0.8);
+      color: #ffd89d;
+    }
+
+    .bindBtn.unbound {
+      border-color: rgba(255, 110, 110, 0.8);
+      color: #ff9f9f;
+    }
+
+    #bindWarnings {
+      margin: 8px 0 4px;
+      min-height: 1.25em;
+      color: rgba(255, 185, 120, 0.94);
+      font-size: 0.82rem;
+    }
+
+    #fixedControlsText {
+      margin: 0 0 8px;
+      color: rgba(233, 240, 255, 0.8);
+      font-size: 0.88rem;
+    }
+
+    #ammoHud {
+      position: fixed;
+      right: 18px;
+      bottom: 16px;
+      min-width: 180px;
+      border: 1px solid rgba(233, 240, 255, 0.35);
+      background: rgba(8, 12, 20, 0.72);
+      color: rgba(233, 240, 255, 0.95);
+      padding: 8px 10px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      font-size: 0.86rem;
+      line-height: 1.25;
+      text-align: right;
+      z-index: 12;
+      pointer-events: none;
+      white-space: pre;
+      text-shadow: 1px 1px #000;
+    }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <div id="crosshair"></div>
+  <div id="ammoHud"></div>
+  <div id="menuScreen">
+    <div class="menuRoot">
+      <h1 id="menuTitle">Lucid Dreamfight</h1>
+      <button id="resumeBtn" class="pauseBtn" type="button">Iniciar / Reanudar</button>
+      <button id="controlsToggle" class="pauseBtn" type="button">Controles</button>
+      <div id="controlsSection" class="hidden">
+        <p id="fixedControlsText">Controles configurables (click en la tecla para reasignar):</p>
+        <div id="bindRows"></div>
+        <div class="controlRow"><span>Auto Jump (obstaculos)</span><button id="autoJumpToggleBtn" class="bindBtn" type="button">ON</button></div>
+        <p id="bindWarnings"></p>
+        <div class="controlRow"><span>[W][W]</span><span>Sprint</span></div>
+        <div class="controlRow"><span>[ESPACIO en pared]</span><span>Wall Jump x3</span></div>
+        <div class="controlRow"><span>[Click Izq]</span><span>Disparar / Puño Izquierdo</span></div>
+        <div class="controlRow"><span>[Click Der]</span><span>ADS / Puño Derecho</span></div>
+        <div class="controlRow"><span>[Rueda]</span><span>Cambiar arma</span></div>
+        <div class="controlRow"><span>[ESC]</span><span>Pausar (desbloquear mouse)</span></div>
+        <div class="controlRow"><span>[Click INICIAR/REANUDAR]</span><span>Entrar al juego</span></div>
+      </div>
+    </div>
+  </div>
+
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.161.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.161.0/examples/jsm/"
+      }
+    }
+  </script>
+
+  <script type="module">
+    import * as THREE from "three";
+    import { PointerLockControls } from "three/addons/controls/PointerLockControls.js";
+
+    // Setup
+    const app = document.getElementById("app");
+    const crosshair = document.getElementById("crosshair");
+    const menuScreen = document.getElementById("menuScreen");
+    const resumeBtn = document.getElementById("resumeBtn");
+    const controlsToggle = document.getElementById("controlsToggle");
+    const controlsSection = document.getElementById("controlsSection");
+    const bindRows = document.getElementById("bindRows");
+    const autoJumpToggleBtn = document.getElementById("autoJumpToggleBtn");
+    const bindWarnings = document.getElementById("bindWarnings");
+    const ammoHud = document.getElementById("ammoHud");
+
+    const renderer = new THREE.WebGLRenderer({ antialias: false });
+    renderer.setPixelRatio(1);
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setClearColor(0x8f84b8, 1);
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.domElement.style.imageRendering = "pixelated";
+    app.appendChild(renderer.domElement);
+
+    const scene = new THREE.Scene();
+    const dreamFogColor = new THREE.Color(0xa99bcb);
+    scene.background = dreamFogColor.clone();
+    scene.fog = new THREE.Fog(dreamFogColor.getHex(), 34, 138);
+
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.05, 300);
+
+    const controls = new PointerLockControls(camera, renderer.domElement);
+
+    const playerBody = new THREE.Object3D();
+    const viewRoll = new THREE.Object3D();
+    const viewKick = new THREE.Object3D();
+    playerBody.position.set(0, 0, 5);
+    scene.add(playerBody);
+    playerBody.add(viewRoll);
+    viewRoll.add(viewKick);
+    viewKick.add(camera);
+
+    const hemiLight = new THREE.HemisphereLight(0xcab9f4, 0x5b547f, 1.0);
+    scene.add(hemiLight);
+
+    const dirLight = new THREE.DirectionalLight(0xfff2fd, 0.58);
+    dirLight.position.set(18, 26, 6);
+    scene.add(dirLight);
+
+    const skyMat = new THREE.ShaderMaterial({
+      uniforms: {
+        topColor: { value: new THREE.Color(0xcfc0ff) },
+        midColor: { value: new THREE.Color(0xb39fdf) },
+        bottomColor: { value: new THREE.Color(0x7f79b0) },
+        offset: { value: 22.0 },
+        exponent: { value: 0.92 }
+      },
+      vertexShader: `
+        varying vec3 vWorldPos;
+        void main() {
+          vec4 worldPosition = modelMatrix * vec4(position, 1.0);
+          vWorldPos = worldPosition.xyz;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: `
+        uniform vec3 topColor;
+        uniform vec3 midColor;
+        uniform vec3 bottomColor;
+        uniform float offset;
+        uniform float exponent;
+        varying vec3 vWorldPos;
+        void main() {
+          float h = normalize(vWorldPos + vec3(0.0, offset, 0.0)).y * 0.5 + 0.5;
+          h = pow(clamp(h, 0.0, 1.0), exponent);
+          vec3 base = mix(bottomColor, midColor, smoothstep(0.0, 0.58, h));
+          vec3 col = mix(base, topColor, smoothstep(0.58, 1.0, h));
+          gl_FragColor = vec4(col, 1.0);
+        }
+      `,
+      side: THREE.BackSide,
+      depthWrite: false,
+      fog: false
+    });
+    const skyDome = new THREE.Mesh(new THREE.SphereGeometry(260, 24, 16), skyMat);
+    scene.add(skyDome);
+
+    const pixelWidth = 320;
+    const pixelHeight = 240;
+
+    const renderTarget = new THREE.WebGLRenderTarget(pixelWidth, pixelHeight, {
+      magFilter: THREE.NearestFilter,
+      minFilter: THREE.NearestFilter,
+      depthBuffer: true,
+      stencilBuffer: false
+    });
+    renderTarget.texture.magFilter = THREE.NearestFilter;
+    renderTarget.texture.minFilter = THREE.NearestFilter;
+
+    const postScene = new THREE.Scene();
+    const postCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+    const screenMat = new THREE.MeshBasicMaterial({ map: renderTarget.texture });
+    screenMat.map.magFilter = THREE.NearestFilter;
+    screenMat.map.minFilter = THREE.NearestFilter;
+    const screenQuad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), screenMat);
+    postScene.add(screenQuad);
+
+    const mapHalfSize = 52;
+    const mapFloorSize = mapHalfSize * 2;
+    const mapWallThickness = 2.2;
+    const mapWallHeight = 24.0;
+    const grid = new THREE.GridHelper(mapFloorSize + mapWallThickness * 2, mapFloorSize / 2, 0x2f3d54, 0x1a1f2c);
+    scene.add(grid);
+
+    const checkerSize = 32;
+    const checkerData = new Uint8Array(checkerSize * checkerSize * 4);
+    for (let y = 0; y < checkerSize; y++) {
+      for (let x = 0; x < checkerSize; x++) {
+        const stride = (y * checkerSize + x) * 4;
+        const isDark = ((x >> 2) + (y >> 2)) % 2 === 0;
+        const value = isDark ? 38 : 62;
+        checkerData[stride] = value;
+        checkerData[stride + 1] = value;
+        checkerData[stride + 2] = value + 10;
+        checkerData[stride + 3] = 255;
+      }
+    }
+
+    const checkerTex = new THREE.DataTexture(checkerData, checkerSize, checkerSize, THREE.RGBAFormat);
+    checkerTex.wrapS = THREE.RepeatWrapping;
+    checkerTex.wrapT = THREE.RepeatWrapping;
+    checkerTex.repeat.set(24, 24);
+    checkerTex.magFilter = THREE.NearestFilter;
+    checkerTex.minFilter = THREE.NearestFilter;
+    checkerTex.generateMipmaps = false;
+    checkerTex.unpackAlignment = 1;
+    checkerTex.needsUpdate = true;
+
+    const groundMat = new THREE.MeshStandardMaterial({
+      map: checkerTex,
+      roughness: 1.0,
+      metalness: 0.0,
+      color: 0x9ea8bc
+    });
+
+    const ground = new THREE.Mesh(new THREE.PlaneGeometry(mapFloorSize, mapFloorSize), groundMat);
+    ground.rotation.x = -Math.PI * 0.5;
+    ground.position.y = -0.001;
+    scene.add(ground);
+
+    const boxes = new THREE.Group();
+    const boxColliders = [];
+    const boundaryWalls = new THREE.Group();
+    const wallMat = new THREE.MeshStandardMaterial({
+      color: 0x2b3344,
+      roughness: 0.96,
+      metalness: 0.02
+    });
+    const wallOffset = mapHalfSize + mapWallThickness * 0.5;
+    const addBoundaryWall = (sx, sy, sz, px, py, pz) => {
+      const wall = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), wallMat);
+      wall.position.set(px, py, pz);
+      boundaryWalls.add(wall);
+      wall.updateMatrixWorld(true);
+      boxColliders.push(new THREE.Box3().setFromObject(wall));
+    };
+    addBoundaryWall(mapFloorSize + mapWallThickness * 2, mapWallHeight, mapWallThickness, 0, mapWallHeight * 0.5, -wallOffset);
+    addBoundaryWall(mapFloorSize + mapWallThickness * 2, mapWallHeight, mapWallThickness, 0, mapWallHeight * 0.5, wallOffset);
+    addBoundaryWall(mapWallThickness, mapWallHeight, mapFloorSize + mapWallThickness * 2, -wallOffset, mapWallHeight * 0.5, 0);
+    addBoundaryWall(mapWallThickness, mapWallHeight, mapFloorSize + mapWallThickness * 2, wallOffset, mapWallHeight * 0.5, 0);
+    scene.add(boundaryWalls);
+
+    const platformMats = [
+      new THREE.MeshStandardMaterial({ color: 0x44506a, roughness: 0.9, metalness: 0.05 }),
+      new THREE.MeshStandardMaterial({ color: 0x3f5d5a, roughness: 0.88, metalness: 0.04 }),
+      new THREE.MeshStandardMaterial({ color: 0x5f4f44, roughness: 0.9, metalness: 0.03 }),
+      new THREE.MeshStandardMaterial({ color: 0x4b4360, roughness: 0.86, metalness: 0.08 }),
+      new THREE.MeshStandardMaterial({ color: 0x3f3f4a, roughness: 0.9, metalness: 0.02 }),
+      new THREE.MeshStandardMaterial({ color: 0x6f6c43, roughness: 0.78, metalness: 0.04 })
+    ];
+    const dynamicTerrainTiles = [];
+    const dynamicColliderSet = new Set();
+
+    const addArenaBlock = (sx, sy, sz, x, y, z, matIndex = 0, shootable = false, motionPreset = null) => {
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), platformMats[matIndex % platformMats.length]);
+      mesh.position.set(x, y, z);
+      mesh.userData.shootable = shootable;
+      boxes.add(mesh);
+      mesh.updateMatrixWorld(true);
+      const collider = new THREE.Box3().setFromObject(mesh);
+      boxColliders.push(collider);
+      if (motionPreset) {
+        dynamicColliderSet.add(collider);
+        dynamicTerrainTiles.push({
+          mesh,
+          collider,
+          baseY: y,
+          lastY: y,
+          deltaY: 0,
+          halfX: sx * 0.5,
+          halfY: sy * 0.5,
+          halfZ: sz * 0.5,
+          minY: motionPreset.minY,
+          maxY: motionPreset.maxY,
+          targetY: motionPreset.targetY,
+          speed: motionPreset.speed,
+          speedMin: motionPreset.speedMin,
+          speedMax: motionPreset.speedMax,
+          pause: motionPreset.pause,
+          pauseMin: motionPreset.pauseMin,
+          pauseMax: motionPreset.pauseMax,
+          moveUp: motionPreset.moveUp,
+          travelRange: motionPreset.maxY - motionPreset.minY
+        });
+      }
+      return mesh;
+    };
+
+    // Coliseum-style terrain: deep rectangular columns rooted below the dream floor.
+    // Tops move up/down while every block remains connected to the ground volume.
+    const terrainRadiusCells = 10;
+    const terrainSize = terrainRadiusCells * 2 + 1;
+    const terrainEdgePadding = 0.65;
+    const terrainCellSize = (mapHalfSize - terrainEdgePadding) / (terrainRadiusCells + 0.5);
+    const terrainTileSize = terrainCellSize;
+    const centerCell = terrainRadiusCells;
+    const shaftDepth = mapWallHeight + 18.0;
+    const coliseumRings = 7;
+    const coliseumStep = 1.05;
+    const baseInnerTop = 1.05;
+    const topLimit = mapWallHeight - 0.55;
+    const spawnCellX = centerCell;
+    const spawnCellZ = centerCell + 1;
+    let spawnFeetX = 0;
+    let spawnFeetY = baseInnerTop + 0.06;
+    let spawnFeetZ = terrainCellSize;
+
+    const terrainHash = (x, z, seed = 0) => {
+      const n = Math.sin((x * 127.1 + z * 311.7 + seed * 43.3) * 0.12345) * 43758.5453;
+      return n - Math.floor(n);
+    };
+
+    const tileTopMap = Array.from({ length: terrainSize }, () => Array(terrainSize).fill(baseInnerTop));
+    for (let gx = 0; gx < terrainSize; gx++) {
+      for (let gz = 0; gz < terrainSize; gz++) {
+        const dx = gx - centerCell;
+        const dz = gz - centerCell;
+        const radial = Math.hypot(dx, dz) / terrainRadiusCells;
+        const ring = Math.min(coliseumRings - 1, Math.floor(THREE.MathUtils.clamp(radial, 0, 0.9999) * coliseumRings));
+        const ringTop = baseInnerTop + ring * coliseumStep;
+        const angle = Math.atan2(dz, dx);
+        const spoke = Math.sin(angle * 6 + terrainHash(gx, gz, 17) * Math.PI * 2) * 0.26;
+        const noise = (terrainHash(gx, gz, 37) - 0.5) * 0.38;
+        let baseTop = THREE.MathUtils.clamp(ringTop + spoke + noise, 0.9, topLimit - 2.8);
+
+        // Stable pocket around spawn so the player always starts on a valid platform.
+        if (Math.hypot(dx, dz - 1) <= 1.45) {
+          baseTop = Math.min(baseTop, 1.14);
+        }
+
+        tileTopMap[gx][gz] = baseTop;
+      }
+    }
+
+    for (let gx = 0; gx < terrainSize; gx++) {
+      for (let gz = 0; gz < terrainSize; gz++) {
+        const x = (gx - centerCell) * terrainCellSize;
+        const z = (gz - centerCell) * terrainCellSize;
+        const baseTop = tileTopMap[gx][gz];
+        const matIndex = (gx * 11 + gz * 7 + Math.floor(baseTop * 10)) % platformMats.length;
+        const clusterX = Math.floor(gx * 0.5);
+        const clusterZ = Math.floor(gz * 0.5);
+        const speedClusterX = Math.floor(gx / 3);
+        const speedClusterZ = Math.floor(gz / 3);
+        const isSpawnCell = gx === spawnCellX && gz === spawnCellZ;
+
+        let minTop = Math.max(0.82, baseTop - (0.18 + terrainHash(gx, gz, 53) * 0.42));
+        let maxTop = THREE.MathUtils.clamp(
+          baseTop + 2.8 + terrainHash(clusterX, clusterZ, 71) * Math.max(1.2, topLimit - baseTop - 0.9),
+          minTop + 0.9,
+          topLimit
+        );
+
+        if (isSpawnCell) {
+          minTop = baseTop;
+          maxTop = baseTop;
+        }
+
+        const minCenterY = minTop - shaftDepth * 0.5;
+        const maxCenterY = maxTop - shaftDepth * 0.5;
+        const movementRange = Math.max(0, maxCenterY - minCenterY);
+        const startFactor = 0.05 + terrainHash(gx, gz, 29) * 0.22;
+        const initialY = minCenterY + movementRange * startFactor;
+        const speedMin = isSpawnCell ? 0 : 0.18 + terrainHash(speedClusterX, speedClusterZ, 211) * 0.28;
+        const speedMax = isSpawnCell ? 0 : speedMin + 0.22 + terrainHash(clusterX + 3, clusterZ - 2, 241) * 0.35;
+        const moveUp = isSpawnCell ? false : terrainHash(gx, gz, 101) > 0.5;
+        const pauseMin = 0.1;
+        const pauseMax = 0.45;
+        const firstTarget = moveUp
+          ? minCenterY + movementRange * (0.72 + terrainHash(gx, gz, 313) * 0.28)
+          : minCenterY + movementRange * (terrainHash(gx, gz, 419) * 0.24);
+        const firstSpeed = isSpawnCell ? 0 : THREE.MathUtils.lerp(speedMin, speedMax, 0.45 + terrainHash(gx, gz, 523) * 0.5);
+        addArenaBlock(
+          terrainTileSize,
+          shaftDepth,
+          terrainTileSize,
+          x,
+          initialY,
+          z,
+          matIndex,
+          false,
+          {
+            minY: minCenterY,
+            maxY: maxCenterY,
+            targetY: firstTarget,
+            speed: firstSpeed,
+            speedMin,
+            speedMax,
+            pause: isSpawnCell ? 0 : terrainHash(gx, gz, 607) * 0.14,
+            pauseMin,
+            pauseMax,
+            moveUp
+          }
+        );
+
+        if (isSpawnCell) {
+          spawnFeetX = x;
+          spawnFeetY = initialY + shaftDepth * 0.5 + 0.04;
+          spawnFeetZ = z;
+        }
+      }
+    }
+
+    playerBody.position.set(spawnFeetX, spawnFeetY, spawnFeetZ);
+    scene.add(boxes);
+
+    const weaponRig = new THREE.Group();
+    const weaponHipPos = new THREE.Vector3(0.17, -0.28, -0.52);
+    const weaponAdsPos = new THREE.Vector3(0, -0.165, -0.39);
+    const weaponHipRot = new THREE.Euler(-0.055, -0.03, 0.006);
+    const weaponAdsRot = new THREE.Euler(-0.006, 0.0, 0.0);
+    weaponRig.position.copy(weaponHipPos);
+    weaponRig.rotation.copy(weaponHipRot);
+    camera.add(weaponRig);
+
+    const armsGroup = new THREE.Group();
+    const armMat = new THREE.MeshStandardMaterial({ color: 0xb18d74, roughness: 0.95, metalness: 0 });
+    const sleeveMat = new THREE.MeshStandardMaterial({ color: 0x2a3348, roughness: 0.88, metalness: 0.06 });
+    const gloveMat = new THREE.MeshStandardMaterial({ color: 0x293241, roughness: 0.9, metalness: 0.08 });
+
+    const buildArm = (side) => {
+      const forearm = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.11, 0.34), armMat);
+      forearm.position.set(0.17 * side, -0.17, -0.03);
+      forearm.rotation.set(-0.22, 0, -0.18 * side);
+
+      const sleeve = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.13, 0.16), sleeveMat);
+      sleeve.position.set(0.2 * side, -0.14, 0.1);
+      sleeve.rotation.copy(forearm.rotation);
+
+      const hand = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.1, 0.14), gloveMat);
+      hand.position.set(0.11 * side, -0.2, -0.2);
+      hand.rotation.set(-0.06, 0, -0.08 * side);
+
+      armsGroup.add(forearm, sleeve, hand);
+    };
+
+    buildArm(1);
+    buildArm(-1);
+    weaponRig.add(armsGroup);
+
+    const makeWeaponModel = (weaponId) => {
+      const root = new THREE.Group();
+      root.visible = false;
+      const darkMetal = new THREE.MeshStandardMaterial({ color: 0x3a404d, roughness: 0.62, metalness: 0.28 });
+      const lightMetal = new THREE.MeshStandardMaterial({ color: 0x7f8999, roughness: 0.5, metalness: 0.32 });
+      const wood = new THREE.MeshStandardMaterial({ color: 0x5e4633, roughness: 0.9, metalness: 0.05 });
+      const tubeMat = new THREE.MeshStandardMaterial({ color: 0x2f5f51, roughness: 0.7, metalness: 0.12 });
+
+      const addPart = (geo, mat, x, y, z, rx = 0, ry = 0, rz = 0) => {
+        const mesh = new THREE.Mesh(geo, mat);
+        mesh.position.set(x, y, z);
+        mesh.rotation.set(rx, ry, rz);
+        root.add(mesh);
+        return mesh;
+      };
+
+      const muzzlePoint = new THREE.Object3D();
+      root.add(muzzlePoint);
+
+      if (weaponId === "fists") {
+        const fistForearmMat = new THREE.MeshStandardMaterial({ color: 0xb38f76, roughness: 0.95, metalness: 0 });
+        const fistSleeveMat = new THREE.MeshStandardMaterial({ color: 0x20293d, roughness: 0.9, metalness: 0.05 });
+
+        const makeFistArm = (side) => {
+          const shoulder = new THREE.Group();
+          shoulder.position.set(0.22 * side, -0.23, -0.05);
+          shoulder.rotation.set(-0.1, side * 0.03, side * 0.1);
+          root.add(shoulder);
+
+          const upperArm = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.14, 0.24), fistSleeveMat);
+          upperArm.position.set(0, -0.01, -0.08);
+          upperArm.rotation.set(-0.12, 0, -0.04 * side);
+          shoulder.add(upperArm);
+
+          const elbow = new THREE.Group();
+          elbow.position.set(0, -0.02, -0.2);
+          elbow.rotation.set(-0.08, 0, 0);
+          shoulder.add(elbow);
+
+          const forearm = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.12, 0.28), fistForearmMat);
+          forearm.position.set(0, -0.01, -0.13);
+          forearm.rotation.set(-0.1, 0, -0.03 * side);
+          elbow.add(forearm);
+
+          const wrist = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.1, 0.14), gloveMat);
+          wrist.position.set(0, -0.03, -0.3);
+          wrist.rotation.set(0.01, 0, -0.01 * side);
+          elbow.add(wrist);
+
+          const knuckles = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.045, 0.08), gloveMat);
+          knuckles.position.set(0, 0.0, -0.39);
+          knuckles.rotation.set(0.08, 0, -0.02 * side);
+          elbow.add(knuckles);
+
+          return { shoulder, elbow };
+        };
+
+        const leftArm = makeFistArm(-1);
+        const rightArm = makeFistArm(1);
+        muzzlePoint.position.set(0, -0.12, -0.66);
+
+        root.userData.leftShoulder = leftArm.shoulder;
+        root.userData.rightShoulder = rightArm.shoulder;
+        root.userData.leftElbow = leftArm.elbow;
+        root.userData.rightElbow = rightArm.elbow;
+        root.userData.leftShoulderRestPos = leftArm.shoulder.position.clone();
+        root.userData.rightShoulderRestPos = rightArm.shoulder.position.clone();
+        root.userData.leftShoulderRestRot = leftArm.shoulder.rotation.clone();
+        root.userData.rightShoulderRestRot = rightArm.shoulder.rotation.clone();
+        root.userData.leftElbowRestRot = leftArm.elbow.rotation.clone();
+        root.userData.rightElbowRestRot = rightArm.elbow.rotation.clone();
+        root.userData.hipPos = new THREE.Vector3(0, -0.235, -0.46);
+        root.userData.adsPos = new THREE.Vector3(0, -0.225, -0.44);
+        root.userData.hipRot = new THREE.Euler(-0.012, 0.0, 0.0);
+        root.userData.adsRot = new THREE.Euler(-0.004, 0.0, 0.0);
+      } else if (weaponId === "revolver") {
+        addPart(new THREE.BoxGeometry(0.2, 0.12, 0.34), darkMetal, 0, -0.04, -0.26);
+        addPart(new THREE.BoxGeometry(0.11, 0.09, 0.36), lightMetal, 0, 0, -0.57);
+        addPart(new THREE.BoxGeometry(0.14, 0.1, 0.12), lightMetal, 0, 0.0, -0.38);
+        addPart(new THREE.BoxGeometry(0.1, 0.18, 0.13), wood, 0, -0.14, -0.12, 0.08);
+        addPart(new THREE.BoxGeometry(0.05, 0.03, 0.05), lightMetal, 0, 0.08, -0.67);
+        muzzlePoint.position.set(0, 0, -0.77);
+      } else if (weaponId === "shotgun") {
+        addPart(new THREE.BoxGeometry(0.24, 0.14, 0.44), darkMetal, 0, -0.03, -0.28);
+        addPart(new THREE.BoxGeometry(0.08, 0.08, 0.78), lightMetal, -0.05, 0.02, -0.72);
+        addPart(new THREE.BoxGeometry(0.08, 0.08, 0.78), lightMetal, 0.05, 0.02, -0.72);
+        addPart(new THREE.BoxGeometry(0.2, 0.08, 0.24), wood, 0, -0.1, -0.48);
+        addPart(new THREE.BoxGeometry(0.18, 0.18, 0.22), wood, 0, -0.14, -0.08);
+        addPart(new THREE.BoxGeometry(0.06, 0.04, 0.06), lightMetal, 0, 0.07, -1.07);
+        muzzlePoint.position.set(0, 0.02, -1.12);
+      } else if (weaponId === "sniper") {
+        addPart(new THREE.BoxGeometry(0.18, 0.11, 0.96), darkMetal, 0, -0.04, -0.52);
+        addPart(new THREE.BoxGeometry(0.09, 0.07, 1.1), lightMetal, 0, 0.01, -1.06);
+        addPart(new THREE.BoxGeometry(0.14, 0.08, 0.36), lightMetal, 0, 0.11, -0.46);
+        addPart(new THREE.BoxGeometry(0.1, 0.08, 0.22), lightMetal, 0, 0.11, -0.78);
+        addPart(new THREE.BoxGeometry(0.16, 0.16, 0.2), wood, 0, -0.13, -0.14);
+        muzzlePoint.position.set(0, 0.01, -1.62);
+      } else if (weaponId === "bazooka") {
+        addPart(new THREE.BoxGeometry(0.28, 0.28, 0.98), tubeMat, 0, -0.01, -0.54);
+        addPart(new THREE.BoxGeometry(0.2, 0.2, 0.24), darkMetal, 0, -0.01, -1.06);
+        addPart(new THREE.BoxGeometry(0.2, 0.2, 0.2), darkMetal, 0, -0.01, -0.04);
+        addPart(new THREE.BoxGeometry(0.1, 0.2, 0.2), darkMetal, 0, -0.15, -0.22);
+        addPart(new THREE.BoxGeometry(0.05, 0.05, 0.16), lightMetal, 0.12, 0.09, -0.35);
+        muzzlePoint.position.set(0, -0.01, -1.24);
+      }
+
+      const flash = new THREE.Mesh(
+        new THREE.BoxGeometry(0.12, 0.12, 0.12),
+        new THREE.MeshBasicMaterial({ color: 0xffb347 })
+      );
+      flash.position.set(0, 0, -0.08);
+      flash.visible = false;
+      muzzlePoint.add(flash);
+
+      root.userData.muzzlePoint = muzzlePoint;
+      root.userData.muzzleFlash = flash;
+      root.userData.hideArms = weaponId === "fists";
+      return root;
+    };
+
+    const weapons = [
+      {
+        id: "fists",
+        name: "PUNOS",
+        fireType: "melee",
+        damage: 52,
+        range: 2.2,
+        clipSize: 0,
+        reserveAmmo: 0,
+        reloadTime: 0,
+        fireInterval: 0.28,
+        adsFov: 75,
+        recoilBack: 0.02,
+        recoilCam: 0.01
+      },
+      {
+        id: "revolver",
+        name: "REVOLVER",
+        fireType: "hitscan",
+        damage: 34,
+        range: 170,
+        clipSize: 6,
+        reserveAmmo: 36,
+        reloadTime: 1.35,
+        fireInterval: 0.3,
+        spread: 0.0014,
+        pellets: 1,
+        adsFov: 65,
+        recoilBack: 0.07,
+        recoilCam: 0.02
+      },
+      {
+        id: "shotgun",
+        name: "ESCOPETA",
+        fireType: "hitscan",
+        damage: 16,
+        range: 58,
+        clipSize: 2,
+        reserveAmmo: 24,
+        reloadTime: 1.95,
+        fireInterval: 0.82,
+        spread: 0.048,
+        pellets: 9,
+        adsFov: 62,
+        recoilBack: 0.11,
+        recoilCam: 0.03
+      },
+      {
+        id: "sniper",
+        name: "SNIPER",
+        fireType: "hitscan",
+        damage: 125,
+        range: 260,
+        clipSize: 1,
+        reserveAmmo: 16,
+        reloadTime: 2.35,
+        fireInterval: 1.1,
+        spread: 0,
+        pellets: 1,
+        adsFov: 30,
+        recoilBack: 0.13,
+        recoilCam: 0.035
+      },
+      {
+        id: "bazooka",
+        name: "BAZOOKA",
+        fireType: "projectile",
+        damage: 120,
+        explosionRadius: 5.4,
+        clipSize: 1,
+        reserveAmmo: 8,
+        reloadTime: 2.6,
+        fireInterval: 1.25,
+        projectileSpeed: 36,
+        adsFov: 68,
+        recoilBack: 0.14,
+        recoilCam: 0.038
+      }
+    ].map((weaponDef) => ({
+      ...weaponDef,
+      currentAmmo: weaponDef.clipSize > 0 ? weaponDef.clipSize : 0
+    }));
+
+    const weaponModels = new Map();
+    for (const weaponDef of weapons) {
+      const model = makeWeaponModel(weaponDef.id);
+      weaponModels.set(weaponDef.id, model);
+      weaponRig.add(model);
+    }
+
+    let currentWeaponIndex = 0;
+    let pendingWeaponIndex = -1;
+    let queuedWeaponIndex = -1;
+    let switchPhase = "idle";
+    let switchTimer = 0;
+    let switchOffsetY = 0;
+    const switchDownDuration = 0.08;
+    const switchUpDuration = 0.1;
+    let triggerHeld = false;
+    let aimHeld = false;
+    let adsWeight = 0;
+    let isReloading = false;
+    let reloadTimer = 0;
+    let reloadWeight = 0;
+    let fireCooldown = 0;
+    let recoilBack = 0;
+    let recoilCamPitch = 0;
+    let muzzleFlashTimer = 0;
+    let activeMuzzleFlash = null;
+    let fistPunchTimer = 0;
+    let fistPunchSide = 0;
+    let fistPendingHit = false;
+    const fistPunchDuration = 0.22;
+    const projectiles = [];
+    const impactMarks = [];
+    const hitFlashStates = [];
+    const raycaster = new THREE.Raycaster();
+    const bulletTargets = [boxes, boundaryWalls, ground];
+
+    const velocity = new THREE.Vector3();
+
+    // Input
+    const keyState = {
+      forward: false,
+      backward: false,
+      left: false,
+      right: false,
+      jump: false,
+      dash: false
+    };
+    const bindableActions = [
+      { id: "forward", label: "Adelante", defaultCode: "KeyW" },
+      { id: "backward", label: "Atras", defaultCode: "KeyS" },
+      { id: "left", label: "Izquierda", defaultCode: "KeyA" },
+      { id: "right", label: "Derecha", defaultCode: "KeyD" },
+      { id: "jump", label: "Saltar", defaultCode: "Space" },
+      { id: "dash", label: "Dash", defaultCode: "ShiftLeft" },
+      { id: "reload", label: "Recargar", defaultCode: "KeyR" },
+      { id: "weapon1", label: "Arma 1", defaultCode: "Digit1" },
+      { id: "weapon2", label: "Arma 2", defaultCode: "Digit2" },
+      { id: "weapon3", label: "Arma 3", defaultCode: "Digit3" },
+      { id: "weapon4", label: "Arma 4", defaultCode: "Digit4" },
+      { id: "weapon5", label: "Arma 5", defaultCode: "Digit5" }
+    ];
+    const actionBindings = Object.fromEntries(bindableActions.map((entry) => [entry.id, entry.defaultCode]));
+    const bindButtons = new Map();
+    const weaponBindToIndex = {
+      weapon1: 0,
+      weapon2: 1,
+      weapon3: 2,
+      weapon4: 3,
+      weapon5: 4
+    };
+    let waitingBindAction = null;
+    const keyLabelMap = {
+      Space: "ESPACIO",
+      ShiftLeft: "SHIFT",
+      ControlLeft: "CTRL",
+      AltLeft: "ALT",
+      Escape: "ESC",
+      ArrowUp: "FLECHA ARRIBA",
+      ArrowDown: "FLECHA ABAJO",
+      ArrowLeft: "FLECHA IZQ",
+      ArrowRight: "FLECHA DER"
+    };
+
+    let isPaused = true;
+    let autoJumpEnabled = true;
+    let autoJumpCooldown = 0;
+    let jumpBufferTime = 0;
+    const jumpBufferMax = 0.12;
+    let lockRequestPending = false;
+    let sprintFromDoubleTap = false;
+    let lastForwardTapTime = -Infinity;
+    const doubleTapWindowMs = 250;
+    let dashQueued = false;
+    let dashTimer = 0;
+    let dashCooldownTimer = 0;
+    let bobOffsetX = 0;
+    let bobOffsetY = 0;
+    const tempOrigin = new THREE.Vector3();
+    const tempDir = new THREE.Vector3();
+    const tempRight = new THREE.Vector3();
+    const tempUp = new THREE.Vector3();
+    const tempNormal = new THREE.Vector3();
+    const tempClosest = new THREE.Vector3();
+    const tempWallNormal = new THREE.Vector3();
+
+    const getActiveWeapon = () => weapons[currentWeaponIndex];
+
+    const updateAmmoHud = () => {
+      const activeWeapon = getActiveWeapon();
+      const ammoText = activeWeapon.clipSize === 0
+        ? "INF"
+        : `${activeWeapon.currentAmmo}/${activeWeapon.reserveAmmo}`;
+      const stateText = isReloading ? "RELOAD..." : (switchPhase !== "idle" ? "SWITCH..." : "");
+      const autoJumpText = `AJ:${autoJumpEnabled ? "ON" : "OFF"}`;
+      ammoHud.textContent = `${activeWeapon.name}\n${ammoText}${stateText ? `\n${stateText}` : ""}\n${autoJumpText}`;
+    };
+
+    const normalizeInputCode = (code) => {
+      if (code === "ShiftRight") return "ShiftLeft";
+      if (code === "ControlRight") return "ControlLeft";
+      if (code === "AltRight") return "AltLeft";
+      return code;
+    };
+
+    const formatBindingLabel = (code) => {
+      if (!code) return "SIN ASIGNAR";
+      if (keyLabelMap[code]) return keyLabelMap[code];
+      if (code.startsWith("Key")) return code.slice(3).toUpperCase();
+      if (code.startsWith("Digit")) return code.slice(5);
+      return code.toUpperCase();
+    };
+
+    const updateBindWarnings = () => {
+      const missing = bindableActions.filter((entry) => !actionBindings[entry.id]);
+      const repeated = [];
+      const byCode = new Map();
+      for (const entry of bindableActions) {
+        const code = actionBindings[entry.id];
+        if (!code) continue;
+        if (!byCode.has(code)) byCode.set(code, []);
+        byCode.get(code).push(entry.label);
+      }
+      for (const [code, labels] of byCode) {
+        if (labels.length > 1) {
+          repeated.push(`${formatBindingLabel(code)} -> ${labels.join(" / ")}`);
+        }
+      }
+
+      if (missing.length === 0 && repeated.length === 0) {
+        bindWarnings.textContent = "Estado: OK";
+        return;
+      }
+
+      const chunks = [];
+      if (missing.length > 0) {
+        chunks.push(`Sin asignar: ${missing.map((entry) => entry.label).join(", ")}`);
+      }
+      if (repeated.length > 0) {
+        chunks.push(`Repetidos: ${repeated.join(" | ")}`);
+      }
+      bindWarnings.textContent = `Advertencia: ${chunks.join(" ; ")}`;
+    };
+
+    const updateAutoJumpToggleUi = () => {
+      autoJumpToggleBtn.textContent = autoJumpEnabled ? "ON" : "OFF";
+    };
+
+    const updateBindingUi = () => {
+      for (const entry of bindableActions) {
+        const button = bindButtons.get(entry.id);
+        if (!button) continue;
+        const code = actionBindings[entry.id];
+        const isWaiting = waitingBindAction === entry.id;
+        button.textContent = isWaiting ? "PRESIONA..." : formatBindingLabel(code);
+        button.classList.toggle("waiting", isWaiting);
+        button.classList.toggle("unbound", !isWaiting && !code);
+      }
+      updateBindWarnings();
+      updateAutoJumpToggleUi();
+    };
+
+    const startBindingCapture = (actionId) => {
+      waitingBindAction = waitingBindAction === actionId ? null : actionId;
+      updateBindingUi();
+    };
+
+    for (const entry of bindableActions) {
+      const row = document.createElement("div");
+      row.className = "controlRow";
+      const label = document.createElement("span");
+      label.textContent = entry.label;
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "bindBtn";
+      button.addEventListener("click", () => startBindingCapture(entry.id));
+      bindButtons.set(entry.id, button);
+      row.append(label, button);
+      bindRows.appendChild(row);
+    }
+    updateBindingUi();
+
+    const setActiveWeapon = (index) => {
+      currentWeaponIndex = THREE.MathUtils.clamp(index, 0, weapons.length - 1);
+      const activeWeaponId = weapons[currentWeaponIndex].id;
+      for (const [weaponId, model] of weaponModels) {
+        model.visible = weaponId === activeWeaponId;
+        if (model.userData.muzzleFlash) model.userData.muzzleFlash.visible = false;
+      }
+      const activeModel = weaponModels.get(activeWeaponId);
+      armsGroup.visible = !(activeModel?.userData?.hideArms);
+      activeMuzzleFlash = activeModel ? activeModel.userData.muzzleFlash : null;
+      fistPunchTimer = 0;
+      fistPunchSide = 0;
+      fistPendingHit = false;
+      if (activeWeaponId === "fists") {
+        const leftShoulder = activeModel?.userData?.leftShoulder;
+        const rightShoulder = activeModel?.userData?.rightShoulder;
+        const leftElbow = activeModel?.userData?.leftElbow;
+        const rightElbow = activeModel?.userData?.rightElbow;
+        const leftShoulderRestPos = activeModel?.userData?.leftShoulderRestPos;
+        const rightShoulderRestPos = activeModel?.userData?.rightShoulderRestPos;
+        const leftShoulderRestRot = activeModel?.userData?.leftShoulderRestRot;
+        const rightShoulderRestRot = activeModel?.userData?.rightShoulderRestRot;
+        const leftElbowRestRot = activeModel?.userData?.leftElbowRestRot;
+        const rightElbowRestRot = activeModel?.userData?.rightElbowRestRot;
+        if (
+          leftShoulder && rightShoulder && leftElbow && rightElbow &&
+          leftShoulderRestPos && rightShoulderRestPos &&
+          leftShoulderRestRot && rightShoulderRestRot &&
+          leftElbowRestRot && rightElbowRestRot
+        ) {
+          leftShoulder.position.copy(leftShoulderRestPos);
+          rightShoulder.position.copy(rightShoulderRestPos);
+          leftShoulder.rotation.copy(leftShoulderRestRot);
+          rightShoulder.rotation.copy(rightShoulderRestRot);
+          leftElbow.rotation.copy(leftElbowRestRot);
+          rightElbow.rotation.copy(rightElbowRestRot);
+        }
+      }
+      updateAmmoHud();
+    };
+
+    const requestWeaponSwitch = (nextIndex) => {
+      if (nextIndex < 0 || nextIndex >= weapons.length) return;
+      if (nextIndex === currentWeaponIndex && switchPhase === "idle") return;
+
+      if (switchPhase !== "idle") {
+        queuedWeaponIndex = nextIndex;
+        return;
+      }
+
+      pendingWeaponIndex = nextIndex;
+      switchPhase = "down";
+      switchTimer = 0;
+      aimHeld = false;
+      isReloading = false;
+      reloadTimer = 0;
+      updateAmmoHud();
+    };
+
+    const requestWeaponSwitchDelta = (delta) => {
+      const count = weapons.length;
+      const target = (currentWeaponIndex + delta + count) % count;
+      requestWeaponSwitch(target);
+    };
+
+    const startReload = () => {
+      const activeWeapon = getActiveWeapon();
+      if (activeWeapon.clipSize <= 0) return;
+      if (activeWeapon.currentAmmo >= activeWeapon.clipSize) return;
+      if (activeWeapon.reserveAmmo <= 0) return;
+      if (isReloading || switchPhase !== "idle") return;
+      isReloading = true;
+      reloadTimer = activeWeapon.reloadTime;
+      updateAmmoHud();
+    };
+
+    const finishReload = () => {
+      const activeWeapon = getActiveWeapon();
+      if (activeWeapon.clipSize <= 0) return;
+      const needed = activeWeapon.clipSize - activeWeapon.currentAmmo;
+      if (needed <= 0) return;
+      const taken = Math.min(needed, activeWeapon.reserveAmmo);
+      activeWeapon.currentAmmo += taken;
+      activeWeapon.reserveAmmo -= taken;
+      updateAmmoHud();
+    };
+
+    const createImpactMark = (point, normal, size = 0.08, life = 0.32, color = 0xf2c988) => {
+      const decal = new THREE.Mesh(
+        new THREE.BoxGeometry(size, size, size * 0.18),
+        new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.95 })
+      );
+      decal.position.copy(point).addScaledVector(normal, 0.02);
+      decal.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), normal.clone().normalize());
+      scene.add(decal);
+      impactMarks.push({ mesh: decal, life, maxLife: life });
+    };
+
+    const flashShootableMesh = (mesh) => {
+      const material = mesh.material;
+      if (!material || !material.emissive) return;
+      let state = hitFlashStates.find((entry) => entry.material === material);
+      if (!state) {
+        state = { material, life: 0.14, maxLife: 0.14 };
+        hitFlashStates.push(state);
+      } else {
+        state.life = state.maxLife;
+      }
+    };
+
+    const doHitscanRay = (origin, direction, range) => {
+      raycaster.set(origin, direction);
+      raycaster.far = range;
+      const hits = raycaster.intersectObjects(bulletTargets, true);
+      if (hits.length === 0) return;
+
+      const hit = hits[0];
+      if (hit.face) {
+        tempNormal.copy(hit.face.normal).transformDirection(hit.object.matrixWorld);
+      } else {
+        tempNormal.copy(direction).multiplyScalar(-1);
+      }
+      createImpactMark(hit.point, tempNormal);
+      if (hit.object.userData.shootable) {
+        flashShootableMesh(hit.object);
+      }
+    };
+
+    const doMeleeStrike = (range) => {
+      camera.getWorldPosition(tempOrigin);
+      camera.getWorldDirection(tempDir).normalize();
+      raycaster.set(tempOrigin, tempDir);
+      raycaster.far = range;
+      const hits = raycaster.intersectObjects(bulletTargets, true);
+      if (hits.length === 0) return;
+
+      const hit = hits[0];
+      if (hit.face) {
+        tempNormal.copy(hit.face.normal).transformDirection(hit.object.matrixWorld);
+      } else {
+        tempNormal.copy(tempDir).multiplyScalar(-1);
+      }
+      createImpactMark(hit.point, tempNormal, 0.12, 0.2, 0xf4d49a);
+      if (hit.object.userData.shootable) {
+        flashShootableMesh(hit.object);
+      }
+    };
+
+    const attemptMeleePunch = (side) => {
+      if (!controls.isLocked || isPaused) return;
+      if (switchPhase !== "idle" || isReloading) return;
+      if (fireCooldown > 0) return;
+
+      const activeWeapon = getActiveWeapon();
+      if (activeWeapon.fireType !== "melee") return;
+      if (side !== -1 && side !== 1) return;
+
+      fistPunchSide = side;
+      fistPunchTimer = fistPunchDuration;
+      fistPendingHit = true;
+
+      fireCooldown = activeWeapon.fireInterval;
+      recoilBack = Math.min(recoilBack + 0.03, 0.2);
+      recoilCamPitch = Math.min(recoilCamPitch + 0.014, 0.08);
+      muzzleFlashTimer = 0;
+      if (activeMuzzleFlash) activeMuzzleFlash.visible = false;
+      updateAmmoHud();
+    };
+
+    const fireHitscanWeapon = (weaponDef) => {
+      camera.getWorldPosition(tempOrigin);
+      camera.getWorldDirection(tempDir).normalize();
+      tempRight.setFromMatrixColumn(camera.matrixWorld, 0).normalize();
+      tempUp.setFromMatrixColumn(camera.matrixWorld, 1).normalize();
+
+      const pellets = weaponDef.pellets || 1;
+      const adsSpreadFactor = pellets > 1 ? 0.45 : 0.0;
+      const spreadBase = (weaponDef.spread || 0) * THREE.MathUtils.lerp(1, adsSpreadFactor, adsWeight);
+      const keepCenterPellet = pellets > 1;
+
+      for (let i = 0; i < pellets; i++) {
+        tempDir.set(0, 0, -1).applyQuaternion(camera.quaternion).normalize();
+        if (spreadBase > 0 && (!keepCenterPellet || i > 0)) {
+          const spreadX = (Math.random() - 0.5) * spreadBase;
+          const spreadY = (Math.random() - 0.5) * spreadBase;
+          tempDir.addScaledVector(tempRight, spreadX);
+          tempDir.addScaledVector(tempUp, spreadY).normalize();
+        }
+        doHitscanRay(tempOrigin, tempDir, weaponDef.range);
+      }
+    };
+
+    const spawnBazookaProjectile = (weaponDef) => {
+      const projectileMesh = new THREE.Mesh(
+        new THREE.IcosahedronGeometry(0.11, 0),
+        new THREE.MeshStandardMaterial({ color: 0xb8d15e, roughness: 0.45, metalness: 0.15 })
+      );
+
+      camera.getWorldPosition(tempOrigin);
+      camera.getWorldDirection(tempDir).normalize();
+      tempOrigin.addScaledVector(tempDir, 0.45);
+
+      projectileMesh.position.copy(tempOrigin);
+      scene.add(projectileMesh);
+      projectiles.push({
+        mesh: projectileMesh,
+        velocity: tempDir.clone().multiplyScalar(weaponDef.projectileSpeed || 34),
+        radius: 0.12,
+        life: 4.2,
+        explosionRadius: weaponDef.explosionRadius || 4.8
+      });
+    };
+
+    const explodeProjectile = (projectile, normal = new THREE.Vector3(0, 1, 0)) => {
+      createImpactMark(projectile.mesh.position, normal, 0.28, 0.46, 0xff9f5a);
+      for (const cube of boxes.children) {
+        if (cube.position.distanceTo(projectile.mesh.position) <= projectile.explosionRadius) {
+          flashShootableMesh(cube);
+        }
+      }
+      scene.remove(projectile.mesh);
+      projectile.mesh.geometry.dispose();
+      projectile.mesh.material.dispose();
+    };
+
+    const updateFistAnimation = (fistModel, dt) => {
+      if (!fistModel) return;
+
+      const leftShoulder = fistModel.userData.leftShoulder;
+      const rightShoulder = fistModel.userData.rightShoulder;
+      const leftElbow = fistModel.userData.leftElbow;
+      const rightElbow = fistModel.userData.rightElbow;
+      const leftShoulderRestPos = fistModel.userData.leftShoulderRestPos;
+      const rightShoulderRestPos = fistModel.userData.rightShoulderRestPos;
+      const leftShoulderRestRot = fistModel.userData.leftShoulderRestRot;
+      const rightShoulderRestRot = fistModel.userData.rightShoulderRestRot;
+      const leftElbowRestRot = fistModel.userData.leftElbowRestRot;
+      const rightElbowRestRot = fistModel.userData.rightElbowRestRot;
+      if (
+        !leftShoulder || !rightShoulder || !leftElbow || !rightElbow ||
+        !leftShoulderRestPos || !rightShoulderRestPos ||
+        !leftShoulderRestRot || !rightShoulderRestRot ||
+        !leftElbowRestRot || !rightElbowRestRot
+      ) return;
+
+      if (fistPunchTimer > 0) {
+        fistPunchTimer = Math.max(0, fistPunchTimer - dt);
+      }
+
+      const armLerp = 1 - Math.exp(-24 * dt);
+      leftShoulder.position.lerp(leftShoulderRestPos, armLerp);
+      rightShoulder.position.lerp(rightShoulderRestPos, armLerp);
+      leftShoulder.rotation.x = THREE.MathUtils.lerp(leftShoulder.rotation.x, leftShoulderRestRot.x, armLerp);
+      leftShoulder.rotation.y = THREE.MathUtils.lerp(leftShoulder.rotation.y, leftShoulderRestRot.y, armLerp);
+      leftShoulder.rotation.z = THREE.MathUtils.lerp(leftShoulder.rotation.z, leftShoulderRestRot.z, armLerp);
+      rightShoulder.rotation.x = THREE.MathUtils.lerp(rightShoulder.rotation.x, rightShoulderRestRot.x, armLerp);
+      rightShoulder.rotation.y = THREE.MathUtils.lerp(rightShoulder.rotation.y, rightShoulderRestRot.y, armLerp);
+      rightShoulder.rotation.z = THREE.MathUtils.lerp(rightShoulder.rotation.z, rightShoulderRestRot.z, armLerp);
+      leftElbow.rotation.x = THREE.MathUtils.lerp(leftElbow.rotation.x, leftElbowRestRot.x, armLerp);
+      leftElbow.rotation.y = THREE.MathUtils.lerp(leftElbow.rotation.y, leftElbowRestRot.y, armLerp);
+      leftElbow.rotation.z = THREE.MathUtils.lerp(leftElbow.rotation.z, leftElbowRestRot.z, armLerp);
+      rightElbow.rotation.x = THREE.MathUtils.lerp(rightElbow.rotation.x, rightElbowRestRot.x, armLerp);
+      rightElbow.rotation.y = THREE.MathUtils.lerp(rightElbow.rotation.y, rightElbowRestRot.y, armLerp);
+      rightElbow.rotation.z = THREE.MathUtils.lerp(rightElbow.rotation.z, rightElbowRestRot.z, armLerp);
+
+      if (fistPunchTimer <= 0 || fistPunchSide === 0) {
+        fistPunchSide = 0;
+        fistPendingHit = false;
+        return;
+      }
+
+      const smoothStep = (value) => {
+        const t = THREE.MathUtils.clamp(value, 0, 1);
+        return t * t * (3 - 2 * t);
+      };
+
+      const punchTime = 1 - (fistPunchTimer / fistPunchDuration);
+      const windup = smoothStep(punchTime / 0.2);
+      const strike = smoothStep((punchTime - 0.2) / 0.36);
+      const recover = smoothStep((punchTime - 0.62) / 0.38);
+      const windupShape = windup * (1 - strike);
+      const strikeShape = strike * (1 - recover);
+      const side = fistPunchSide;
+
+      const attackShoulder = side > 0 ? rightShoulder : leftShoulder;
+      const attackElbow = side > 0 ? rightElbow : leftElbow;
+      const attackShoulderRestPos = side > 0 ? rightShoulderRestPos : leftShoulderRestPos;
+      const attackShoulderRestRot = side > 0 ? rightShoulderRestRot : leftShoulderRestRot;
+      const attackElbowRestRot = side > 0 ? rightElbowRestRot : leftElbowRestRot;
+
+      const guardShoulder = side > 0 ? leftShoulder : rightShoulder;
+      const guardElbow = side > 0 ? leftElbow : rightElbow;
+      const guardShoulderRestPos = side > 0 ? leftShoulderRestPos : rightShoulderRestPos;
+      const guardShoulderRestRot = side > 0 ? leftShoulderRestRot : rightShoulderRestRot;
+      const guardElbowRestRot = side > 0 ? leftElbowRestRot : rightElbowRestRot;
+
+      const forwardOffset = (-0.05 * windupShape) + (0.32 * strikeShape);
+      const inwardOffset = 0.14 * strikeShape;
+      const raiseOffset = 0.022 * strikeShape;
+
+      attackShoulder.position.x = THREE.MathUtils.lerp(attackShoulder.position.x, attackShoulderRestPos.x - side * inwardOffset, armLerp);
+      attackShoulder.position.y = THREE.MathUtils.lerp(attackShoulder.position.y, attackShoulderRestPos.y + raiseOffset, armLerp);
+      attackShoulder.position.z = THREE.MathUtils.lerp(attackShoulder.position.z, attackShoulderRestPos.z - forwardOffset, armLerp);
+      attackShoulder.rotation.x = THREE.MathUtils.lerp(attackShoulder.rotation.x, attackShoulderRestRot.x - 0.1 * windupShape - 0.28 * strikeShape, armLerp);
+      attackShoulder.rotation.y = THREE.MathUtils.lerp(attackShoulder.rotation.y, attackShoulderRestRot.y - side * 0.27 * strikeShape, armLerp);
+      attackShoulder.rotation.z = THREE.MathUtils.lerp(attackShoulder.rotation.z, attackShoulderRestRot.z - side * 0.19 * strikeShape, armLerp);
+      attackElbow.rotation.x = THREE.MathUtils.lerp(attackElbow.rotation.x, attackElbowRestRot.x + 0.26 * windupShape - 0.36 * strikeShape, armLerp);
+      attackElbow.rotation.y = THREE.MathUtils.lerp(attackElbow.rotation.y, attackElbowRestRot.y - side * 0.12 * strikeShape, armLerp);
+      attackElbow.rotation.z = THREE.MathUtils.lerp(attackElbow.rotation.z, attackElbowRestRot.z - side * 0.06 * strikeShape, armLerp);
+
+      guardShoulder.position.x = THREE.MathUtils.lerp(guardShoulder.position.x, guardShoulderRestPos.x + side * 0.018 * strikeShape, armLerp);
+      guardShoulder.position.y = THREE.MathUtils.lerp(guardShoulder.position.y, guardShoulderRestPos.y + 0.01 * strikeShape, armLerp);
+      guardShoulder.position.z = THREE.MathUtils.lerp(guardShoulder.position.z, guardShoulderRestPos.z - 0.05 * strikeShape, armLerp);
+      guardShoulder.rotation.x = THREE.MathUtils.lerp(guardShoulder.rotation.x, guardShoulderRestRot.x - 0.1 * strikeShape, armLerp);
+      guardShoulder.rotation.y = THREE.MathUtils.lerp(guardShoulder.rotation.y, guardShoulderRestRot.y + side * 0.15 * strikeShape, armLerp);
+      guardShoulder.rotation.z = THREE.MathUtils.lerp(guardShoulder.rotation.z, guardShoulderRestRot.z + side * 0.08 * strikeShape, armLerp);
+      guardElbow.rotation.x = THREE.MathUtils.lerp(guardElbow.rotation.x, guardElbowRestRot.x - 0.1 * strikeShape, armLerp);
+
+      if (fistPendingHit && strike >= 0.62) {
+        const activeWeapon = getActiveWeapon();
+        doMeleeStrike(activeWeapon.range);
+        fistPendingHit = false;
+      }
+    };
+
+    const attemptFire = () => {
+      if (!controls.isLocked || isPaused) return;
+      if (switchPhase !== "idle" || isReloading) return;
+      if (fireCooldown > 0) return;
+
+      const activeWeapon = getActiveWeapon();
+      if (activeWeapon.fireType === "melee") {
+        attemptMeleePunch(-1);
+        return;
+      }
+      if (activeWeapon.clipSize > 0 && activeWeapon.currentAmmo <= 0) {
+        startReload();
+        return;
+      }
+
+      if (activeWeapon.fireType === "hitscan") {
+        fireHitscanWeapon(activeWeapon);
+      } else if (activeWeapon.fireType === "projectile") {
+        spawnBazookaProjectile(activeWeapon);
+      }
+
+      if (activeWeapon.clipSize > 0) {
+        activeWeapon.currentAmmo = Math.max(0, activeWeapon.currentAmmo - 1);
+      }
+      fireCooldown = activeWeapon.fireInterval;
+      recoilBack = Math.min(recoilBack + activeWeapon.recoilBack, 0.2);
+      recoilCamPitch = Math.min(recoilCamPitch + activeWeapon.recoilCam, 0.08);
+      muzzleFlashTimer = 0.05;
+      if (activeMuzzleFlash) activeMuzzleFlash.visible = true;
+      updateAmmoHud();
+    };
+
+    const clearMovementState = () => {
+      keyState.forward = false;
+      keyState.backward = false;
+      keyState.left = false;
+      keyState.right = false;
+      keyState.jump = false;
+      keyState.dash = false;
+      autoJumpCooldown = 0;
+      sprintFromDoubleTap = false;
+      lastForwardTapTime = -Infinity;
+      dashQueued = false;
+      triggerHeld = false;
+      aimHeld = false;
+      isReloading = false;
+      reloadTimer = 0;
+      reloadWeight = 0;
+      fireCooldown = 0;
+      switchPhase = "idle";
+      switchTimer = 0;
+      switchOffsetY = 0;
+      pendingWeaponIndex = -1;
+      queuedWeaponIndex = -1;
+      adsWeight = 0;
+      recoilBack = 0;
+      recoilCamPitch = 0;
+      muzzleFlashTimer = 0;
+      fistPunchTimer = 0;
+      fistPunchSide = 0;
+      fistPendingHit = false;
+      if (activeMuzzleFlash) activeMuzzleFlash.visible = false;
+    };
+
+    const showMenu = (mode) => {
+      resumeBtn.textContent = mode === "pause" ? "REANUDAR" : "INICIAR";
+      menuScreen.classList.remove("hidden");
+      crosshair.classList.add("hidden");
+    };
+
+    const hideMenu = () => {
+      menuScreen.classList.add("hidden");
+      crosshair.classList.remove("hidden");
+    };
+
+    const setKeyState = (code, down) => {
+      if (code === actionBindings.forward) {
+        if (down && !keyState.forward) {
+          const now = performance.now();
+          if (now - lastForwardTapTime <= doubleTapWindowMs) {
+            sprintFromDoubleTap = true;
+          }
+          lastForwardTapTime = now;
+        }
+        if (!down) sprintFromDoubleTap = false;
+        keyState.forward = down;
+      }
+      if (code === actionBindings.backward) {
+        if (down) sprintFromDoubleTap = false;
+        keyState.backward = down;
+      }
+      if (code === actionBindings.left) keyState.left = down;
+      if (code === actionBindings.right) keyState.right = down;
+      if (code === actionBindings.jump) {
+        if (down && !keyState.jump) jumpBufferTime = jumpBufferMax;
+        keyState.jump = down;
+      }
+      if (code === actionBindings.dash) {
+        if (down && !keyState.dash) dashQueued = true;
+        keyState.dash = down;
+      }
+    };
+
+    setActiveWeapon(0);
+
+    const safeRequestLock = async () => {
+      if (controls.isLocked || lockRequestPending) return;
+      lockRequestPending = true;
+      try {
+        const maybePromise = renderer.domElement.requestPointerLock();
+        if (maybePromise && typeof maybePromise.then === "function") {
+          await maybePromise;
+        }
+      } catch (_) {
+      } finally {
+        setTimeout(() => {
+          lockRequestPending = false;
+        }, 0);
+      }
+    };
+
+    const resetPausedMotion = () => {
+      clearMovementState();
+      jumpBufferTime = 0;
+      velocity.set(0, 0, 0);
+      viewRoll.rotation.z = 0;
+      viewKick.rotation.x = 0;
+      dashTimer = 0;
+      dashCooldownTimer = 0;
+      wallJumpCharges = wallJumpMaxCharges;
+      wallContactTimer = 0;
+      lastWallContactNormal.set(0, 0, 0);
+      bobOffsetX = 0;
+      bobOffsetY = 0;
+      weaponRig.position.copy(weaponHipPos);
+      weaponRig.rotation.copy(weaponHipRot);
+      camera.position.set(0, standEyeHeight, 0);
+    };
+
+    document.addEventListener("keydown", (e) => {
+      const normalizedCode = normalizeInputCode(e.code);
+      if (waitingBindAction) {
+        e.preventDefault();
+        if (normalizedCode === "Escape") {
+          actionBindings[waitingBindAction] = null;
+        } else {
+          actionBindings[waitingBindAction] = normalizedCode;
+        }
+        waitingBindAction = null;
+        updateBindingUi();
+        return;
+      }
+
+      if (e.target instanceof HTMLElement && e.target.closest("button")) return;
+
+      if (!controls.isLocked || isPaused) return;
+
+      if (normalizedCode === actionBindings.reload) {
+        e.preventDefault();
+        if (!e.repeat) startReload();
+        return;
+      }
+
+      for (const [bindId, directIndex] of Object.entries(weaponBindToIndex)) {
+        if (normalizedCode === actionBindings[bindId]) {
+          if (directIndex >= 0 && directIndex < weapons.length && !e.repeat) {
+            requestWeaponSwitch(directIndex);
+          }
+          return;
+        }
+      }
+
+      if (normalizedCode === actionBindings.jump) e.preventDefault();
+      setKeyState(normalizedCode, true);
+    });
+
+    document.addEventListener("keyup", (e) => {
+      const normalizedCode = normalizeInputCode(e.code);
+      if (normalizedCode === actionBindings.jump) e.preventDefault();
+      setKeyState(normalizedCode, false);
+    });
+
+    document.addEventListener("mousedown", (e) => {
+      if (!controls.isLocked || isPaused) return;
+      const activeWeapon = getActiveWeapon();
+      if (e.button === 0) {
+        if (activeWeapon.fireType === "melee") {
+          attemptMeleePunch(-1);
+        } else {
+          triggerHeld = true;
+          attemptFire();
+        }
+        e.preventDefault();
+      } else if (e.button === 2) {
+        if (activeWeapon.fireType === "melee") {
+          attemptMeleePunch(1);
+        } else {
+          aimHeld = true;
+        }
+        e.preventDefault();
+      }
+    });
+
+    document.addEventListener("mouseup", (e) => {
+      if (e.button === 0) {
+        triggerHeld = false;
+      } else if (e.button === 2) {
+        aimHeld = false;
+      }
+    });
+
+    renderer.domElement.addEventListener("contextmenu", (e) => {
+      e.preventDefault();
+    });
+
+    renderer.domElement.addEventListener("wheel", (e) => {
+      if (!controls.isLocked || isPaused) return;
+      e.preventDefault();
+      requestWeaponSwitchDelta(e.deltaY > 0 ? 1 : -1);
+    }, { passive: false });
+
+    window.addEventListener("blur", () => {
+      resetPausedMotion();
+    });
+
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden) resetPausedMotion();
+    });
+
+    resumeBtn.addEventListener("click", () => {
+      safeRequestLock();
+    });
+
+    controlsToggle.addEventListener("click", () => {
+      controlsSection.classList.toggle("hidden");
+    });
+
+    autoJumpToggleBtn.addEventListener("click", () => {
+      autoJumpEnabled = !autoJumpEnabled;
+      updateBindingUi();
+      updateAmmoHud();
+    });
+
+    controls.addEventListener("lock", () => {
+      lockRequestPending = false;
+      isPaused = false;
+      hideMenu();
+    });
+
+    controls.addEventListener("unlock", () => {
+      lockRequestPending = false;
+      isPaused = true;
+      resetPausedMotion();
+      showMenu("pause");
+    });
+
+    document.addEventListener("pointerlockerror", () => {
+      lockRequestPending = false;
+      isPaused = true;
+      showMenu("pause");
+    });
+
+    showMenu("start");
+
+    // Physics
+    const clock = new THREE.Clock();
+    const direction = new THREE.Vector3();
+
+    const standEyeHeight = 1.8;
+    let currentEyeHeight = standEyeHeight;
+    const playerRadius = 0.42;
+    const playerHeadClearance = 0.35;
+    const stepHeight = 0.6;
+    const groundSnap = 0.18;
+
+    // Player body tracks feet position; camera is a local eye offset.
+    const player = playerBody;
+    camera.position.set(0, standEyeHeight, 0);
+
+    const groundFriction = 18.0;
+    const stopSpeed = 6.0;
+    const groundAccel = 80.0;
+    const airAccel = 10.0;
+    const jumpVelocity = 9.0;
+    const bhopBoost = 1.01;
+    const maxGroundSpeed = 10.5;
+    const sprintGroundSpeed = 16.0;
+    const maxAirWishSpeed = 10.5;
+    const hardMaxHorizontalSpeed = 22.0;
+    const gravity = 27.0;
+    const baseFov = 75.0;
+    const sprintFovBoost = 6.0;
+    const dashFovBoost = 5.0;
+    const maxTilt = 0.024;
+    const breathAmplitude = 0.03;
+    const breathFrequency = 1.8;
+    const bobSideAmplitude = 0.014;
+    const bobUpAmplitude = 0.028;
+    const dashDuration = 0.12;
+    const dashCooldown = 0.4;
+    const dashSpeed = 28.0;
+    const wallJumpMaxCharges = 3;
+    const wallJumpVerticalVelocity = 8.9;
+    const wallJumpPushSpeed = 9.8;
+    const wallJumpTangentCarry = 0.92;
+    const wallJumpContactGrace = 0.12;
+    
+    let isGrounded = true;
+    let swayTime = 0;
+    let breathTime = 0;
+    let breathOffset = 0;
+    let bobTime = 0;
+    const forward = new THREE.Vector3();
+    const right = new THREE.Vector3();
+    const moveWish = new THREE.Vector3();
+    const dashDirection = new THREE.Vector3();
+    const fixedDelta = 1 / 120;
+    const maxSubSteps = 6;
+    let physicsAccumulator = 0;
+    let wallJumpCharges = wallJumpMaxCharges;
+    let wallContactTimer = 0;
+    const lastWallContactNormal = new THREE.Vector3();
+
+    const applyAcceleration = (wishDir, wishSpeed, accelRate, dt) => {
+      if (wishSpeed <= 0 || wishDir.lengthSq() === 0) return;
+      const currentSpeed = velocity.x * wishDir.x + velocity.z * wishDir.z;
+      const addSpeed = wishSpeed - currentSpeed;
+      if (addSpeed <= 0) return;
+      const accelSpeed = Math.min(accelRate * wishSpeed * dt, addSpeed);
+      velocity.x += wishDir.x * accelSpeed;
+      velocity.z += wishDir.z * accelSpeed;
+    };
+
+    const applyGroundFriction = (dt) => {
+      const speed = Math.hypot(velocity.x, velocity.z);
+      if (speed < 0.0001) return;
+      const control = Math.max(speed, stopSpeed);
+      const drop = control * groundFriction * dt;
+      const newSpeed = Math.max(0, speed - drop);
+      const scale = speed > 0 ? newSpeed / speed : 0;
+      velocity.x *= scale;
+      velocity.z *= scale;
+      if (newSpeed < 0.05) {
+        velocity.x = 0;
+        velocity.z = 0;
+      }
+    };
+
+    const resolveHorizontalCollisions = () => {
+      const feetY = player.position.y;
+      const headY = feetY + currentEyeHeight + playerHeadClearance;
+      const floorTolerance = 0.06;
+      const collisionEpsilon = 0.0005;
+      const maxIterations = 4;
+
+      for (let iter = 0; iter < maxIterations; iter++) {
+        let hitAny = false;
+
+        for (const box of boxColliders) {
+          // Ignore ceilings above the head and floors already under the feet.
+          if (headY <= box.min.y + collisionEpsilon) continue;
+          if (feetY >= box.max.y - floorTolerance) continue;
+
+          const closestX = THREE.MathUtils.clamp(player.position.x, box.min.x, box.max.x);
+          const closestZ = THREE.MathUtils.clamp(player.position.z, box.min.z, box.max.z);
+          const dx = player.position.x - closestX;
+          const dz = player.position.z - closestZ;
+          const distSq = dx * dx + dz * dz;
+
+          if (distSq >= playerRadius * playerRadius) continue;
+          hitAny = true;
+
+          if (distSq < 1e-10) {
+            const toMinX = Math.abs(player.position.x - box.min.x);
+            const toMaxX = Math.abs(box.max.x - player.position.x);
+            const toMinZ = Math.abs(player.position.z - box.min.z);
+            const toMaxZ = Math.abs(box.max.z - player.position.z);
+            const minPen = Math.min(toMinX, toMaxX, toMinZ, toMaxZ);
+
+            if (minPen === toMinX) {
+              player.position.x = box.min.x - playerRadius - collisionEpsilon;
+              velocity.x = Math.min(velocity.x, 0);
+            } else if (minPen === toMaxX) {
+              player.position.x = box.max.x + playerRadius + collisionEpsilon;
+              velocity.x = Math.max(velocity.x, 0);
+            } else if (minPen === toMinZ) {
+              player.position.z = box.min.z - playerRadius - collisionEpsilon;
+              velocity.z = Math.min(velocity.z, 0);
+            } else {
+              player.position.z = box.max.z + playerRadius + collisionEpsilon;
+              velocity.z = Math.max(velocity.z, 0);
+            }
+            continue;
+          }
+
+          const dist = Math.sqrt(distSq);
+          const pushOut = playerRadius - dist + collisionEpsilon;
+          const nx = dx / dist;
+          const nz = dz / dist;
+
+          player.position.x += nx * pushOut;
+          player.position.z += nz * pushOut;
+
+          const intoWall = velocity.x * nx + velocity.z * nz;
+          if (intoWall < 0) {
+            velocity.x -= nx * intoWall;
+            velocity.z -= nz * intoWall;
+          }
+        }
+
+        if (!hitAny) break;
+      }
+    };
+
+    const getWallContactNormal = (outNormal) => {
+      const feetY = player.position.y;
+      const headY = feetY + currentEyeHeight + playerHeadClearance;
+      const collisionEpsilon = 0.0005;
+      const floorTolerance = 0.06;
+      const probeRadius = playerRadius + 0.035;
+      let bestPenetration = 0;
+      outNormal.set(0, 0, 0);
+
+      for (const box of boxColliders) {
+        if (headY <= box.min.y + collisionEpsilon) continue;
+        if (feetY >= box.max.y - floorTolerance) continue;
+
+        const closestX = THREE.MathUtils.clamp(player.position.x, box.min.x, box.max.x);
+        const closestZ = THREE.MathUtils.clamp(player.position.z, box.min.z, box.max.z);
+        const dx = player.position.x - closestX;
+        const dz = player.position.z - closestZ;
+        const distSq = dx * dx + dz * dz;
+        if (distSq > probeRadius * probeRadius) continue;
+
+        let nx = 0;
+        let nz = 0;
+        let dist = 0;
+
+        if (distSq < 1e-10) {
+          const toMinX = Math.abs(player.position.x - box.min.x);
+          const toMaxX = Math.abs(box.max.x - player.position.x);
+          const toMinZ = Math.abs(player.position.z - box.min.z);
+          const toMaxZ = Math.abs(box.max.z - player.position.z);
+          const minPen = Math.min(toMinX, toMaxX, toMinZ, toMaxZ);
+
+          if (minPen === toMinX) {
+            nx = -1;
+          } else if (minPen === toMaxX) {
+            nx = 1;
+          } else if (minPen === toMinZ) {
+            nz = -1;
+          } else {
+            nz = 1;
+          }
+        } else {
+          dist = Math.sqrt(distSq);
+          nx = dx / dist;
+          nz = dz / dist;
+        }
+
+        const penetration = probeRadius - dist;
+        if (penetration <= bestPenetration) continue;
+        bestPenetration = penetration;
+        outNormal.set(nx, 0, nz);
+      }
+
+      if (outNormal.lengthSq() <= 0.0001) return false;
+      outNormal.normalize();
+      return true;
+    };
+
+    const findGroundY = (feetY) => {
+      let bestGroundY = 0;
+
+      for (const box of boxColliders) {
+        const overlapsXZ =
+          player.position.x + playerRadius > box.min.x &&
+          player.position.x - playerRadius < box.max.x &&
+          player.position.z + playerRadius > box.min.z &&
+          player.position.z - playerRadius < box.max.z;
+
+        if (!overlapsXZ) continue;
+
+        const topY = box.max.y;
+        const canStep = topY <= feetY + stepHeight;
+        const insideTopBand = feetY <= topY && (topY - feetY) <= 0.35;
+        if (canStep || (dynamicColliderSet.has(box) && insideTopBand)) {
+          bestGroundY = Math.max(bestGroundY, topY);
+        }
+      }
+
+      return bestGroundY;
+    };
+
+    const resolveCeilingCollision = (previousFeetY) => {
+      const previousHeadY = previousFeetY + currentEyeHeight + playerHeadClearance;
+      const feetY = player.position.y;
+      const headY = feetY + currentEyeHeight + playerHeadClearance;
+      let bestCeilingFeetY = Infinity;
+
+      for (const box of boxColliders) {
+        const overlapsXZ =
+          player.position.x + playerRadius > box.min.x &&
+          player.position.x - playerRadius < box.max.x &&
+          player.position.z + playerRadius > box.min.z &&
+          player.position.z - playerRadius < box.max.z;
+
+        if (!overlapsXZ) continue;
+        if (previousHeadY > box.min.y + 0.001) continue;
+        if (headY <= box.min.y + 0.001) continue;
+        if (feetY >= box.max.y - 0.001) continue;
+
+        const candidateFeetY = box.min.y - (currentEyeHeight + playerHeadClearance) - 0.001;
+        bestCeilingFeetY = Math.min(bestCeilingFeetY, candidateFeetY);
+      }
+
+      if (bestCeilingFeetY !== Infinity) {
+        player.position.y = Math.min(player.position.y, bestCeilingFeetY);
+        velocity.y = Math.min(velocity.y, 0);
+      }
+    };
+
+    const getMovingGroundDelta = (feetY) => {
+      const followTolerance = 0.28;
+      let bestTop = -Infinity;
+      let bestDelta = 0;
+
+      for (const tile of dynamicTerrainTiles) {
+        const box = tile.collider;
+        const overlapsXZ =
+          player.position.x + playerRadius > box.min.x &&
+          player.position.x - playerRadius < box.max.x &&
+          player.position.z + playerRadius > box.min.z &&
+          player.position.z - playerRadius < box.max.z;
+
+        if (!overlapsXZ) continue;
+
+        const topY = box.max.y;
+        if (Math.abs(feetY - topY) > followTolerance) continue;
+        if (topY > bestTop) {
+          bestTop = topY;
+          bestDelta = tile.deltaY;
+        }
+      }
+
+      return bestDelta;
+    };
+
+    const shouldTriggerAutoJump = (wishDir) => {
+      if (!autoJumpEnabled || autoJumpCooldown > 0) return false;
+      if (!isGrounded || keyState.jump) return false;
+      if (wishDir.lengthSq() < 0.0001) return false;
+      const horizontalSpeed = Math.hypot(velocity.x, velocity.z);
+      if (horizontalSpeed < 1.2) return false;
+
+      const feetY = player.position.y;
+      const headY = feetY + currentEyeHeight + playerHeadClearance;
+      const minJumpTop = feetY + stepHeight + 0.02;
+      const maxJumpTop = feetY + 1.45;
+      const probeDist = playerRadius + 0.22 + horizontalSpeed * 0.015;
+      const probeX = player.position.x + wishDir.x * probeDist;
+      const probeZ = player.position.z + wishDir.z * probeDist;
+      let targetTopY = -Infinity;
+
+      for (const box of boxColliders) {
+        if (headY <= box.min.y + 0.001) continue;
+        if (feetY >= box.max.y - 0.001) continue;
+
+        const closestX = THREE.MathUtils.clamp(probeX, box.min.x, box.max.x);
+        const closestZ = THREE.MathUtils.clamp(probeZ, box.min.z, box.max.z);
+        const dx = probeX - closestX;
+        const dz = probeZ - closestZ;
+        if (dx * dx + dz * dz > playerRadius * playerRadius) continue;
+
+        const topY = box.max.y;
+        if (topY < minJumpTop || topY > maxJumpTop) continue;
+        targetTopY = Math.max(targetTopY, topY);
+      }
+
+      if (targetTopY === -Infinity) return false;
+
+      const landingFeetY = targetTopY + 0.02;
+      const landingHeadY = landingFeetY + currentEyeHeight + playerHeadClearance;
+      const landingDist = probeDist + playerRadius + 0.05;
+      const landingX = player.position.x + wishDir.x * landingDist;
+      const landingZ = player.position.z + wishDir.z * landingDist;
+
+      for (const box of boxColliders) {
+        if (landingHeadY <= box.min.y + 0.001) continue;
+        if (landingFeetY >= box.max.y - 0.001) continue;
+
+        const closestX = THREE.MathUtils.clamp(landingX, box.min.x, box.max.x);
+        const closestZ = THREE.MathUtils.clamp(landingZ, box.min.z, box.max.z);
+        const dx = landingX - closestX;
+        const dz = landingZ - closestZ;
+        if (dx * dx + dz * dz <= playerRadius * playerRadius) return false;
+      }
+
+      return true;
+    };
+
+    const updateDynamicTerrain = (dt) => {
+      if (dynamicTerrainTiles.length === 0) return;
+      const maxDeltaPerStep = 0.018;
+
+      const pickNextTileTarget = (tile) => {
+        if (tile.travelRange <= 0.01) {
+          tile.targetY = tile.minY;
+          tile.pause = 0;
+          tile.speed = 0;
+          return;
+        }
+
+        if (tile.moveUp) {
+          const highFactor = 0.68 + Math.random() * 0.32;
+          tile.targetY = tile.minY + tile.travelRange * highFactor;
+          if (Math.random() < 0.25) tile.targetY = tile.maxY;
+          tile.speed = THREE.MathUtils.lerp(tile.speedMin, tile.speedMax, 0.7 + Math.random() * 0.3);
+        } else {
+          const lowFactor = Math.random() * 0.24;
+          tile.targetY = tile.minY + tile.travelRange * lowFactor;
+          if (Math.random() < 0.25) tile.targetY = tile.minY;
+          tile.speed = THREE.MathUtils.lerp(tile.speedMin, tile.speedMax, 0.35 + Math.random() * 0.35);
+        }
+
+        tile.pause = tile.pauseMin + Math.random() * (tile.pauseMax - tile.pauseMin);
+        tile.moveUp = !tile.moveUp;
+      };
+
+      for (const tile of dynamicTerrainTiles) {
+        if (tile.pause > 0) {
+          tile.pause = Math.max(0, tile.pause - dt);
+          tile.deltaY = 0;
+          continue;
+        }
+
+        const toTarget = tile.targetY - tile.lastY;
+        if (Math.abs(toTarget) <= 0.01) {
+          tile.lastY = tile.targetY;
+          tile.deltaY = 0;
+          pickNextTileTarget(tile);
+          continue;
+        }
+
+        const speedStep = Math.max(0.01, tile.speed) * dt;
+        const stepDelta = THREE.MathUtils.clamp(toTarget, -Math.min(maxDeltaPerStep, speedStep), Math.min(maxDeltaPerStep, speedStep));
+        const nextY = tile.lastY + stepDelta;
+
+        tile.mesh.position.y = nextY;
+        tile.mesh.updateMatrixWorld(true);
+        tile.deltaY = nextY - tile.lastY;
+        tile.lastY = nextY;
+
+        tile.collider.min.set(
+          tile.mesh.position.x - tile.halfX,
+          nextY - tile.halfY,
+          tile.mesh.position.z - tile.halfZ
+        );
+        tile.collider.max.set(
+          tile.mesh.position.x + tile.halfX,
+          nextY + tile.halfY,
+          tile.mesh.position.z + tile.halfZ
+        );
+      }
+    };
+
+    const updatePlayerPhysics = (dt) => {
+      jumpBufferTime = Math.max(0, jumpBufferTime - dt);
+      autoJumpCooldown = Math.max(0, autoJumpCooldown - dt);
+      dashCooldownTimer = Math.max(0, dashCooldownTimer - dt);
+      dashTimer = Math.max(0, dashTimer - dt);
+      fireCooldown = Math.max(0, fireCooldown - dt);
+      updateDynamicTerrain(dt);
+      if (isGrounded) {
+        wallJumpCharges = wallJumpMaxCharges;
+        wallContactTimer = 0;
+        lastWallContactNormal.set(0, 0, 0);
+        const movingGroundDelta = getMovingGroundDelta(player.position.y);
+        if (Math.abs(movingGroundDelta) > 0.00001) {
+          player.position.y += movingGroundDelta;
+        }
+      }
+
+      if (isReloading) {
+        reloadTimer = Math.max(0, reloadTimer - dt);
+        if (reloadTimer <= 0) {
+          isReloading = false;
+          finishReload();
+        }
+      }
+
+      if (switchPhase === "down") {
+        switchTimer += dt;
+        if (switchTimer >= switchDownDuration) {
+          switchTimer = 0;
+          switchPhase = "up";
+          if (pendingWeaponIndex >= 0) {
+            setActiveWeapon(pendingWeaponIndex);
+            pendingWeaponIndex = -1;
+          }
+        }
+      } else if (switchPhase === "up") {
+        switchTimer += dt;
+        if (switchTimer >= switchUpDuration) {
+          switchTimer = 0;
+          switchPhase = "idle";
+          if (queuedWeaponIndex >= 0 && queuedWeaponIndex !== currentWeaponIndex) {
+            pendingWeaponIndex = queuedWeaponIndex;
+            queuedWeaponIndex = -1;
+            switchPhase = "down";
+          } else {
+            queuedWeaponIndex = -1;
+          }
+        }
+      }
+
+      const switchTarget = switchPhase === "down" ? -0.42 : 0;
+      const switchLerp = 1 - Math.exp(-24 * dt);
+      switchOffsetY = THREE.MathUtils.lerp(switchOffsetY, switchTarget, switchLerp);
+
+      if (muzzleFlashTimer > 0) {
+        muzzleFlashTimer = Math.max(0, muzzleFlashTimer - dt);
+        if (muzzleFlashTimer <= 0 && activeMuzzleFlash) {
+          activeMuzzleFlash.visible = false;
+        }
+      }
+
+      for (let i = projectiles.length - 1; i >= 0; i--) {
+        const projectile = projectiles[i];
+        projectile.life -= dt;
+        if (projectile.life <= 0) {
+          explodeProjectile(projectile, new THREE.Vector3(0, 1, 0));
+          projectiles.splice(i, 1);
+          continue;
+        }
+
+        projectile.velocity.y -= 4.2 * dt;
+        projectile.mesh.position.addScaledVector(projectile.velocity, dt);
+
+        let exploded = false;
+        if (projectile.mesh.position.y <= 0) {
+          explodeProjectile(projectile, new THREE.Vector3(0, 1, 0));
+          exploded = true;
+        } else {
+          for (let colliderIndex = 0; colliderIndex < boxColliders.length; colliderIndex++) {
+            const box = boxColliders[colliderIndex];
+            tempClosest.set(
+              THREE.MathUtils.clamp(projectile.mesh.position.x, box.min.x, box.max.x),
+              THREE.MathUtils.clamp(projectile.mesh.position.y, box.min.y, box.max.y),
+              THREE.MathUtils.clamp(projectile.mesh.position.z, box.min.z, box.max.z)
+            );
+            const distSq = tempClosest.distanceToSquared(projectile.mesh.position);
+            if (distSq <= projectile.radius * projectile.radius) {
+              tempNormal.copy(projectile.mesh.position).sub(tempClosest);
+              if (tempNormal.lengthSq() < 0.0001) tempNormal.set(0, 1, 0);
+              tempNormal.normalize();
+              explodeProjectile(projectile, tempNormal);
+              exploded = true;
+              break;
+            }
+          }
+        }
+
+        if (exploded) {
+          projectiles.splice(i, 1);
+        }
+      }
+
+      for (let i = impactMarks.length - 1; i >= 0; i--) {
+        const mark = impactMarks[i];
+        mark.life -= dt;
+        const alpha = Math.max(0, mark.life / mark.maxLife);
+        mark.mesh.material.opacity = alpha;
+        if (mark.life <= 0) {
+          scene.remove(mark.mesh);
+          mark.mesh.geometry.dispose();
+          mark.mesh.material.dispose();
+          impactMarks.splice(i, 1);
+        }
+      }
+
+      for (let i = hitFlashStates.length - 1; i >= 0; i--) {
+        const flash = hitFlashStates[i];
+        flash.life -= dt;
+        const glow = Math.max(0, flash.life / flash.maxLife);
+        flash.material.emissive.setRGB(0.56 * glow, 0.22 * glow, 0.08 * glow);
+        if (flash.life <= 0) {
+          flash.material.emissive.setRGB(0, 0, 0);
+          hitFlashStates.splice(i, 1);
+        }
+      }
+
+      direction.set(
+        Number(keyState.right) - Number(keyState.left),
+        0,
+        Number(keyState.forward) - Number(keyState.backward)
+      );
+
+      const eyeLerp = 1 - Math.exp(-12 * dt);
+      currentEyeHeight = THREE.MathUtils.lerp(currentEyeHeight, standEyeHeight, eyeLerp);
+
+      camera.getWorldDirection(forward);
+      forward.y = 0;
+      if (forward.lengthSq() < 0.0001) forward.set(0, 0, -1);
+      forward.normalize();
+      right.crossVectors(forward, camera.up).normalize();
+
+      moveWish.set(0, 0, 0);
+      moveWish.addScaledVector(forward, direction.z);
+      moveWish.addScaledVector(right, direction.x);
+      const hasMoveInput = moveWish.lengthSq() > 0;
+      if (hasMoveInput) moveWish.normalize();
+      if (hasMoveInput && jumpBufferTime <= 0 && shouldTriggerAutoJump(moveWish)) {
+        jumpBufferTime = jumpBufferMax;
+        autoJumpCooldown = 0.18;
+      }
+
+      const hasWallContact = !isGrounded && getWallContactNormal(tempWallNormal);
+      if (hasWallContact) {
+        wallContactTimer = wallJumpContactGrace;
+        lastWallContactNormal.copy(tempWallNormal);
+      } else {
+        wallContactTimer = Math.max(0, wallContactTimer - dt);
+      }
+
+      if (!keyState.forward || keyState.backward) {
+        sprintFromDoubleTap = false;
+      }
+
+      if (dashQueued) {
+        dashQueued = false;
+        if (dashCooldownTimer <= 0) {
+          if (hasMoveInput) {
+            dashDirection.copy(moveWish);
+          } else {
+            dashDirection.copy(forward);
+          }
+          dashDirection.y = 0;
+          if (dashDirection.lengthSq() < 0.0001) dashDirection.set(0, 0, -1);
+          dashDirection.normalize();
+          dashTimer = dashDuration;
+          dashCooldownTimer = dashCooldown;
+          sprintFromDoubleTap = false;
+        }
+      }
+
+      const isDashing = dashTimer > 0;
+      const isSprinting = sprintFromDoubleTap && keyState.forward && !keyState.backward && !isDashing;
+      const targetSpeed = isSprinting ? sprintGroundSpeed : maxGroundSpeed;
+
+      if (isGrounded && !isDashing) {
+        applyGroundFriction(dt);
+      }
+
+      if (isDashing) {
+        velocity.x = dashDirection.x * dashSpeed;
+        velocity.z = dashDirection.z * dashSpeed;
+      } else if (hasMoveInput) {
+        if (isGrounded) {
+          applyAcceleration(moveWish, targetSpeed, groundAccel, dt);
+        } else {
+          applyAcceleration(moveWish, Math.min(targetSpeed, maxAirWishSpeed), airAccel, dt);
+        }
+      }
+
+      if (!isDashing && isGrounded && jumpBufferTime > 0) {
+        velocity.x *= bhopBoost;
+        velocity.z *= bhopBoost;
+        velocity.y = jumpVelocity;
+        isGrounded = false;
+        jumpBufferTime = 0;
+      } else if (!isDashing && !isGrounded && jumpBufferTime > 0 && wallJumpCharges > 0 && wallContactTimer > 0) {
+        const jumpNormal = hasWallContact ? tempWallNormal : lastWallContactNormal;
+        const wallDotVel = velocity.x * jumpNormal.x + velocity.z * jumpNormal.z;
+        const pushingTowardWall = hasMoveInput && moveWish.dot(jumpNormal) < -0.12;
+        if (pushingTowardWall || wallDotVel < -0.45) {
+          const tangentX = velocity.x - jumpNormal.x * wallDotVel;
+          const tangentZ = velocity.z - jumpNormal.z * wallDotVel;
+          velocity.x = tangentX * wallJumpTangentCarry + jumpNormal.x * wallJumpPushSpeed;
+          velocity.z = tangentZ * wallJumpTangentCarry + jumpNormal.z * wallJumpPushSpeed;
+          velocity.y = wallJumpVerticalVelocity;
+          wallJumpCharges -= 1;
+          wallContactTimer = 0;
+          jumpBufferTime = 0;
+          sprintFromDoubleTap = false;
+        }
+      }
+
+      if (!isGrounded) {
+        velocity.y -= gravity * (isDashing ? 0.35 : 1.0) * dt;
+      }
+
+      const mapClamp = mapHalfSize - playerRadius - 0.2;
+      const horizontalMove = Math.hypot(velocity.x, velocity.z) * dt;
+      const maxMovePerSlice = playerRadius * 0.45;
+      const moveSlices = Math.max(1, Math.min(8, Math.ceil(horizontalMove / maxMovePerSlice)));
+      const sliceDt = dt / moveSlices;
+
+      for (let moveStep = 0; moveStep < moveSlices; moveStep++) {
+        player.position.x += velocity.x * sliceDt;
+        player.position.z += velocity.z * sliceDt;
+        resolveHorizontalCollisions();
+
+        if (player.position.x < -mapClamp) {
+          player.position.x = -mapClamp;
+          velocity.x = Math.max(velocity.x, 0);
+        } else if (player.position.x > mapClamp) {
+          player.position.x = mapClamp;
+          velocity.x = Math.min(velocity.x, 0);
+        }
+        if (player.position.z < -mapClamp) {
+          player.position.z = -mapClamp;
+          velocity.z = Math.max(velocity.z, 0);
+        } else if (player.position.z > mapClamp) {
+          player.position.z = mapClamp;
+          velocity.z = Math.min(velocity.z, 0);
+        }
+      }
+
+      const previousFeetY = player.position.y;
+      player.position.y += velocity.y * dt;
+      if (velocity.y > 0) {
+        resolveCeilingCollision(previousFeetY);
+      }
+      const feetY = player.position.y;
+      const groundY = findGroundY(feetY);
+
+      if (velocity.y <= 0 && feetY <= groundY + groundSnap) {
+        player.position.y = groundY;
+        velocity.y = 0;
+        isGrounded = true;
+        wallJumpCharges = wallJumpMaxCharges;
+        wallContactTimer = 0;
+        lastWallContactNormal.set(0, 0, 0);
+      } else {
+        isGrounded = false;
+      }
+      resolveHorizontalCollisions();
+
+      const horizontalSpeed = Math.hypot(velocity.x, velocity.z);
+      if (!isDashing && horizontalSpeed > hardMaxHorizontalSpeed) {
+        const scale = hardMaxHorizontalSpeed / horizontalSpeed;
+        velocity.x *= scale;
+        velocity.z *= scale;
+      }
+
+      if (triggerHeld && getActiveWeapon().autoFire) {
+        attemptFire();
+      }
+
+      const activeWeapon = getActiveWeapon();
+      const canAim = aimHeld && !isReloading && switchPhase === "idle" && activeWeapon.fireType !== "melee";
+      const adsTarget = canAim ? 1 : 0;
+      const adsLerp = 1 - Math.exp(-14 * dt);
+      adsWeight = THREE.MathUtils.lerp(adsWeight, adsTarget, adsLerp);
+      const adsMotionScale = THREE.MathUtils.lerp(1.0, 0.12, adsWeight);
+
+      const tiltLerp = 1 - Math.exp(-12 * dt);
+      const dashTilt = isDashing ? -THREE.MathUtils.clamp(dashDirection.dot(right), -1, 1) * 0.006 : 0;
+      const targetTilt = (-THREE.MathUtils.clamp(direction.x, -1, 1) * maxTilt + dashTilt) * THREE.MathUtils.lerp(1, 0.1, adsWeight);
+      const nextTilt = THREE.MathUtils.lerp(viewRoll.rotation.z, targetTilt, tiltLerp);
+      viewRoll.rotation.z = THREE.MathUtils.clamp(nextTilt, -maxTilt, maxTilt);
+
+      recoilBack = THREE.MathUtils.lerp(recoilBack, 0, 1 - Math.exp(-17 * dt));
+      recoilCamPitch = THREE.MathUtils.lerp(recoilCamPitch, 0, 1 - Math.exp(-22 * dt));
+      viewKick.rotation.x = THREE.MathUtils.lerp(viewKick.rotation.x, -recoilCamPitch, 1 - Math.exp(-20 * dt));
+
+      const movementFactor = THREE.MathUtils.clamp(horizontalSpeed / sprintGroundSpeed, 0, 1);
+      bobTime += dt * (7.0 + horizontalSpeed * 0.45);
+      const bobGroundScale = isGrounded ? 1.0 : 0.35;
+      const bobAdsScale = THREE.MathUtils.lerp(1, 0.3, adsWeight);
+      const bobTargetX = Math.sin(bobTime * 1.8) * bobSideAmplitude * movementFactor * bobGroundScale * bobAdsScale;
+      const bobTargetY = Math.abs(Math.sin(bobTime * 3.2)) * bobUpAmplitude * movementFactor * bobGroundScale * bobAdsScale;
+      const bobLerp = 1 - Math.exp(-10 * dt);
+      bobOffsetX = THREE.MathUtils.lerp(bobOffsetX, bobTargetX, bobLerp);
+      bobOffsetY = THREE.MathUtils.lerp(bobOffsetY, bobTargetY, bobLerp);
+
+      const idleFactor = THREE.MathUtils.clamp(1 - horizontalSpeed / 2.2, 0, 1);
+      const sprintBreathScale = isSprinting ? 0.14 : 1.0;
+      const dashBreathScale = isDashing ? 0.06 : 1.0;
+      const adsBreathScale = THREE.MathUtils.lerp(1, 0.2, adsWeight);
+      breathTime += dt * breathFrequency;
+      const targetBreath = Math.sin(breathTime) * breathAmplitude * idleFactor * sprintBreathScale * dashBreathScale * adsBreathScale;
+      const breathLerp = 1 - Math.exp(-6 * dt);
+      breathOffset = THREE.MathUtils.lerp(breathOffset, targetBreath, breathLerp);
+      camera.position.set(bobOffsetX, currentEyeHeight + breathOffset + bobOffsetY, 0);
+
+      const movementFov = baseFov + (isSprinting ? sprintFovBoost : 0) + (isDashing ? dashFovBoost : 0);
+      const adsFov = activeWeapon.adsFov || movementFov;
+      const finalFovTarget = THREE.MathUtils.lerp(movementFov, adsFov, adsWeight);
+      const fovLerp = 1 - Math.exp(-10 * dt);
+      camera.fov = THREE.MathUtils.lerp(camera.fov, finalFovTarget, fovLerp);
+      camera.updateProjectionMatrix();
+
+      const swaySpeed = Math.hypot(velocity.x, velocity.z);
+      const swayTarget = isGrounded ? swaySpeed * 1.05 : swaySpeed * 0.25;
+      swayTime += dt * (8.3 + swayTarget * 0.45);
+
+      const swayIntensity = Math.min(swayTarget * 0.022, 0.085);
+      const swayX = Math.sin(swayTime * 1.5) * swayIntensity;
+      const swayY = Math.abs(Math.sin(swayTime * 2.5)) * swayIntensity * 0.6;
+      const swayPoseX = swayX * adsMotionScale;
+      const swayPoseY = swayY * adsMotionScale;
+
+      const reloadTarget = isReloading ? 1 : 0;
+      reloadWeight = THREE.MathUtils.lerp(reloadWeight, reloadTarget, 1 - Math.exp(-10 * dt));
+
+      const activeModel = weaponModels.get(activeWeapon.id);
+      const currentHipPos = activeModel?.userData?.hipPos || weaponHipPos;
+      const currentAdsPos = activeModel?.userData?.adsPos || weaponAdsPos;
+      const currentHipRot = activeModel?.userData?.hipRot || weaponHipRot;
+      const currentAdsRot = activeModel?.userData?.adsRot || weaponAdsRot;
+
+      const poseLerp = 1 - Math.exp(-14 * dt);
+      const poseBaseX = THREE.MathUtils.lerp(currentHipPos.x, currentAdsPos.x, adsWeight);
+      const poseBaseY = THREE.MathUtils.lerp(currentHipPos.y, currentAdsPos.y, adsWeight);
+      const poseBaseZ = THREE.MathUtils.lerp(currentHipPos.z, currentAdsPos.z, adsWeight);
+      const targetRigX = poseBaseX + swayPoseX;
+      const targetRigY = poseBaseY + swayPoseY + switchOffsetY - reloadWeight * 0.14;
+      const targetRigZ = poseBaseZ - recoilBack;
+      weaponRig.position.x = THREE.MathUtils.lerp(weaponRig.position.x, targetRigX, poseLerp);
+      weaponRig.position.y = THREE.MathUtils.lerp(weaponRig.position.y, targetRigY, poseLerp);
+      weaponRig.position.z = THREE.MathUtils.lerp(weaponRig.position.z, targetRigZ, poseLerp);
+
+      const targetRigRotX = THREE.MathUtils.lerp(currentHipRot.x, currentAdsRot.x, adsWeight) + reloadWeight * 0.045;
+      const targetRigRotY = THREE.MathUtils.lerp(currentHipRot.y, currentAdsRot.y, adsWeight);
+      const targetRigRotZ = THREE.MathUtils.lerp(currentHipRot.z, currentAdsRot.z, adsWeight) + swayPoseX * 1.25 + reloadWeight * 0.16;
+      weaponRig.rotation.x = THREE.MathUtils.lerp(weaponRig.rotation.x, targetRigRotX, poseLerp);
+      weaponRig.rotation.y = THREE.MathUtils.lerp(weaponRig.rotation.y, targetRigRotY, poseLerp);
+      weaponRig.rotation.z = THREE.MathUtils.lerp(weaponRig.rotation.z, targetRigRotZ, poseLerp);
+
+      if (activeWeapon.id === "fists") {
+        updateFistAnimation(activeModel, dt);
+      }
+
+      updateAmmoHud();
+    };
+
+    // Rendering
+    const animate = () => {
+      requestAnimationFrame(animate);
+
+      const frameDt = Math.min(clock.getDelta(), 0.1);
+
+      if (controls.isLocked && !isPaused) {
+        physicsAccumulator = Math.min(physicsAccumulator + frameDt, fixedDelta * maxSubSteps);
+        let subSteps = 0;
+        while (physicsAccumulator >= fixedDelta && subSteps < maxSubSteps) {
+          updatePlayerPhysics(fixedDelta);
+          physicsAccumulator -= fixedDelta;
+          subSteps += 1;
+        }
+      } else {
+        physicsAccumulator = 0;
+      }
+
+      renderer.setRenderTarget(renderTarget);
+      renderer.clear();
+      renderer.render(scene, camera);
+
+      renderer.setRenderTarget(null);
+      renderer.clear();
+      renderer.render(postScene, postCamera);
+    };
+
+    animate();
+
+    window.addEventListener("resize", () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+  </script>
+</body>
+</html>
+
+
