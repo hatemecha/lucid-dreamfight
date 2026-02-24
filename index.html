@@ -613,9 +613,9 @@
     app.appendChild(renderer.domElement);
 
     const scene = new THREE.Scene();
-    const dreamFogColor = new THREE.Color(GameConfig.colors.dreamFog);
+    const dreamFogColor = new THREE.Color(0x07090d);
     scene.background = dreamFogColor.clone();
-    scene.fog = new THREE.Fog(dreamFogColor.getHex(), 24, 126);
+    scene.fog = new THREE.Fog(dreamFogColor.getHex(), 15, 100);
 
     const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.05, 300);
 
@@ -630,15 +630,15 @@
     viewRoll.add(viewKick);
     viewKick.add(camera);
 
-    const hemiLight = new THREE.HemisphereLight(GameConfig.colors.hemiSky, GameConfig.colors.hemiGround, 1.36);
+    const ambientFill = new THREE.AmbientLight(0x594a7e, 2.5);
+    scene.add(ambientFill);
+
+    const hemiLight = new THREE.HemisphereLight(0xff8add, 0x1dbacc, 2.2);
     scene.add(hemiLight);
 
-    const dirLight = new THREE.DirectionalLight(GameConfig.colors.directional, 0.96);
-    dirLight.position.set(18, 26, 6);
+    const dirLight = new THREE.DirectionalLight(0xe8f4ff, 1.2);
+    dirLight.position.set(18, 35, 12);
     scene.add(dirLight);
-
-    const ambientFill = new THREE.AmbientLight(GameConfig.colors.ambientFill, 0.28);
-    scene.add(ambientFill);
 
     const mapHalfSize = GameConfig.map.halfSize;
     const mapFloorSize = mapHalfSize * 2;
@@ -995,11 +995,11 @@
       texelSize: { value: new THREE.Vector2(1 / pixelWidth, 1 / pixelHeight) },
       aberrationStrength: { value: 1.12 },
       aberrationMix: { value: 0.94 },
-      postExposure: { value: 1.28 },
+      postExposure: { value: 1.45 },
       bloomRadius: { value: 2.8 },
       bloomThreshold: { value: 0.26 },
       bloomStrength: { value: 1.2 },
-      shadowLift: { value: 0.035 }
+      shadowLift: { value: 0.06 }
     };
     const screenMat = new THREE.ShaderMaterial({
       uniforms: postUniforms,
