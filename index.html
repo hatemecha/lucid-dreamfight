@@ -273,7 +273,11 @@
     const bindWarnings = document.getElementById("bindWarnings");
     const ammoHud = document.getElementById("ammoHud");
 
-    const renderer = new THREE.WebGLRenderer({ antialias: false });
+    const renderer = new THREE.WebGLRenderer({
+      antialias: false,
+      powerPreference: "high-performance",
+      desynchronized: true
+    });
     renderer.setPixelRatio(1);
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.setClearColor(0x8f84b8, 1);
@@ -310,6 +314,15 @@
     const mapFloorSize = mapHalfSize * 2;
     const mapWallThickness = 2.2;
     const mapWallHeight = 24.0;
+    const perfConfig = {
+      fireflyCount: 72,
+      fireflyPointLights: 8,
+      maxProjectiles: 14,
+      maxImpactMarks: 80,
+      maxDebrisChunks: 120,
+      maxDetachedChunks: 22,
+      maxDetachedRenderVoxels: 140
+    };
 
     const skyMat = new THREE.ShaderMaterial({
       uniforms: {
@@ -352,7 +365,7 @@
     const fireflyGroup = new THREE.Group();
     scene.add(fireflyGroup);
     const fireflies = [];
-    const fireflyCount = 110;
+    const fireflyCount = perfConfig.fireflyCount;
     const fireflyArea = mapHalfSize - 1.2;
     const fireflyGlowMat = new THREE.SpriteMaterial({
       color: 0xe8ff8a,
@@ -373,7 +386,7 @@
       fireflyGroup.add(sprite);
 
       let light = null;
-      if (i < 40) {
+      if (i < perfConfig.fireflyPointLights) {
         light = new THREE.PointLight(0xc9ff7a, 0.34 + Math.random() * 0.22, 11 + Math.random() * 5, 2);
         light.position.copy(sprite.position);
         scene.add(light);
@@ -442,10 +455,8 @@
     checkerTex.unpackAlignment = 1;
     checkerTex.needsUpdate = true;
 
-    const groundMat = new THREE.MeshStandardMaterial({
+    const groundMat = new THREE.MeshLambertMaterial({
       map: checkerTex,
-      roughness: 1.0,
-      metalness: 0.0,
       color: 0x9ea8bc
     });
 
@@ -457,11 +468,7 @@
     const boxes = new THREE.Group();
     const boxColliders = [];
     const boundaryWalls = new THREE.Group();
-    const wallMat = new THREE.MeshStandardMaterial({
-      color: 0x2b3344,
-      roughness: 0.96,
-      metalness: 0.02
-    });
+    const wallMat = new THREE.MeshLambertMaterial({ color: 0x2b3344 });
     const wallOffset = mapHalfSize + mapWallThickness * 0.5;
     const addBoundaryWall = (sx, sy, sz, px, py, pz) => {
       const wall = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), wallMat);
@@ -477,12 +484,12 @@
     scene.add(boundaryWalls);
 
     const platformMats = [
-      new THREE.MeshStandardMaterial({ color: 0x44506a, roughness: 0.9, metalness: 0.05 }),
-      new THREE.MeshStandardMaterial({ color: 0x3f5d5a, roughness: 0.88, metalness: 0.04 }),
-      new THREE.MeshStandardMaterial({ color: 0x5f4f44, roughness: 0.9, metalness: 0.03 }),
-      new THREE.MeshStandardMaterial({ color: 0x4b4360, roughness: 0.86, metalness: 0.08 }),
-      new THREE.MeshStandardMaterial({ color: 0x3f3f4a, roughness: 0.9, metalness: 0.02 }),
-      new THREE.MeshStandardMaterial({ color: 0x6f6c43, roughness: 0.78, metalness: 0.04 })
+      new THREE.MeshLambertMaterial({ color: 0x44506a }),
+      new THREE.MeshLambertMaterial({ color: 0x3f5d5a }),
+      new THREE.MeshLambertMaterial({ color: 0x5f4f44 }),
+      new THREE.MeshLambertMaterial({ color: 0x4b4360 }),
+      new THREE.MeshLambertMaterial({ color: 0x3f3f4a }),
+      new THREE.MeshLambertMaterial({ color: 0x6f6c43 })
     ];
     const voxelCubeGeometry = new THREE.BoxGeometry(1, 1, 1);
     const voxelBuildMatrix = new THREE.Matrix4();
@@ -512,8 +519,8 @@
     };
 
     const buildVoxelGrid = (sx, sy, sz, material, shootable = false) => {
-      const targetVoxelXZ = 1.7;
-      const targetVoxelY = 1.9;
+      const targetVoxelXZ = 2.15;
+      const targetVoxelY = 2.35;
       const voxelCountX = THREE.MathUtils.clamp(Math.round(sx / targetVoxelXZ), 2, 6);
       const voxelCountY = THREE.MathUtils.clamp(Math.round(sy / targetVoxelY), 8, 30);
       const voxelCountZ = THREE.MathUtils.clamp(Math.round(sz / targetVoxelXZ), 2, 6);
@@ -570,13 +577,42 @@
       };
     };
 
+    const isSurfaceVoxel = (blockState, index) => {
+      if (!blockState.voxelAlive[index]) return false;
+
+      const countX = blockState.voxelCountX;
+      const countY = blockState.voxelCountY;
+      const countZ = blockState.voxelCountZ;
+      const layerStride = countX * countY;
+      const gz = Math.floor(index / layerStride);
+      const rem = index - gz * layerStride;
+      const gy = Math.floor(rem / countX);
+      const gx = rem - gy * countX;
+
+      if (gx === 0 || gx === countX - 1) return true;
+      if (gy === 0 || gy === countY - 1) return true;
+      if (gz === 0 || gz === countZ - 1) return true;
+
+      const voxels = blockState.voxelAlive;
+      if (!voxels[index - 1] || !voxels[index + 1]) return true;
+      if (!voxels[index - countX] || !voxels[index + countX]) return true;
+      if (!voxels[index - layerStride] || !voxels[index + layerStride]) return true;
+      return false;
+    };
+
     const rebuildBlockVoxelMesh = (blockState) => {
       const { voxelMesh, voxelAlive, voxelLocalCenters, voxelToInstance, instanceToVoxel, voxelScale } = blockState;
       let instanceCount = 0;
+      let aliveCount = 0;
       voxelTempScale.copy(voxelScale);
 
       for (let i = 0; i < voxelAlive.length; i++) {
         if (!voxelAlive[i]) {
+          voxelToInstance[i] = -1;
+          continue;
+        }
+        aliveCount += 1;
+        if (!isSurfaceVoxel(blockState, i)) {
           voxelToInstance[i] = -1;
           continue;
         }
@@ -595,7 +631,8 @@
 
       voxelMesh.count = instanceCount;
       voxelMesh.instanceMatrix.needsUpdate = true;
-      blockState.aliveCount = instanceCount;
+      blockState.aliveCount = aliveCount;
+      blockState.visibleCount = instanceCount;
     };
 
     const syncBlockCollider = (blockState) => {
@@ -709,6 +746,7 @@
         voxelLocalCenters: voxelGrid.voxelLocalCenters,
         totalVoxels: voxelGrid.totalVoxels,
         aliveCount: voxelGrid.totalVoxels,
+        visibleCount: voxelGrid.totalVoxels,
         localBoundsMin: new THREE.Vector3(-sx * 0.5, -sy * 0.5, -sz * 0.5),
         localBoundsMax: new THREE.Vector3(sx * 0.5, sy * 0.5, sz * 0.5),
         halfX: sx * 0.5,
@@ -1159,6 +1197,35 @@
     const debrisChunks = [];
     const raycaster = new THREE.Raycaster();
     const bulletTargets = [boxes, boundaryWalls, ground];
+    const impactUp = new THREE.Vector3(0, 0, 1);
+    const worldUp = new THREE.Vector3(0, 1, 0);
+
+    const disposeProjectile = (projectile) => {
+      if (!projectile) return;
+      scene.remove(projectile.mesh);
+      projectile.mesh.geometry.dispose();
+      projectile.mesh.material.dispose();
+    };
+
+    const disposeImpactMark = (mark) => {
+      if (!mark) return;
+      scene.remove(mark.mesh);
+      mark.mesh.geometry.dispose();
+      mark.mesh.material.dispose();
+    };
+
+    const disposeDebrisChunk = (chunk) => {
+      if (!chunk) return;
+      scene.remove(chunk.mesh);
+      chunk.mesh.geometry.dispose();
+      chunk.mesh.material.dispose();
+    };
+
+    const disposeDetachedVoxelChunk = (chunk) => {
+      if (!chunk) return;
+      scene.remove(chunk.root);
+      chunk.mesh.material.dispose();
+    };
 
     const velocity = new THREE.Vector3();
 
@@ -1234,6 +1301,7 @@
     const tempImpactDir = new THREE.Vector3();
     const tempChunkAxis = new THREE.Vector3();
     const tempChunkRotation = new THREE.Quaternion();
+    let lastAmmoHudText = "";
 
     const getActiveWeapon = () => weapons[currentWeaponIndex];
 
@@ -1244,7 +1312,10 @@
         : `${activeWeapon.currentAmmo}/${activeWeapon.reserveAmmo}`;
       const stateText = isReloading ? "RELOAD..." : (switchPhase !== "idle" ? "SWITCH..." : "");
       const autoJumpText = `AJ:${autoJumpEnabled ? "ON" : "OFF"}`;
-      ammoHud.textContent = `${activeWeapon.name}\n${ammoText}${stateText ? `\n${stateText}` : ""}\n${autoJumpText}`;
+      const nextHudText = `${activeWeapon.name}\n${ammoText}${stateText ? `\n${stateText}` : ""}\n${autoJumpText}`;
+      if (nextHudText === lastAmmoHudText) return;
+      lastAmmoHudText = nextHudText;
+      ammoHud.textContent = nextHudText;
     };
 
     const normalizeInputCode = (code) => {
@@ -1418,14 +1489,22 @@
       updateAmmoHud();
     };
 
+    const impactMarkGeometry = new THREE.BoxGeometry(1, 1, 0.18);
+    const debrisPieceGeometry = new THREE.BoxGeometry(1, 1, 1);
+    const bazookaProjectileGeometry = new THREE.IcosahedronGeometry(0.11, 0);
+
     const createImpactMark = (point, normal, size = 0.08, life = 0.32, color = 0xf2c988) => {
       const decal = new THREE.Mesh(
-        new THREE.BoxGeometry(size, size, size * 0.18),
+        impactMarkGeometry,
         new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.95 })
       );
       decal.position.copy(point).addScaledVector(normal, 0.02);
-      decal.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), normal.clone().normalize());
+      decal.scale.set(size, size, size);
+      decal.quaternion.setFromUnitVectors(impactUp, normal.clone().normalize());
       scene.add(decal);
+      if (impactMarks.length >= perfConfig.maxImpactMarks) {
+        disposeImpactMark(impactMarks.shift());
+      }
       impactMarks.push({ mesh: decal, life, maxLife: life });
     };
 
@@ -1460,9 +1539,9 @@
     const spawnBlockDebris = (blockState, hitPoint, hitNormal, impactDir, energy = 1, removedCount = 0) => {
       const baseColor = blockState.material?.color ? blockState.material.color : new THREE.Color(0x8d93a2);
       const pieceCount = THREE.MathUtils.clamp(
-        Math.round(2 + energy * 2 + removedCount * 0.1 + Math.random() * 2),
-        3,
-        22
+        Math.round(1 + energy * 1.5 + removedCount * 0.05 + Math.random() * 2),
+        2,
+        12
       );
       const normal = hitNormal.clone().normalize();
       const push = impactDir.clone().normalize();
@@ -1471,15 +1550,14 @@
       for (let i = 0; i < pieceCount; i++) {
         const size = avgVoxelSize * (0.25 + Math.random() * 0.38);
         const piece = new THREE.Mesh(
-          new THREE.BoxGeometry(size, size, size),
-          new THREE.MeshStandardMaterial({
+          debrisPieceGeometry,
+          new THREE.MeshLambertMaterial({
             color: baseColor.clone().offsetHSL((Math.random() - 0.5) * 0.05, 0, (Math.random() - 0.5) * 0.1),
-            roughness: 0.85,
-            metalness: 0.05,
             transparent: true,
             opacity: 0.96
           })
         );
+        piece.scale.set(size, size, size);
 
         piece.position.copy(hitPoint)
           .addScaledVector(normal, 0.05 + Math.random() * 0.12)
@@ -1497,18 +1575,21 @@
           mesh: piece,
           velocity,
           spin: new THREE.Vector3((Math.random() - 0.5) * 9, (Math.random() - 0.5) * 9, (Math.random() - 0.5) * 9),
-          life: 0.7 + Math.random() * 0.65,
-          maxLife: 1.2,
+          life: 0.52 + Math.random() * 0.48,
+          maxLife: 0.98,
           bounce: 0.22 + Math.random() * 0.16,
           drag: 2.1 + Math.random() * 1.4
         });
+        if (debrisChunks.length > perfConfig.maxDebrisChunks) {
+          disposeDebrisChunk(debrisChunks.shift());
+        }
       }
     };
 
     const spawnDetachedVoxelChunk = (blockState, voxelIndices, hitPoint, impactDir, energy = 1) => {
       if (!voxelIndices || voxelIndices.length === 0) return;
 
-      const maxRenderVoxels = 260;
+      const maxRenderVoxels = perfConfig.maxDetachedRenderVoxels;
       let renderIndices = voxelIndices;
       if (voxelIndices.length > maxRenderVoxels) {
         renderIndices = [];
@@ -1518,12 +1599,10 @@
         }
       }
 
-      const chunkMaterial = new THREE.MeshStandardMaterial({
+      const chunkMaterial = new THREE.MeshLambertMaterial({
         color: blockState.material?.color
           ? blockState.material.color.clone().offsetHSL((Math.random() - 0.5) * 0.03, 0, (Math.random() - 0.5) * 0.06)
           : new THREE.Color(0x8d93a2),
-        roughness: 0.86,
-        metalness: 0.05,
         transparent: true,
         opacity: 0.98
       });
@@ -1598,7 +1677,7 @@
       const velocity = away.multiplyScalar(launchSpeed).addScaledVector(impactDirection, (1.6 + energy) / massFactor);
       velocity.y += 1.0 + Math.random() * 1.8;
 
-      const chunkLife = 3.2 + Math.random() * 2.8 + Math.min(2.2, voxelIndices.length * 0.016);
+      const chunkLife = 1.8 + Math.random() * 1.4 + Math.min(1.2, voxelIndices.length * 0.008);
       detachedVoxelChunks.push({
         root: chunkRoot,
         mesh: chunkMesh,
@@ -1611,6 +1690,9 @@
         bounce: 0.16 + Math.random() * 0.13,
         drag: 0.85 + Math.random() * 0.8
       });
+      if (detachedVoxelChunks.length > perfConfig.maxDetachedChunks) {
+        disposeDetachedVoxelChunk(detachedVoxelChunks.shift());
+      }
     };
 
     const collectFloatingVoxelIslands = (blockState) => {
@@ -2017,8 +2099,8 @@
 
     const spawnBazookaProjectile = (weaponDef) => {
       const projectileMesh = new THREE.Mesh(
-        new THREE.IcosahedronGeometry(0.11, 0),
-        new THREE.MeshStandardMaterial({ color: 0xb8d15e, roughness: 0.45, metalness: 0.15 })
+        bazookaProjectileGeometry,
+        new THREE.MeshLambertMaterial({ color: 0xb8d15e })
       );
 
       camera.getWorldPosition(tempOrigin);
@@ -2027,6 +2109,9 @@
 
       projectileMesh.position.copy(tempOrigin);
       scene.add(projectileMesh);
+      if (projectiles.length >= perfConfig.maxProjectiles) {
+        disposeProjectile(projectiles.shift());
+      }
       projectiles.push({
         mesh: projectileMesh,
         velocity: tempDir.clone().multiplyScalar(weaponDef.projectileSpeed || 34),
@@ -2038,7 +2123,7 @@
       });
     };
 
-    const explodeProjectile = (projectile, normal = new THREE.Vector3(0, 1, 0)) => {
+    const explodeProjectile = (projectile, normal = worldUp) => {
       createImpactMark(projectile.mesh.position, normal, 0.28, 0.46, 0xff9f5a);
       tempImpactDir.copy(projectile.velocity || normal).normalize();
       if (tempImpactDir.lengthSq() < 0.0001) tempImpactDir.copy(normal).normalize();
@@ -2048,9 +2133,7 @@
         projectile.structureDamage || projectile.damage || 120,
         tempImpactDir
       );
-      scene.remove(projectile.mesh);
-      projectile.mesh.geometry.dispose();
-      projectile.mesh.material.dispose();
+      disposeProjectile(projectile);
     };
 
     const sampleVoxelImpactNormal = (blockState, worldPoint, radius, outNormal) => {
@@ -2621,6 +2704,8 @@
     const wallJumpPushSpeed = 9.8;
     const wallJumpTangentCarry = 0.92;
     const wallJumpContactGrace = 0.12;
+    const dynamicTerrainActiveRadius = 18;
+    const dynamicTerrainActiveRadiusSq = dynamicTerrainActiveRadius * dynamicTerrainActiveRadius;
     
     let isGrounded = true;
     let swayTime = 0;
@@ -2631,12 +2716,19 @@
     const right = new THREE.Vector3();
     const moveWish = new THREE.Vector3();
     const dashDirection = new THREE.Vector3();
-    const fixedDelta = 1 / 120;
-    const maxSubSteps = 6;
-    let physicsAccumulator = 0;
+    const maxSimDt = 1 / 30;
+    let fireflyAccumulator = 0;
+    const fireflyStep = 1 / 45;
     let wallJumpCharges = wallJumpMaxCharges;
     let wallContactTimer = 0;
     const lastWallContactNormal = new THREE.Vector3();
+
+    const overlapsCircleXZ = (box, cx, cz, radius) => (
+      cx + radius > box.min.x &&
+      cx - radius < box.max.x &&
+      cz + radius > box.min.z &&
+      cz - radius < box.max.z
+    );
 
     const applyAcceleration = (wishDir, wishSpeed, accelRate, dt) => {
       if (wishSpeed <= 0 || wishDir.lengthSq() === 0) return;
@@ -2668,12 +2760,14 @@
       const headY = feetY + currentEyeHeight + playerHeadClearance;
       const floorTolerance = 0.06;
       const collisionEpsilon = 0.0005;
-      const maxIterations = 4;
+      const maxIterations = 3;
+      const probeRadius = playerRadius + 0.08;
 
       for (let iter = 0; iter < maxIterations; iter++) {
         let hitAny = false;
 
         for (const box of boxColliders) {
+          if (!overlapsCircleXZ(box, player.position.x, player.position.z, probeRadius)) continue;
           // Ignore ceilings above the head and floors already under the feet.
           if (headY <= box.min.y + collisionEpsilon) continue;
           if (feetY >= box.max.y - floorTolerance) continue;
@@ -2739,6 +2833,7 @@
       outNormal.set(0, 0, 0);
 
       for (const box of boxColliders) {
+        if (!overlapsCircleXZ(box, player.position.x, player.position.z, probeRadius + 0.05)) continue;
         if (headY <= box.min.y + collisionEpsilon) continue;
         if (feetY >= box.max.y - floorTolerance) continue;
 
@@ -2880,6 +2975,7 @@
       let targetTopY = -Infinity;
 
       for (const box of boxColliders) {
+        if (!overlapsCircleXZ(box, probeX, probeZ, playerRadius + 0.05)) continue;
         if (headY <= box.min.y + 0.001) continue;
         if (feetY >= box.max.y - 0.001) continue;
 
@@ -2903,6 +2999,7 @@
       const landingZ = player.position.z + wishDir.z * landingDist;
 
       for (const box of boxColliders) {
+        if (!overlapsCircleXZ(box, landingX, landingZ, playerRadius + 0.05)) continue;
         if (landingHeadY <= box.min.y + 0.001) continue;
         if (landingFeetY >= box.max.y - 0.001) continue;
 
@@ -2945,6 +3042,13 @@
       };
 
       for (const tile of dynamicTerrainTiles) {
+        const dxToPlayer = tile.mesh.position.x - player.position.x;
+        const dzToPlayer = tile.mesh.position.z - player.position.z;
+        if (dxToPlayer * dxToPlayer + dzToPlayer * dzToPlayer > dynamicTerrainActiveRadiusSq) {
+          tile.deltaY = 0;
+          continue;
+        }
+
         if (tile.pause > 0) {
           tile.pause = Math.max(0, tile.pause - dt);
           tile.deltaY = 0;
@@ -2954,7 +3058,6 @@
         const toTarget = tile.targetY - tile.lastY;
         if (Math.abs(toTarget) <= 0.01) {
           tile.mesh.position.y = tile.targetY;
-          tile.mesh.updateMatrixWorld(true);
           tile.lastY = tile.targetY;
           tile.deltaY = 0;
           syncBlockCollider(tile.blockState);
@@ -2967,7 +3070,6 @@
         const nextY = tile.lastY + stepDelta;
 
         tile.mesh.position.y = nextY;
-        tile.mesh.updateMatrixWorld(true);
         tile.deltaY = nextY - tile.lastY;
         tile.lastY = nextY;
         syncBlockCollider(tile.blockState);
@@ -3062,7 +3164,7 @@
         const projectile = projectiles[i];
         projectile.life -= dt;
         if (projectile.life <= 0) {
-          explodeProjectile(projectile, new THREE.Vector3(0, 1, 0));
+          explodeProjectile(projectile, worldUp);
           projectiles.splice(i, 1);
           continue;
         }
@@ -3128,8 +3230,7 @@
 
         chunk.mesh.material.opacity = THREE.MathUtils.clamp(chunk.life / chunk.maxLife, 0, 1);
         if (chunk.life <= 0) {
-          scene.remove(chunk.root);
-          chunk.mesh.material.dispose();
+          disposeDetachedVoxelChunk(chunk);
           detachedVoxelChunks.splice(i, 1);
         }
       }
@@ -3158,9 +3259,7 @@
 
         chunk.mesh.material.opacity = THREE.MathUtils.clamp(chunk.life / chunk.maxLife, 0, 1);
         if (chunk.life <= 0) {
-          scene.remove(chunk.mesh);
-          chunk.mesh.geometry.dispose();
-          chunk.mesh.material.dispose();
+          disposeDebrisChunk(chunk);
           debrisChunks.splice(i, 1);
         }
       }
@@ -3171,9 +3270,7 @@
         const alpha = Math.max(0, mark.life / mark.maxLife);
         mark.mesh.material.opacity = alpha;
         if (mark.life <= 0) {
-          scene.remove(mark.mesh);
-          mark.mesh.geometry.dispose();
-          mark.mesh.material.dispose();
+          disposeImpactMark(mark);
           impactMarks.splice(i, 1);
         }
       }
@@ -3291,8 +3388,8 @@
 
       const mapClamp = mapHalfSize - playerRadius - 0.2;
       const horizontalMove = Math.hypot(velocity.x, velocity.z) * dt;
-      const maxMovePerSlice = playerRadius * 0.45;
-      const moveSlices = Math.max(1, Math.min(8, Math.ceil(horizontalMove / maxMovePerSlice)));
+      const maxMovePerSlice = playerRadius * 0.55;
+      const moveSlices = Math.max(1, Math.min(6, Math.ceil(horizontalMove / maxMovePerSlice)));
       const sliceDt = dt / moveSlices;
 
       for (let moveStep = 0; moveStep < moveSlices; moveStep++) {
@@ -3388,8 +3485,11 @@
       const adsFov = activeWeapon.adsFov || movementFov;
       const finalFovTarget = THREE.MathUtils.lerp(movementFov, adsFov, adsWeight);
       const fovLerp = 1 - Math.exp(-10 * dt);
-      camera.fov = THREE.MathUtils.lerp(camera.fov, finalFovTarget, fovLerp);
-      camera.updateProjectionMatrix();
+      const nextFov = THREE.MathUtils.lerp(camera.fov, finalFovTarget, fovLerp);
+      if (Math.abs(nextFov - camera.fov) > 0.001) {
+        camera.fov = nextFov;
+        camera.updateProjectionMatrix();
+      }
 
       const swaySpeed = Math.hypot(velocity.x, velocity.z);
       const swayTarget = isGrounded ? swaySpeed * 1.05 : swaySpeed * 0.25;
@@ -3440,19 +3540,15 @@
       requestAnimationFrame(animate);
 
       const frameDt = Math.min(clock.getDelta(), 0.1);
-
-      updateFireflies(frameDt);
+      fireflyAccumulator = Math.min(fireflyAccumulator + frameDt, 0.2);
+      if (fireflyAccumulator >= fireflyStep) {
+        updateFireflies(fireflyAccumulator);
+        fireflyAccumulator = 0;
+      }
 
       if (controls.isLocked && !isPaused) {
-        physicsAccumulator = Math.min(physicsAccumulator + frameDt, fixedDelta * maxSubSteps);
-        let subSteps = 0;
-        while (physicsAccumulator >= fixedDelta && subSteps < maxSubSteps) {
-          updatePlayerPhysics(fixedDelta);
-          physicsAccumulator -= fixedDelta;
-          subSteps += 1;
-        }
-      } else {
-        physicsAccumulator = 0;
+        const simDt = Math.min(frameDt, maxSimDt);
+        updatePlayerPhysics(simDt);
       }
 
       renderer.setRenderTarget(renderTarget);
