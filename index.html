@@ -415,6 +415,7 @@
         <div class="controlRow"><span>[Click Izq]</span><span>Disparar / Puño Izquierdo</span></div>
         <div class="controlRow"><span>[Click Der]</span><span>ADS / Puño Derecho</span></div>
         <div class="controlRow"><span>[Rueda]</span><span>Cambiar arma</span></div>
+        <div class="controlRow"><span>[C]</span><span>Agacharse</span></div>
         <div class="controlRow"><span>[ESC]</span><span>Pausar (desbloquear mouse)</span></div>
         <div class="controlRow"><span>[Click NUEVO JUEGO / REANUDAR]</span><span>Entrar al juego</span></div>
       </div>
@@ -486,7 +487,10 @@
         pixelWidth: 320,
         pixelHeight: 240,
         maxSimDt: 1 / 30,
-        fireflyStep: 1 / 45
+        fireflyStep: 1 / 45,
+        ambientStep: 1 / 28,
+        dreamSparkStep: 1 / 24,
+        lightStep: 1 / 18
       },
       input: {
         jumpBufferMax: 0.12,
@@ -558,8 +562,12 @@
           reloadTime: 0,
           fireInterval: 0.28,
           adsFov: 75,
-          recoilBack: 0.02,
-          recoilCam: 0.01
+          recoilForce: 0.32,
+          verticalKick: 0.03,
+          massFactor: 1.8,
+          selfImpulseMultiplier: 1.0,
+          recoilBack: 0.06,
+          recoilCam: 0.018
         },
         {
           id: "revolver",
@@ -575,8 +583,12 @@
           spread: 0.0014,
           pellets: 1,
           adsFov: 65,
-          recoilBack: 0.07,
-          recoilCam: 0.02
+          recoilForce: 1.45,
+          verticalKick: 0.09,
+          massFactor: 1.4,
+          selfImpulseMultiplier: 1.05,
+          recoilBack: 0.2,
+          recoilCam: 0.06
         },
         {
           id: "shotgun",
@@ -592,8 +604,12 @@
           spread: 0.048,
           pellets: 9,
           adsFov: 62,
-          recoilBack: 0.11,
-          recoilCam: 0.03
+          recoilForce: 2.35,
+          verticalKick: 0.16,
+          massFactor: 1.0,
+          selfImpulseMultiplier: 1.08,
+          recoilBack: 0.34,
+          recoilCam: 0.095
         },
         {
           id: "sniper",
@@ -609,8 +625,12 @@
           spread: 0,
           pellets: 1,
           adsFov: 30,
-          recoilBack: 0.13,
-          recoilCam: 0.035
+          recoilForce: 2.4,
+          verticalKick: 0.1,
+          massFactor: 0.8,
+          selfImpulseMultiplier: 0.95,
+          recoilBack: 0.26,
+          recoilCam: 0.075
         },
         {
           id: "bazooka",
@@ -624,9 +644,14 @@
           reloadTime: 2.6,
           fireInterval: 1.25,
           projectileSpeed: 36,
+          explosionImpulseForce: 23.0,
           adsFov: 68,
-          recoilBack: 0.14,
-          recoilCam: 0.038
+          recoilForce: 3.0,
+          verticalKick: 0.3,
+          massFactor: 0.35,
+          selfImpulseMultiplier: 1.25,
+          recoilBack: 0.46,
+          recoilCam: 0.12
         }
       ]
     };
@@ -651,7 +676,8 @@
       powerPreference: "high-performance",
       desynchronized: true
     });
-    renderer.setPixelRatio(1);
+    const rendererPixelRatioCap = 1.5;
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, rendererPixelRatioCap));
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.setClearColor(GameConfig.colors.clearColor, 1);
     renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -693,9 +719,127 @@
     const perfConfig = GameConfig.perf;
     const physicsFlags = GameConfig.physicsFlags;
     const physicsConfig = GameConfig.physics;
+    const hardwareThreads = Math.max(1, navigator.hardwareConcurrency || 8);
+    const reportedDeviceMemory = Math.max(1, navigator.deviceMemory || 8);
+    const lowSpecProfile = hardwareThreads <= 4 || reportedDeviceMemory <= 4;
+    const midSpecProfile = !lowSpecProfile && (hardwareThreads <= 8 || reportedDeviceMemory <= 8);
+    const particleQualityScale = lowSpecProfile ? 0.6 : (midSpecProfile ? 0.8 : 1);
+    const lightQualityScale = lowSpecProfile ? 0.58 : (midSpecProfile ? 0.8 : 1);
+    const tunedFireflyCount = Math.max(420, Math.round(perfConfig.fireflyCount * particleQualityScale));
+    const tunedAmbientParticleCount = Math.max(1200, Math.round(perfConfig.ambientParticleCount * particleQualityScale));
+    const tunedDreamSparkCount = Math.max(120, Math.round(250 * particleQualityScale));
+    const tunedFireflyPointLights = Math.max(8, Math.round(perfConfig.fireflyPointLights * lightQualityScale));
+    const tunedMaxActiveFireflyLights = Math.max(4, Math.round(GameConfig.lighting.maxActiveFireflyLights * lightQualityScale));
+
+    const audioListener = new THREE.AudioListener();
+    camera.add(audioListener);
+
+    const backgroundMusicAnchor = new THREE.Object3D();
+    backgroundMusicAnchor.position.set(0, 4.5, 0);
+    scene.add(backgroundMusicAnchor);
+
+    const backgroundMusic = new THREE.PositionalAudio(audioListener);
+    backgroundMusic.setLoop(true);
+    backgroundMusic.setRefDistance(mapHalfSize * 0.7);
+    backgroundMusic.setMaxDistance(mapHalfSize * 5);
+    backgroundMusic.setRolloffFactor(0.35);
+    backgroundMusic.setDistanceModel("inverse");
+    backgroundMusic.panner.panningModel = "equalpower";
+    backgroundMusicAnchor.add(backgroundMusic);
+
+    const backgroundMusicFilter = audioListener.context.createBiquadFilter();
+    backgroundMusicFilter.type = "lowpass";
+    backgroundMusicFilter.Q.value = 0.65;
+    backgroundMusic.setFilter(backgroundMusicFilter);
+
+    const backgroundMusicActiveVolume = 0.34;
+    const backgroundMusicPausedVolume = 0.24;
+    const backgroundMusicOpenCutoff = 18000;
+    const backgroundMusicPausedCutoff = 3200;
+    const backgroundMusicTransition = 0.24;
+    let backgroundMusicStarted = false;
+
+    const backgroundMusicElement = new Audio("./loop_music.ogg");
+    backgroundMusicElement.loop = true;
+    backgroundMusicElement.preload = "auto";
+    backgroundMusicElement.playsInline = true;
+    backgroundMusicElement.crossOrigin = "anonymous";
+    backgroundMusic.setMediaElementSource(backgroundMusicElement);
+    backgroundMusicElement.load();
+
+    const updateBackgroundMusicState = (paused) => {
+      const now = audioListener.context.currentTime;
+      const targetVolume = paused ? backgroundMusicPausedVolume : backgroundMusicActiveVolume;
+      const targetCutoff = paused ? backgroundMusicPausedCutoff : backgroundMusicOpenCutoff;
+
+      backgroundMusic.gain.gain.cancelScheduledValues(now);
+      backgroundMusic.gain.gain.setValueAtTime(backgroundMusic.gain.gain.value, now);
+      backgroundMusic.gain.gain.linearRampToValueAtTime(targetVolume, now + backgroundMusicTransition);
+
+      backgroundMusicFilter.frequency.cancelScheduledValues(now);
+      backgroundMusicFilter.frequency.setValueAtTime(backgroundMusicFilter.frequency.value, now);
+      backgroundMusicFilter.frequency.linearRampToValueAtTime(targetCutoff, now + backgroundMusicTransition);
+    };
+
+    const ensureAudioContextRunning = async () => {
+      const { context } = audioListener;
+      if (context.state === "running") return true;
+      try {
+        await context.resume();
+      } catch (_) {
+      }
+      return context.state === "running";
+    };
+
+    const startBackgroundMusic = async () => {
+      if (backgroundMusicStarted || !backgroundMusicElement.paused) {
+        backgroundMusicStarted = true;
+        return true;
+      }
+      try {
+        await backgroundMusicElement.play();
+        backgroundMusicStarted = true;
+        return true;
+      } catch (_) {
+      }
+      return false;
+    };
+
+    const syncBackgroundMusicPlayback = async (paused, requestContextResume = false) => {
+      updateBackgroundMusicState(paused);
+
+      const { context } = audioListener;
+      if (context.state !== "running") {
+        if (!requestContextResume) return;
+        const resumed = await ensureAudioContextRunning();
+        if (!resumed) return;
+      }
+
+      if (!backgroundMusicStarted && paused && !requestContextResume) return;
+      await startBackgroundMusic();
+    };
+
+    backgroundMusicElement.addEventListener("error", (event) => {
+      console.warn("[Audio] Could not play loop_music.ogg", event);
+    });
+
+    const initRapierCompat = async () => {
+      const warningText = "using deprecated parameters for the initialization function; pass a single object instead";
+      const previousWarn = console.warn;
+      console.warn = (...args) => {
+        if (typeof args[0] === "string" && args[0].includes(warningText)) return;
+        previousWarn(...args);
+      };
+      try {
+        await RAPIER.init();
+      } finally {
+        console.warn = previousWarn;
+      }
+    };
+
     let rapierReady = false;
     try {
-      await RAPIER.init();
+      await initRapierCompat();
       rapierReady = true;
       console.info("[Rapier] Initialized @dimforge/rapier3d-compat@0.19.3");
     } catch (error) {
@@ -804,10 +948,10 @@
     const fireflyGroup = new THREE.Group();
     scene.add(fireflyGroup);
     const fireflies = [];
-    const fireflyCount = perfConfig.fireflyCount;
+    const fireflyCount = tunedFireflyCount;
     const fireflyArea = mapHalfSize - 2.0;
-    const fireflyMinY = mapWallHeight * 0.32;
-    const fireflyMaxY = mapWallHeight * 0.72;
+    const fireflyMinY = 0.5;
+    const fireflyMaxY = Math.min(mapWallHeight * 0.72, 7.5);
     const fireflyPlacement = buildStratifiedScatter(fireflyCount, fireflyArea, fireflyMinY, fireflyMaxY, 0.96);
     const fireflyGlowTexture = (() => {
       const size = 256;
@@ -912,15 +1056,15 @@
 
       let light = null;
       let lightBaseDistance = 0;
-      if (i < perfConfig.fireflyPointLights) {
+      if (i < tunedFireflyPointLights) {
         lightBaseDistance = 24 + Math.random() * 12;
         light = new THREE.PointLight(GameConfig.colors.fireflyLight, 3.0 + Math.random() * 1.2, lightBaseDistance, 1.05);
         light.position.set(x, y, z);
         scene.add(light);
       }
 
-      const startsLanded = false;
-      const wantsToLand = false;
+      const startsLanded = Math.random() < 0.5;
+      const wantsToLand = Math.random() < 0.4;
       fireflies.push({
         index: i,
         light,
@@ -928,8 +1072,13 @@
         spawnPos: new THREE.Vector3(x, y, z),
         startsLanded,
         state: startsLanded ? FIREFLY_STATE_LANDED : FIREFLY_STATE_FLYING,
+        _wasLanded: startsLanded,
         wantsToLand,
         landingTarget: new THREE.Vector3(x, Math.max(fireflyMinY, y - (1.2 + Math.random() * 1.6)), z),
+        flyTarget: new THREE.Vector3(x, y, z),
+        flyTimer: 0,
+        pendingDt: 0,
+        lastPulse: startsLanded ? 0.62 : 0.9,
         hasLandingTarget: false,
         landingSearchTimer: Math.random() * 0.35,
         landingFallSpeed: 0.46 + Math.random() * 0.36,
@@ -962,7 +1111,7 @@
     if (fireflyHaloInstanced.instanceColor) fireflyHaloInstanced.instanceColor.needsUpdate = true;
     if (fireflyAuraInstanced.instanceColor) fireflyAuraInstanced.instanceColor.needsUpdate = true;
 
-    const ambientParticleCount = perfConfig.ambientParticleCount;
+    const ambientParticleCount = tunedAmbientParticleCount;
     const ambientParticleArea = mapHalfSize - 1.4;
     const ambientParticleMinY = 0.6;
     const ambientParticleMaxY = mapWallHeight * 0.72;
@@ -1021,6 +1170,57 @@
     }
     ambientParticles.instanceMatrix.needsUpdate = true;
     if (ambientParticles.instanceColor) ambientParticles.instanceColor.needsUpdate = true;
+
+    const sparkCount = tunedDreamSparkCount;
+    const dreamSparksGeometry = new THREE.PlaneGeometry(0.25, 0.25);
+    const dreamSparksMaterial = new THREE.MeshBasicMaterial({
+      color: 0xffffff,
+      transparent: true,
+      opacity: 0.9,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      side: THREE.DoubleSide
+    });
+    const dreamSparksInstanced = new THREE.InstancedMesh(dreamSparksGeometry, dreamSparksMaterial, sparkCount);
+    dreamSparksInstanced.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    dreamSparksInstanced.frustumCulled = false;
+    scene.add(dreamSparksInstanced);
+    const dreamSparksData = [];
+    const dreamSparksPalette = [0x00f0ff, 0xff2a85, 0x88ff6f, 0xb175ff];
+    const tempSparkPos = new THREE.Vector3();
+    const tempSparkMatrix = new THREE.Matrix4();
+    const tempSparkScale = new THREE.Vector3(1, 1, 1);
+    const tempSparkQuat = new THREE.Quaternion();
+    const dreamSparkArea = mapHalfSize - 2;
+    const dreamSparkMinY = 0.2;
+    const dreamSparkMaxY = mapWallHeight * 0.8;
+    const dreamSparksPerTick = Math.max(48, Math.round(sparkCount * 0.45));
+    let dreamSparkUpdateCursor = 0;
+    let dreamSparkTime = 0;
+
+    for (let i = 0; i < sparkCount; i++) {
+      const baseX = (Math.random() * 2 - 1) * dreamSparkArea;
+      const baseY = dreamSparkMinY + Math.random() * (dreamSparkMaxY - dreamSparkMinY);
+      const baseZ = (Math.random() * 2 - 1) * dreamSparkArea;
+      const color = dreamSparksPalette[Math.floor(Math.random() * dreamSparksPalette.length)];
+      tempSparkPos.set(baseX, baseY, baseZ);
+      tempSparkQuat.identity();
+      tempSparkMatrix.compose(tempSparkPos, tempSparkQuat, tempSparkScale);
+      dreamSparksInstanced.setMatrixAt(i, tempSparkMatrix);
+      const glowColor = new THREE.Color(color).multiplyScalar(2.5);
+      dreamSparksInstanced.setColorAt(i, glowColor);
+      dreamSparksData.push({
+        baseX,
+        baseY,
+        baseZ,
+        phase: Math.random() * Math.PI * 2,
+        speedY: 0.1 + Math.random() * 0.2,
+        driftSpeed: 0.2 + Math.random() * 0.3,
+        lastUpdateTime: 0
+      });
+    }
+    dreamSparksInstanced.instanceMatrix.needsUpdate = true;
+    dreamSparksInstanced.instanceColor.needsUpdate = true;
 
     const pixelWidth = GameConfig.renderer.pixelWidth;
     const pixelHeight = GameConfig.renderer.pixelHeight;
@@ -1248,6 +1448,9 @@
     const neonLightPool = [];
     const tempNeonLightPos = new THREE.Vector3();
     const neonLightActivationDistanceSq = neonLightActivationDistance * neonLightActivationDistance;
+    const nearestNeonBlocks = new Array(neonLightPoolSize).fill(null);
+    const nearestNeonDistSq = new Float32Array(neonLightPoolSize);
+    for (let i = 0; i < neonLightPoolSize; i++) nearestNeonDistSq[i] = Number.POSITIVE_INFINITY;
     for (let i = 0; i < neonLightPoolSize; i++) {
       const pooledNeonLight = new THREE.PointLight(0xffffff, 0, 1, 1.35);
       pooledNeonLight.visible = false;
@@ -2322,26 +2525,13 @@
         return;
       }
 
-      neonBlocksList.sort((a, b) => {
-        const aMesh = a.mesh;
-        const bMesh = b.mesh;
-        const aDead = !aMesh || !aMesh.parent || aMesh.userData?.blockState?.destroyed;
-        const bDead = !bMesh || !bMesh.parent || bMesh.userData?.blockState?.destroyed;
-        if (aDead && bDead) return 0;
-        if (aDead) return 1;
-        if (bDead) return -1;
-        const adx = aMesh.position.x - playerPos.x;
-        const ady = aMesh.position.y - playerPos.y;
-        const adz = aMesh.position.z - playerPos.z;
-        const bdx = bMesh.position.x - playerPos.x;
-        const bdy = bMesh.position.y - playerPos.y;
-        const bdz = bMesh.position.z - playerPos.z;
-        return (adx * adx + ady * ady + adz * adz) - (bdx * bdx + bdy * bdy + bdz * bdz);
-      });
+      let selectedCount = 0;
+      for (let i = 0; i < neonLightPool.length; i++) {
+        nearestNeonBlocks[i] = null;
+        nearestNeonDistSq[i] = Number.POSITIVE_INFINITY;
+      }
 
-      let poolIndex = 0;
       for (const neonBlock of neonBlocksList) {
-        if (poolIndex >= neonLightPool.length) break;
         const mesh = neonBlock.mesh;
         if (!mesh || !mesh.parent || mesh.userData?.blockState?.destroyed) continue;
 
@@ -2349,7 +2539,30 @@
         const dy = mesh.position.y - playerPos.y;
         const dz = mesh.position.z - playerPos.z;
         const distSq = dx * dx + dy * dy + dz * dz;
-        if (distSq > neonLightActivationDistanceSq) break;
+        if (distSq > neonLightActivationDistanceSq) continue;
+        if (selectedCount >= neonLightPool.length && distSq >= nearestNeonDistSq[neonLightPool.length - 1]) continue;
+
+        let insertAt = Math.min(selectedCount, neonLightPool.length - 1);
+        while (insertAt > 0 && distSq < nearestNeonDistSq[insertAt - 1]) {
+          insertAt -= 1;
+        }
+
+        const shiftFrom = Math.min(selectedCount, neonLightPool.length - 1);
+        for (let j = shiftFrom; j > insertAt; j--) {
+          nearestNeonDistSq[j] = nearestNeonDistSq[j - 1];
+          nearestNeonBlocks[j] = nearestNeonBlocks[j - 1];
+        }
+        nearestNeonDistSq[insertAt] = distSq;
+        nearestNeonBlocks[insertAt] = neonBlock;
+        if (selectedCount < neonLightPool.length) selectedCount += 1;
+      }
+
+      let poolIndex = 0;
+      for (let i = 0; i < selectedCount; i++) {
+        const neonBlock = nearestNeonBlocks[i];
+        if (!neonBlock) continue;
+        const mesh = neonBlock.mesh;
+        if (!mesh || !mesh.parent || mesh.userData?.blockState?.destroyed) continue;
 
         const pooledLight = neonLightPool[poolIndex];
         tempNeonLightPos.copy(mesh.position);
@@ -2712,7 +2925,8 @@
       left: false,
       right: false,
       jump: false,
-      dash: false
+      dash: false,
+      crouch: false
     };
     const bindableActions = GameConfig.input.defaultBinds;
     const actionBindings = Object.fromEntries(bindableActions.map((entry) => [entry.id, entry.defaultCode]));
@@ -2739,9 +2953,17 @@
     };
 
     let isPaused = true;
+    const setPausedState = (paused, requestContextResume = false) => {
+      isPaused = !!paused;
+      void syncBackgroundMusicPlayback(isPaused, requestContextResume);
+    };
+    setPausedState(true);
+
     let sniperScopeActive = false;
     const sniperScopeZoomFov = 25;
     let autoJumpEnabled = true;
+    let isCrouching = false;
+    let crouchBlend = 0;
     let autoJumpCooldown = 0;
     let jumpBufferTime = 0;
     const jumpBufferMax = GameConfig.input.jumpBufferMax;
@@ -2773,7 +2995,79 @@
     const tempDetachedImpactDir = new THREE.Vector3();
     const tempDetachedAway = new THREE.Vector3();
     const tempFireflyPos = new THREE.Vector3();
+    const tempShootDir = new THREE.Vector3();
+    const tempRecoilDir = new THREE.Vector3();
+    const tempExplosionDir = new THREE.Vector3();
+    const playerVelocity = velocity;
+    const impulsePhysicsEntities = [];
     let lastAmmoHudText = "";
+
+    const registerImpulseEntity = (entity) => {
+      if (!entity || !entity.position || !entity.velocity) return null;
+      impulsePhysicsEntities.push(entity);
+      return entity;
+    };
+
+    const applyImpulse = (targetVelocity, direction, force) => {
+      if (!targetVelocity || !direction) return;
+      if (!Number.isFinite(force) || force === 0) return;
+      const lenSq = direction.x * direction.x + direction.y * direction.y + direction.z * direction.z;
+      if (lenSq <= 0.00000001) return;
+      const normalizedScale = force / Math.sqrt(lenSq);
+      targetVelocity.x += direction.x * normalizedScale;
+      targetVelocity.y += direction.y * normalizedScale;
+      targetVelocity.z += direction.z * normalizedScale;
+    };
+
+    const applyWeaponRecoilImpulse = (weaponDef, shootDir) => {
+      if (!weaponDef || !shootDir) return;
+      const recoilForce = weaponDef.recoilForce || 0;
+      const massFactor = Math.max(0.0001, weaponDef.massFactor || 1);
+      const selfImpulseMultiplier = weaponDef.selfImpulseMultiplier ?? 1;
+      const finalRecoil = (recoilForce / massFactor) * selfImpulseMultiplier;
+      if (finalRecoil > 0) {
+        tempRecoilDir.copy(shootDir).multiplyScalar(-1);
+        applyImpulse(playerVelocity, tempRecoilDir, finalRecoil);
+      }
+      const verticalKick = weaponDef.verticalKick || 0;
+      if (verticalKick !== 0) {
+        playerVelocity.y += verticalKick;
+      }
+    };
+
+    const applyExplosionImpulse = (origin, radius, baseForce) => {
+      if (!origin) return;
+      if (!Number.isFinite(radius) || radius <= 0) return;
+      if (!Number.isFinite(baseForce) || baseForce <= 0) return;
+      const radiusSq = radius * radius;
+
+      for (let i = 0; i < impulsePhysicsEntities.length; i++) {
+        const entity = impulsePhysicsEntities[i];
+        if (!entity || entity.enabled === false) continue;
+        const position = entity.position;
+        const targetVelocity = entity.velocity;
+        if (!position || !targetVelocity) continue;
+
+        const yOffset = typeof entity.yOffset === "function" ? entity.yOffset() : (entity.yOffset || 0);
+        const dx = position.x - origin.x;
+        const dy = position.y + yOffset - origin.y;
+        const dz = position.z - origin.z;
+        const distSq = dx * dx + dy * dy + dz * dz;
+        if (distSq > radiusSq) continue;
+
+        if (distSq <= 0.00000001) {
+          tempExplosionDir.set(0, 1, 0);
+          applyImpulse(targetVelocity, tempExplosionDir, baseForce * (entity.impulseScale ?? 1));
+          continue;
+        }
+
+        const distance = Math.sqrt(distSq);
+        const falloff = 1 - THREE.MathUtils.clamp(distance / radius, 0, 1);
+        if (falloff <= 0) continue;
+        tempExplosionDir.set(dx, dy, dz);
+        applyImpulse(targetVelocity, tempExplosionDir, baseForce * falloff * (entity.impulseScale ?? 1));
+      }
+    };
 
     const getActiveWeapon = () => weapons[currentWeaponIndex];
 
@@ -2946,6 +3240,8 @@
       if (isReloading || switchPhase !== "idle") return;
       isReloading = true;
       reloadTimer = activeWeapon.reloadTime;
+      recoilBack = Math.min(recoilBack + 0.22, 0.85);
+      recoilCamPitch = Math.min(recoilCamPitch + 0.05, 0.26);
       updateAmmoHud();
     };
 
@@ -3051,6 +3347,7 @@
         radius: 0.12,
         life: 0,
         explosionRadius: 0,
+        explosionImpulseForce: 0,
         structureDamage: 0,
         damage: 0,
         active: false,
@@ -3688,16 +3985,18 @@
       fistPendingHit = true;
 
       fireCooldown = activeWeapon.fireInterval;
-      recoilBack = Math.min(recoilBack + 0.03, 0.2);
-      recoilCamPitch = Math.min(recoilCamPitch + 0.014, 0.08);
+      camera.getWorldDirection(tempShootDir).normalize();
+      applyWeaponRecoilImpulse(activeWeapon, tempShootDir);
+      recoilBack = Math.min(recoilBack + (activeWeapon.recoilBack || 0) * 1.9, 0.62);
+      recoilCamPitch = Math.min(recoilCamPitch + (activeWeapon.recoilCam || 0) * 1.7, 0.2);
       muzzleFlashTimer = 0;
       if (activeMuzzleFlash) activeMuzzleFlash.visible = false;
       updateAmmoHud();
     };
 
-    const fireHitscanWeapon = (weaponDef) => {
+    const fireHitscanWeapon = (weaponDef, shootDir) => {
       camera.getWorldPosition(tempOrigin);
-      camera.getWorldDirection(tempDir).normalize();
+      tempShootDir.copy(shootDir).normalize();
       tempRight.setFromMatrixColumn(camera.matrixWorld, 0).normalize();
       tempUp.setFromMatrixColumn(camera.matrixWorld, 1).normalize();
 
@@ -3707,7 +4006,7 @@
       const keepCenterPellet = pellets > 1;
 
       for (let i = 0; i < pellets; i++) {
-        tempDir.set(0, 0, -1).applyQuaternion(camera.quaternion).normalize();
+        tempDir.copy(tempShootDir);
         if (spreadBase > 0 && (!keepCenterPellet || i > 0)) {
           const spreadX = (Math.random() - 0.5) * spreadBase;
           const spreadY = (Math.random() - 0.5) * spreadBase;
@@ -3718,13 +4017,13 @@
       }
     };
 
-    const spawnBazookaProjectile = (weaponDef) => {
+    const spawnBazookaProjectile = (weaponDef, shootDir) => {
       const projectileState = acquirePooledProjectile();
       if (!projectileState) return;
       const projectileMesh = projectileState.mesh;
 
       camera.getWorldPosition(tempOrigin);
-      camera.getWorldDirection(tempDir).normalize();
+      tempDir.copy(shootDir).normalize();
       tempOrigin.addScaledVector(tempDir, 0.45);
 
       projectileMesh.position.copy(tempOrigin);
@@ -3733,6 +4032,7 @@
       projectileState.radius = 0.12;
       projectileState.life = 4.2;
       projectileState.explosionRadius = weaponDef.explosionRadius || 4.8;
+      projectileState.explosionImpulseForce = weaponDef.explosionImpulseForce || 0;
       projectileState.structureDamage = weaponDef.structureDamage || 210;
       projectileState.damage = weaponDef.damage || 120;
       projectileState.prevPhysicsPos.copy(projectileMesh.position);
@@ -3751,6 +4051,11 @@
         projectile.explosionRadius,
         projectile.structureDamage || projectile.damage || 120,
         tempImpactDir
+      );
+      applyExplosionImpulse(
+        projectile.mesh.position,
+        projectile.explosionRadius,
+        projectile.explosionImpulseForce || 0
       );
       disposeProjectile(projectile);
     };
@@ -4032,18 +4337,20 @@
         return;
       }
 
+      camera.getWorldDirection(tempShootDir).normalize();
       if (activeWeapon.fireType === "hitscan") {
-        fireHitscanWeapon(activeWeapon);
+        fireHitscanWeapon(activeWeapon, tempShootDir);
       } else if (activeWeapon.fireType === "projectile") {
-        spawnBazookaProjectile(activeWeapon);
+        spawnBazookaProjectile(activeWeapon, tempShootDir);
       }
 
       if (activeWeapon.clipSize > 0) {
         activeWeapon.currentAmmo = Math.max(0, activeWeapon.currentAmmo - 1);
       }
       fireCooldown = activeWeapon.fireInterval;
-      recoilBack = Math.min(recoilBack + activeWeapon.recoilBack, 0.2);
-      recoilCamPitch = Math.min(recoilCamPitch + activeWeapon.recoilCam, 0.08);
+      applyWeaponRecoilImpulse(activeWeapon, tempShootDir);
+      recoilBack = Math.min(recoilBack + (activeWeapon.recoilBack || 0) * 2.3, 0.78);
+      recoilCamPitch = Math.min(recoilCamPitch + (activeWeapon.recoilCam || 0) * 1.95, 0.26);
       muzzleFlashTimer = 0.05;
       if (activeMuzzleFlash) activeMuzzleFlash.visible = true;
       updateAmmoHud();
@@ -4056,6 +4363,8 @@
       keyState.right = false;
       keyState.jump = false;
       keyState.dash = false;
+      keyState.crouch = false;
+      isCrouching = false;
       autoJumpCooldown = 0;
       sprintFromDoubleTap = false;
       lastForwardTapTime = -Infinity;
@@ -4136,6 +4445,10 @@
         if (down && !keyState.dash) dashQueued = true;
         keyState.dash = down;
       }
+      if (code === "KeyC") {
+        keyState.crouch = down;
+        isCrouching = down;
+      }
       inputManager.handleKey(code, down);
     };
 
@@ -4145,6 +4458,7 @@
       if (controls.isLocked || lockRequestPending) return;
       lockRequestPending = true;
       try {
+        void syncBackgroundMusicPlayback(isPaused, true);
         const maybePromise = renderer.domElement.requestPointerLock();
         if (maybePromise && typeof maybePromise.then === "function") {
           await maybePromise;
@@ -4156,6 +4470,19 @@
         }, 0);
       }
     };
+
+    let backgroundMusicGesturePrimed = false;
+    const primeBackgroundMusicFromGesture = () => {
+      if (backgroundMusicGesturePrimed) return;
+      backgroundMusicGesturePrimed = true;
+      void syncBackgroundMusicPlayback(isPaused, true);
+      document.removeEventListener("pointerdown", primeBackgroundMusicFromGesture);
+      document.removeEventListener("keydown", primeBackgroundMusicFromGesture);
+      document.removeEventListener("touchstart", primeBackgroundMusicFromGesture);
+    };
+    document.addEventListener("pointerdown", primeBackgroundMusicFromGesture, { passive: true });
+    document.addEventListener("keydown", primeBackgroundMusicFromGesture);
+    document.addEventListener("touchstart", primeBackgroundMusicFromGesture, { passive: true });
 
     const resetPausedMotion = () => {
       clearMovementState();
@@ -4170,6 +4497,8 @@
       lastWallContactNormal.set(0, 0, 0);
       bobOffsetX = 0;
       bobOffsetY = 0;
+      crouchBlend = 0;
+      currentEyeHeight = PLAYER_HEIGHT_STAND;
       setSniperScopeActive(false);
       weaponRig.visible = true;
       weaponRig.position.copy(weaponHipPos);
@@ -4178,7 +4507,7 @@
         camera.fov = 75;
         camera.updateProjectionMatrix();
       }
-      camera.position.set(0, standEyeHeight, 0);
+      camera.position.set(0, PLAYER_HEIGHT_STAND, 0);
     };
 
     document.addEventListener("keydown", (e) => {
@@ -4293,20 +4622,20 @@
 
     controls.addEventListener("lock", () => {
       lockRequestPending = false;
-      isPaused = false;
+      setPausedState(false, true);
       hideMenu();
     });
 
     controls.addEventListener("unlock", () => {
       lockRequestPending = false;
-      isPaused = true;
+      setPausedState(true);
       resetPausedMotion();
       showMenu("pause");
     });
 
     document.addEventListener("pointerlockerror", () => {
       lockRequestPending = false;
-      isPaused = true;
+      setPausedState(true);
       showMenu("pause");
     });
 
@@ -4316,7 +4645,12 @@
     const clock = new THREE.Clock();
     const direction = new THREE.Vector3();
 
-    const standEyeHeight = GameConfig.player.standEyeHeight;
+    const PLAYER_HEIGHT_STAND = 1.7;
+    const PLAYER_HEIGHT_CROUCH = 1.05;
+    const PLAYER_SPEED_STAND = 8.0;
+    const PLAYER_SPEED_CROUCH = 4.6;
+
+    const standEyeHeight = PLAYER_HEIGHT_STAND;
     let currentEyeHeight = standEyeHeight;
     const playerRadius = GameConfig.player.playerRadius;
     const playerHeadClearance = GameConfig.player.playerHeadClearance;
@@ -4326,6 +4660,12 @@
     // Player body tracks feet position; camera is a local eye offset.
     const player = playerBody;
     camera.position.set(0, standEyeHeight, 0);
+    registerImpulseEntity({
+      position: player.position,
+      velocity: playerVelocity,
+      yOffset: () => currentEyeHeight * 0.5,
+      impulseScale: 1.15
+    });
 
     const groundFriction = GameConfig.player.groundFriction;
     const stopSpeed = GameConfig.player.stopSpeed;
@@ -4333,7 +4673,6 @@
     const airAccel = GameConfig.player.airAccel;
     const jumpVelocity = GameConfig.player.jumpVelocity;
     const bhopBoost = GameConfig.player.bhopBoost;
-    const maxGroundSpeed = GameConfig.player.maxGroundSpeed;
     const sprintGroundSpeed = GameConfig.player.sprintGroundSpeed;
     const maxAirWishSpeed = GameConfig.player.maxAirWishSpeed;
     const hardMaxHorizontalSpeed = GameConfig.player.hardMaxHorizontalSpeed;
@@ -4367,9 +4706,16 @@
     const moveWish = new THREE.Vector3();
     const dashDirection = new THREE.Vector3();
     const fixedDt = 1 / 60;
+    const maxPhysicsSubsteps = 5;
     let physicsAccumulator = 0;
     let fireflyAccumulator = 0;
+    let ambientParticleAccumulator = 0;
+    let dreamSparkAccumulator = 0;
+    let lightAccumulator = 0;
     const fireflyStep = GameConfig.renderer.fireflyStep;
+    const ambientStep = GameConfig.renderer.ambientStep;
+    const dreamSparkStep = GameConfig.renderer.dreamSparkStep;
+    const lightStep = GameConfig.renderer.lightStep;
     let wallJumpCharges = wallJumpMaxCharges;
     let wallContactTimer = 0;
     const lastWallContactNormal = new THREE.Vector3();
@@ -4878,27 +5224,49 @@
       return true;
     };
 
-    const traceFireflyMotion = (startPos, targetPos, outPos) => {
-      outPos.lerpVectors(startPos, targetPos, 0.1);
-      keepFireflyOutsideBlocks(outPos, 0.1, 0.05);
-    };
-
     const preLandFirefliesOnLoad = () => {
+      const seedFireflyFlyTarget = (bug, rangeXZ = 8.0) => {
+        bug.flyTarget.set(
+          bug.currentPos.x + (Math.random() - 0.5) * rangeXZ,
+          bug.currentPos.y + (Math.random() - 0.5) * 3.2,
+          bug.currentPos.z + (Math.random() - 0.5) * rangeXZ
+        );
+        bug.flyTarget.x = THREE.MathUtils.clamp(bug.flyTarget.x, -mapHalfSize + 1, mapHalfSize - 1);
+        bug.flyTarget.y = THREE.MathUtils.clamp(bug.flyTarget.y, fireflyMinY, fireflyMaxY);
+        bug.flyTarget.z = THREE.MathUtils.clamp(bug.flyTarget.z, -mapHalfSize + 1, mapHalfSize - 1);
+        bug.flyTimer = 0.25 + Math.random() * 1.1;
+      };
+
       const landedPulse = 0.62;
       fireflyInstanceQuat.identity();
       for (const bug of fireflies) {
-        if (!bug.startsLanded) continue;
-
         bug.currentPos.copy(bug.spawnPos);
+        keepFireflyOutsideBlocks(bug.currentPos, 0.2, 0.2);
+
+        if (!bug.startsLanded) {
+          bug._wasLanded = false;
+          bug.lastPulse = 0.9;
+          bug.pendingDt = 0;
+          seedFireflyFlyTarget(bug);
+          continue;
+        }
+
         const foundLandingSpot = findFireflyLandingSpot(bug.spawnPos, bug.currentPos);
         if (!foundLandingSpot) {
           bug.state = FIREFLY_STATE_FLYING;
+          bug._wasLanded = false;
+          bug.lastPulse = 0.9;
+          bug.pendingDt = 0;
           bug.wantsToLand = false;
+          seedFireflyFlyTarget(bug);
           continue;
         }
 
         bug.state = FIREFLY_STATE_LANDED;
+        bug._wasLanded = true;
         bug.wantsToLand = false;
+        bug.lastPulse = landedPulse;
+        bug.pendingDt = 0;
         bug.hasLandingTarget = true;
         bug.landingTarget.copy(bug.currentPos);
         bug.speed = 0;
@@ -4906,6 +5274,8 @@
         bug.baseX = bug.currentPos.x;
         bug.baseY = bug.currentPos.y;
         bug.baseZ = bug.currentPos.z;
+        bug.flyTarget.copy(bug.currentPos);
+        bug.flyTimer = 0;
 
         const coreScale = bug.baseScale * (0.7 + landedPulse * 1.05);
         const haloScale = coreScale * (7.2 + landedPulse * 2.4);
@@ -4937,19 +5307,37 @@
       if (fireflyAuraInstanced.instanceColor) fireflyAuraInstanced.instanceColor.needsUpdate = true;
     };
 
+    const firefliesPerTick = 220;
+    let fireflyUpdateCursor = 0;
+
     const updateFireflies = (dt) => {
+      if (fireflies.length === 0) return;
+
+      for (const bug of fireflies) {
+        bug.pendingDt = Math.min(0.2, (bug.pendingDt || 0) + dt);
+      }
+
       fireflyInstanceQuat.copy(camera.quaternion);
       let landingChecksThisFrame = 0;
-      let activeLightCount = 0;
-      for (const bug of fireflies) {
-        bug.flickerPhase += dt * bug.flickerSpeed;
-        bug.flickerPhaseB += dt * bug.flickerSpeedB;
+      let matricesDirty = false;
+      let colorsDirty = false;
+
+      const start = fireflyUpdateCursor;
+      const end = Math.min(fireflies.length, start + firefliesPerTick);
+
+      for (let i = start; i < end; i++) {
+        const bug = fireflies[i];
+        const simDt = Math.max(dt, bug.pendingDt || 0);
+        bug.pendingDt = 0;
+
+        bug.flickerPhase += simDt * bug.flickerSpeed;
+        bug.flickerPhaseB += simDt * bug.flickerSpeedB;
 
         if (bug.state === FIREFLY_STATE_FLYING) {
           if (bug.wantsToLand) {
-            bug.phase += dt * bug.speed * 0.45;
-            bug.bobPhase += dt * bug.bobSpeed * 0.35;
-            bug.landingSearchTimer -= dt;
+            bug.phase += simDt * bug.speed * 0.45;
+            bug.bobPhase += simDt * bug.bobSpeed * 0.35;
+            bug.landingSearchTimer -= simDt;
             if (!bug.hasLandingTarget || bug.landingSearchTimer <= 0) {
               if (landingChecksThisFrame < 2) {
                 bug.hasLandingTarget = findFireflyLandingSpot(bug.currentPos, bug.landingTarget);
@@ -4964,10 +5352,10 @@
             }
 
             if (bug.hasLandingTarget) {
-              const approachT = 1 - Math.exp(-bug.landingApproach * dt);
+              const approachT = 1 - Math.exp(-bug.landingApproach * simDt);
               bug.currentPos.x = THREE.MathUtils.lerp(bug.currentPos.x, bug.landingTarget.x, approachT);
               bug.currentPos.z = THREE.MathUtils.lerp(bug.currentPos.z, bug.landingTarget.z, approachT);
-              bug.currentPos.y = Math.max(bug.landingTarget.y, bug.currentPos.y - bug.landingFallSpeed * dt);
+              bug.currentPos.y = Math.max(bug.landingTarget.y, bug.currentPos.y - bug.landingFallSpeed * simDt);
 
               const toLandX = bug.landingTarget.x - bug.currentPos.x;
               const toLandZ = bug.landingTarget.z - bug.currentPos.z;
@@ -4982,7 +5370,8 @@
               const fallbackTargetZ = bug.baseZ + Math.sin(bug.phase * bug.driftFreqZ + bug.pulseBias) * bug.driftRadius;
               const fallbackTargetY = bug.baseY + Math.sin(bug.bobPhase) * bug.bobAmp;
               tempFireflyTarget.set(fallbackTargetX, fallbackTargetY, fallbackTargetZ);
-              traceFireflyMotion(bug.currentPos, tempFireflyTarget, tempFireflyPos);
+              tempFireflyPos.lerpVectors(bug.currentPos, tempFireflyTarget, 0.1);
+              keepFireflyOutsideBlocks(tempFireflyPos, 0.1, 0.05);
               bug.currentPos.copy(tempFireflyPos);
               bug.baseX = THREE.MathUtils.lerp(bug.baseX, tempFireflyPos.x, 0.035);
               bug.baseZ = THREE.MathUtils.lerp(bug.baseZ, tempFireflyPos.z, 0.035);
@@ -4992,16 +5381,31 @@
             bug.currentPos.z = THREE.MathUtils.clamp(bug.currentPos.z, -mapHalfSize + 0.24, mapHalfSize - 0.24);
             bug.currentPos.y = THREE.MathUtils.clamp(bug.currentPos.y, fireflyMinY, fireflyMaxY);
           } else {
-            bug.phase += dt * bug.speed;
-            bug.bobPhase += dt * bug.bobSpeed;
-            const px = bug.baseX + Math.cos(bug.phase * bug.driftFreqX) * bug.driftRadius;
-            const pz = bug.baseZ + Math.sin(bug.phase * bug.driftFreqZ + bug.pulseBias) * bug.driftRadius;
-            const py = bug.baseY + Math.sin(bug.bobPhase) * bug.bobAmp;
-            tempFireflyTarget.set(px, py, pz);
-            traceFireflyMotion(bug.currentPos, tempFireflyTarget, tempFireflyPos);
+            if (!Number.isFinite(bug.flyTimer)) bug.flyTimer = 0;
+            bug.phase += simDt * 15.0;
+            bug.flyTimer -= simDt;
+            if (bug.currentPos.distanceTo(bug.flyTarget) < 0.8 || bug.flyTimer <= 0) {
+              bug.flyTarget.set(
+                bug.currentPos.x + (Math.random() - 0.5) * 14.0,
+                bug.currentPos.y + (Math.random() - 0.5) * 6.0,
+                bug.currentPos.z + (Math.random() - 0.5) * 14.0
+              );
+              bug.flyTarget.x = THREE.MathUtils.clamp(bug.flyTarget.x, -mapHalfSize + 1, mapHalfSize - 1);
+              bug.flyTarget.y = THREE.MathUtils.clamp(bug.flyTarget.y, fireflyMinY, fireflyMaxY);
+              bug.flyTarget.z = THREE.MathUtils.clamp(bug.flyTarget.z, -mapHalfSize + 1, mapHalfSize - 1);
+              bug.flyTimer = 1.0 + Math.random() * 2.5;
+            }
+
+            tempFireflyPos.lerpVectors(bug.currentPos, bug.flyTarget, simDt * bug.speed);
+            tempFireflyPos.x += Math.sin(bug.phase + bug.pulseBias) * 0.035;
+            tempFireflyPos.y += Math.cos(bug.phase * 1.2 + bug.index) * 0.035;
+            tempFireflyPos.z += Math.sin(bug.phase * 0.8 - bug.pulseBias) * 0.035;
             bug.currentPos.copy(tempFireflyPos);
-            bug.baseX = THREE.MathUtils.lerp(bug.baseX, tempFireflyPos.x, 0.035);
-            bug.baseZ = THREE.MathUtils.lerp(bug.baseZ, tempFireflyPos.z, 0.035);
+
+            const hitBlock = keepFireflyOutsideBlocks(bug.currentPos, 0.2, 0.2);
+            if (hitBlock) {
+              bug.flyTimer = 0;
+            }
           }
         }
 
@@ -5011,6 +5415,7 @@
         const sideFlicker = 0.5 + 0.5 * Math.sin(bug.flickerPhaseB);
         const pulse = THREE.MathUtils.clamp(0.28 + slowFlicker * (0.56 * bug.flickerAmount) + sideFlicker * 0.18, 0.05, 1.0);
         const renderPulse = bug.state === FIREFLY_STATE_LANDED ? 0.62 : pulse;
+        bug.lastPulse = renderPulse;
         const coreScale = bug.baseScale * (0.7 + renderPulse * 1.05);
         const haloScale = coreScale * (7.2 + renderPulse * 2.4);
         const auraScale = coreScale * (13.5 + renderPulse * 4.2);
@@ -5024,41 +5429,82 @@
         fireflyInstanceScale.set(auraScale, auraScale, auraScale);
         fireflyInstanceMatrix.compose(tempFireflyPos, fireflyInstanceQuat, fireflyInstanceScale);
         fireflyAuraInstanced.setMatrixAt(bug.index, fireflyInstanceMatrix);
+        matricesDirty = true;
 
         if (bug.state === FIREFLY_STATE_LANDED) {
-          fireflyCoreInstanced.setColorAt(bug.index, fireflyCoreBaseColor);
-          fireflyHaloInstanced.setColorAt(bug.index, fireflyHaloBaseColor);
-          fireflyAuraInstanced.setColorAt(bug.index, fireflyAuraBaseColor);
+          if (!bug._wasLanded) {
+            fireflyCoreInstanced.setColorAt(bug.index, fireflyCoreBaseColor);
+            bug._wasLanded = true;
+            colorsDirty = true;
+          }
         } else {
+          bug._wasLanded = false;
           fireflyInstanceColor.copy(fireflyCoreBaseColor).multiplyScalar(0.65 + pulse * 0.95);
           fireflyCoreInstanced.setColorAt(bug.index, fireflyInstanceColor);
-          fireflyInstanceColor.copy(fireflyHaloBaseColor).multiplyScalar(0.42 + pulse * 0.78);
-          fireflyHaloInstanced.setColorAt(bug.index, fireflyInstanceColor);
-          fireflyInstanceColor.copy(fireflyAuraBaseColor).multiplyScalar(0.28 + pulse * 0.64);
-          fireflyAuraInstanced.setColorAt(bug.index, fireflyInstanceColor);
-        }
-
-        if (bug.light) {
-          const dx = tempFireflyPos.x - player.position.x;
-          const dy = tempFireflyPos.y - (player.position.y + standEyeHeight);
-          const dz = tempFireflyPos.z - player.position.z;
-          const nearPlayer = (dx * dx + dy * dy + dz * dz) <= fireflyLightCullRadiusSq;
-          const canEnable = nearPlayer && activeLightCount < GameConfig.lighting.maxActiveFireflyLights;
-          bug.light.visible = canEnable;
-          if (canEnable) {
-            activeLightCount += 1;
-            bug.light.position.copy(tempFireflyPos);
-            bug.light.distance = bug.lightBaseDistance + pulse * 16.5;
-            bug.light.intensity = 2.6 + pulse * 3.35;
-          }
+          colorsDirty = true;
         }
       }
-      fireflyCoreInstanced.instanceMatrix.needsUpdate = true;
-      fireflyHaloInstanced.instanceMatrix.needsUpdate = true;
-      fireflyAuraInstanced.instanceMatrix.needsUpdate = true;
-      if (fireflyCoreInstanced.instanceColor) fireflyCoreInstanced.instanceColor.needsUpdate = true;
-      if (fireflyHaloInstanced.instanceColor) fireflyHaloInstanced.instanceColor.needsUpdate = true;
-      if (fireflyAuraInstanced.instanceColor) fireflyAuraInstanced.instanceColor.needsUpdate = true;
+
+      fireflyUpdateCursor = end >= fireflies.length ? 0 : end;
+
+      let activeLightCount = 0;
+      for (const bug of fireflies) {
+        if (!bug.light) continue;
+        tempFireflyPos.copy(bug.currentPos);
+        const dx = tempFireflyPos.x - player.position.x;
+        const dy = tempFireflyPos.y - (player.position.y + currentEyeHeight);
+        const dz = tempFireflyPos.z - player.position.z;
+        const nearPlayer = (dx * dx + dy * dy + dz * dz) <= fireflyLightCullRadiusSq;
+        const canEnable = nearPlayer && activeLightCount < tunedMaxActiveFireflyLights;
+        bug.light.visible = canEnable;
+        if (canEnable) {
+          activeLightCount += 1;
+          bug.light.position.copy(tempFireflyPos);
+          const lightPulse = bug.lastPulse ?? 0.62;
+          bug.light.distance = bug.lightBaseDistance + lightPulse * 16.5;
+          bug.light.intensity = 2.6 + lightPulse * 3.35;
+        }
+      }
+
+      if (matricesDirty) {
+        fireflyCoreInstanced.instanceMatrix.needsUpdate = true;
+        fireflyHaloInstanced.instanceMatrix.needsUpdate = true;
+        fireflyAuraInstanced.instanceMatrix.needsUpdate = true;
+      }
+      if (colorsDirty && fireflyCoreInstanced.instanceColor) {
+        fireflyCoreInstanced.instanceColor.needsUpdate = true;
+      }
+    };
+
+    const updateDreamSparks = (dt) => {
+      if (dreamSparksData.length === 0) return;
+      dreamSparkTime += dt;
+      tempSparkQuat.copy(camera.quaternion);
+
+      const start = dreamSparkUpdateCursor;
+      const end = Math.min(dreamSparksData.length, start + dreamSparksPerTick);
+
+      for (let i = start; i < end; i++) {
+        const spark = dreamSparksData[i];
+        const simDt = Math.min(0.2, Math.max(dt, dreamSparkTime - (spark.lastUpdateTime || 0)));
+        spark.lastUpdateTime = dreamSparkTime;
+        spark.baseY += spark.speedY * simDt;
+        if (spark.baseY > mapWallHeight) {
+          spark.baseY = 0.2;
+        }
+
+        tempSparkPos.set(
+          spark.baseX + Math.sin(spark.phase) * 0.8,
+          spark.baseY,
+          spark.baseZ + Math.cos(spark.phase * 0.8) * 0.8
+        );
+        spark.phase += spark.driftSpeed * simDt;
+        tempSparkMatrix.compose(tempSparkPos, tempSparkQuat, tempSparkScale);
+        dreamSparksInstanced.setMatrixAt(i, tempSparkMatrix);
+      }
+
+      dreamSparkUpdateCursor = end >= dreamSparksData.length ? 0 : end;
+      if (end > start) dreamSparksInstanced.instanceMatrix.needsUpdate = true;
     };
 
     const updateAmbientParticles = (dt) => {
@@ -5427,8 +5873,12 @@
         Number(inputManager.isPressed("forward")) - Number(inputManager.isPressed("backward"))
       );
 
+      const targetCrouch = isCrouching ? 1 : 0;
+      crouchBlend += (targetCrouch - crouchBlend) * Math.min(1, dt * 12);
+      crouchBlend = THREE.MathUtils.clamp(crouchBlend, 0, 1);
+      const targetEyeHeight = THREE.MathUtils.lerp(PLAYER_HEIGHT_STAND, PLAYER_HEIGHT_CROUCH, crouchBlend);
       const eyeLerp = 1 - Math.exp(-12 * dt);
-      currentEyeHeight = THREE.MathUtils.lerp(currentEyeHeight, standEyeHeight, eyeLerp);
+      currentEyeHeight = THREE.MathUtils.lerp(currentEyeHeight, targetEyeHeight, eyeLerp);
 
       camera.getWorldDirection(forward);
       forward.y = 0;
@@ -5476,8 +5926,11 @@
       }
 
       const isDashing = dashTimer > 0;
-      const isSprinting = sprintFromDoubleTap && inputManager.isPressed("forward") && !inputManager.isPressed("backward") && !isDashing;
-      const targetSpeed = isSprinting ? sprintGroundSpeed : maxGroundSpeed;
+      const crouchBlocksSprint = isCrouching || crouchBlend > 0.1;
+      if (crouchBlocksSprint) sprintFromDoubleTap = false;
+      const isSprinting = !crouchBlocksSprint && sprintFromDoubleTap && inputManager.isPressed("forward") && !inputManager.isPressed("backward") && !isDashing;
+      const standingTargetSpeed = isSprinting ? sprintGroundSpeed : PLAYER_SPEED_STAND;
+      const targetSpeed = THREE.MathUtils.lerp(standingTargetSpeed, PLAYER_SPEED_CROUCH, crouchBlend);
 
       if (isGrounded && !isDashing) {
         applyGroundFriction(dt);
@@ -5530,8 +5983,8 @@
       const nextTilt = THREE.MathUtils.lerp(viewRoll.rotation.z, targetTilt, tiltLerp);
       viewRoll.rotation.z = THREE.MathUtils.clamp(nextTilt, -maxTilt, maxTilt);
 
-      recoilBack = THREE.MathUtils.lerp(recoilBack, 0, 1 - Math.exp(-17 * dt));
-      recoilCamPitch = THREE.MathUtils.lerp(recoilCamPitch, 0, 1 - Math.exp(-22 * dt));
+      recoilBack = THREE.MathUtils.lerp(recoilBack, 0, 1 - Math.exp(-11.5 * dt));
+      recoilCamPitch = THREE.MathUtils.lerp(recoilCamPitch, 0, 1 - Math.exp(-14 * dt));
       viewKick.rotation.x = THREE.MathUtils.lerp(viewKick.rotation.x, -recoilCamPitch, 1 - Math.exp(-20 * dt));
 
       const movementFactor = THREE.MathUtils.clamp(horizontalSpeed / sprintGroundSpeed, 0, 1);
@@ -5578,7 +6031,13 @@
       const swayPoseY = swayY * adsMotionScale;
 
       const reloadTarget = isReloading ? 1 : 0;
-      reloadWeight = THREE.MathUtils.lerp(reloadWeight, reloadTarget, 1 - Math.exp(-10 * dt));
+      reloadWeight = THREE.MathUtils.lerp(reloadWeight, reloadTarget, 1 - Math.exp(-12 * dt));
+      const reloadTime = Math.max(0.0001, activeWeapon.reloadTime || 0.0001);
+      const reloadProgress = isReloading
+        ? THREE.MathUtils.clamp(1 - (reloadTimer / reloadTime), 0, 1)
+        : 0;
+      const reloadSwing = Math.sin(reloadProgress * Math.PI * 2.6) * reloadWeight;
+      const reloadArc = Math.sin(reloadProgress * Math.PI) * reloadWeight;
 
       const activeModel = weaponModels.get(activeWeapon.id);
       const currentHipPos = activeModel?.userData?.hipPos || weaponHipPos;
@@ -5590,16 +6049,16 @@
       const poseBaseX = THREE.MathUtils.lerp(currentHipPos.x, currentAdsPos.x, adsWeight);
       const poseBaseY = THREE.MathUtils.lerp(currentHipPos.y, currentAdsPos.y, adsWeight);
       const poseBaseZ = THREE.MathUtils.lerp(currentHipPos.z, currentAdsPos.z, adsWeight);
-      const targetRigX = poseBaseX + swayPoseX;
-      const targetRigY = poseBaseY + swayPoseY + switchOffsetY - reloadWeight * 0.14;
-      const targetRigZ = poseBaseZ - recoilBack;
+      const targetRigX = poseBaseX + swayPoseX + reloadWeight * 0.09 + reloadSwing * 0.05;
+      const targetRigY = poseBaseY + swayPoseY + switchOffsetY - reloadWeight * 0.22 - reloadArc * 0.08 + recoilBack * 0.14;
+      const targetRigZ = poseBaseZ + recoilBack + reloadWeight * 0.2 + reloadArc * 0.11;
       weaponRig.position.x = THREE.MathUtils.lerp(weaponRig.position.x, targetRigX, poseLerp);
       weaponRig.position.y = THREE.MathUtils.lerp(weaponRig.position.y, targetRigY, poseLerp);
       weaponRig.position.z = THREE.MathUtils.lerp(weaponRig.position.z, targetRigZ, poseLerp);
 
-      const targetRigRotX = THREE.MathUtils.lerp(currentHipRot.x, currentAdsRot.x, adsWeight) + reloadWeight * 0.045;
-      const targetRigRotY = THREE.MathUtils.lerp(currentHipRot.y, currentAdsRot.y, adsWeight);
-      const targetRigRotZ = THREE.MathUtils.lerp(currentHipRot.z, currentAdsRot.z, adsWeight) + swayPoseX * 1.25 + reloadWeight * 0.16;
+      const targetRigRotX = THREE.MathUtils.lerp(currentHipRot.x, currentAdsRot.x, adsWeight) + reloadWeight * 0.24 + reloadArc * 0.28 + recoilBack * 0.54;
+      const targetRigRotY = THREE.MathUtils.lerp(currentHipRot.y, currentAdsRot.y, adsWeight) + reloadSwing * 0.2;
+      const targetRigRotZ = THREE.MathUtils.lerp(currentHipRot.z, currentAdsRot.z, adsWeight) + swayPoseX * 1.25 + reloadWeight * 0.32 + reloadSwing * 0.14 + recoilBack * 0.11;
       weaponRig.rotation.x = THREE.MathUtils.lerp(weaponRig.rotation.x, targetRigRotX, poseLerp);
       weaponRig.rotation.y = THREE.MathUtils.lerp(weaponRig.rotation.y, targetRigRotY, poseLerp);
       weaponRig.rotation.z = THREE.MathUtils.lerp(weaponRig.rotation.z, targetRigRotZ, poseLerp);
@@ -5618,24 +6077,41 @@
       requestAnimationFrame(animate);
 
       const frameDt = Math.min(clock.getDelta(), 0.1);
+      const pausedVisualStepFactor = isPaused ? 2 : 1;
       skyMat.uniforms.time.value += frameDt * 0.45;
       fireflyAccumulator = Math.min(fireflyAccumulator + frameDt, 0.2);
-      if (fireflyAccumulator >= fireflyStep) {
+      if (fireflyAccumulator >= fireflyStep * pausedVisualStepFactor) {
         updateFireflies(fireflyAccumulator);
         fireflyAccumulator = 0;
       }
-      updateAmbientParticles(frameDt);
+      dreamSparkAccumulator = Math.min(dreamSparkAccumulator + frameDt, 0.2);
+      if (dreamSparkAccumulator >= dreamSparkStep * pausedVisualStepFactor) {
+        updateDreamSparks(dreamSparkAccumulator);
+        dreamSparkAccumulator = 0;
+      }
+      ambientParticleAccumulator = Math.min(ambientParticleAccumulator + frameDt, 0.2);
+      if (ambientParticleAccumulator >= ambientStep * pausedVisualStepFactor) {
+        updateAmbientParticles(ambientParticleAccumulator);
+        ambientParticleAccumulator = 0;
+      }
 
       if (controls.isLocked && !isPaused) {
-        physicsAccumulator += frameDt;
-        while (physicsAccumulator >= fixedDt) {
+        physicsAccumulator = Math.min(
+          physicsAccumulator + frameDt,
+          fixedDt * maxPhysicsSubsteps
+        );
+        for (let i = 0; i < maxPhysicsSubsteps && physicsAccumulator >= fixedDt; i++) {
           updatePlayerPhysics(fixedDt);
           physicsAccumulator -= fixedDt;
         }
       } else {
         physicsAccumulator = 0;
       }
-      updateNeonLights(player.position);
+      lightAccumulator = Math.min(lightAccumulator + frameDt, 0.3);
+      if (lightAccumulator >= lightStep * pausedVisualStepFactor) {
+        updateNeonLights(player.position);
+        lightAccumulator = 0;
+      }
 
       renderer.setRenderTarget(renderTarget);
       renderer.clear();
@@ -5651,6 +6127,7 @@
     window.addEventListener("resize", () => {
       camera.aspect = window.innerWidth / window.innerHeight;
       camera.updateProjectionMatrix();
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, rendererPixelRatioCap));
       renderer.setSize(window.innerWidth, window.innerHeight);
     });
   </script>
