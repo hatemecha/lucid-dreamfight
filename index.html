@@ -5,12 +5,26 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Lucid Dreamfight</title>
   <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
   <style>
     :root {
       --bg: #07090d;
       --panel: #0f1520;
       --text: #d6deeb;
       --accent: #57a5ff;
+      --hud-scale: 1;
+      --hud-opacity: 1;
+      --crosshair-size: 18px;
+      --hud-main: rgba(239, 246, 255, 0.94);
+      --hud-mid: rgba(239, 246, 255, 0.72);
+      --hud-dim: rgba(239, 246, 255, 0.48);
+      --hud-faint: rgba(239, 246, 255, 0.24);
+      --hud-aberration:
+        -1px 0 rgba(255, 108, 126, 0.3),
+        1px 0 rgba(109, 196, 255, 0.36),
+        0 0 9px rgba(202, 228, 255, 0.36),
+        0 0 2px rgba(0, 0, 0, 0.75);
+      --hud-fast-transition: 140ms ease;
     }
 
     * {
@@ -84,11 +98,13 @@
     #menuScreen.controls-open #menuTitle,
     #menuScreen.controls-open #newGameBtn,
     #menuScreen.controls-open #resumeBtn,
-    #menuScreen.controls-open #controlsToggle {
+    #menuScreen.controls-open #controlsToggle,
+    #menuScreen.controls-open #optionsToggle {
       display: none;
     }
 
-    #menuScreen.controls-open #controlsSection {
+    #menuScreen.controls-open #controlsSection,
+    #menuScreen.controls-open #optionsSection {
       margin-top: 0;
       width: min(860px, 100%);
     }
@@ -97,34 +113,91 @@
       position: fixed;
       left: 50%;
       top: 50%;
-      width: 14px;
-      height: 14px;
-      margin-left: -7px;
-      margin-top: -7px;
+      width: var(--crosshair-size);
+      height: var(--crosshair-size);
+      transform: translate(-50%, -50%) scale(1);
+      transform-origin: center;
+      transition:
+        transform var(--hud-fast-transition),
+        opacity var(--hud-fast-transition);
       pointer-events: none;
       z-index: 10;
+      opacity: calc(0.88 * var(--hud-opacity));
+      filter: drop-shadow(0 0 6px rgba(239, 246, 255, 0.42));
     }
 
     #crosshair::before,
     #crosshair::after {
       content: "";
       position: absolute;
-      background: #e9f0ff;
-      opacity: 0.9;
+      background: rgba(239, 246, 255, 0.96);
+      opacity: 0.95;
     }
 
     #crosshair::before {
-      left: 6px;
+      left: calc((var(--crosshair-size) - 1px) / 2);
       top: 0;
-      width: 2px;
-      height: 14px;
+      width: 1px;
+      height: var(--crosshair-size);
     }
 
     #crosshair::after {
       left: 0;
-      top: 6px;
-      width: 14px;
-      height: 2px;
+      top: calc((var(--crosshair-size) - 1px) / 2);
+      width: var(--crosshair-size);
+      height: 1px;
+    }
+
+    body:active #crosshair {
+      transform: translate(-50%, -50%) scale(0.86);
+    }
+
+    #statusHud {
+      position: fixed;
+      left: clamp(16px, 2.3vw, 30px);
+      top: clamp(16px, 2.3vh, 30px);
+      z-index: 12;
+      pointer-events: none;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.11em;
+      font-size: 0.82rem;
+      font-weight: 300;
+      color: var(--hud-mid);
+      text-shadow: var(--hud-aberration);
+      transition: opacity var(--hud-fast-transition);
+      transform: scale(var(--hud-scale));
+      transform-origin: top left;
+      opacity: var(--hud-opacity);
+    }
+
+    .statusRow {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      line-height: 1;
+    }
+
+    .statusRow i {
+      width: 13px;
+      text-align: center;
+      font-size: 0.76rem;
+      opacity: 0.58;
+    }
+
+    .statusLabel {
+      min-width: 62px;
+      opacity: 0.58;
+    }
+
+    .statusValue {
+      opacity: 0.9;
+    }
+
+    body.hud-icons-off #statusHud .statusRow i {
+      display: none;
     }
 
     #sniperScope {
@@ -246,21 +319,22 @@
       appearance: none;
       border: none;
       background: transparent;
-      color: rgba(233, 240, 255, 0.9);
-      padding: 8px 14px;
+      color: var(--hud-mid);
+      padding: 7px 10px;
       cursor: pointer;
       font: inherit;
-      letter-spacing: 0.08em;
+      letter-spacing: 0.1em;
+      font-weight: 300;
       text-transform: uppercase;
-      text-shadow:
-        -1px 0 rgba(255, 108, 126, 0.32),
-        1px 0 rgba(109, 196, 255, 0.4),
-        0 0 10px rgba(202, 228, 255, 0.42),
-        0 0 2px rgba(0, 0, 0, 0.75);
+      text-shadow: var(--hud-aberration);
+      transition:
+        opacity var(--hud-fast-transition),
+        letter-spacing var(--hud-fast-transition);
     }
 
     .pauseBtn:hover {
-      color: #8bc0ff;
+      opacity: 1;
+      letter-spacing: 0.125em;
     }
 
     #controlsToggle {
@@ -269,158 +343,458 @@
     }
 
     #controlsSection {
-      margin-top: 8px;
-      width: min(760px, 100%);
+      margin-top: 12px;
+      width: min(780px, 100%);
       border: 0;
       background: transparent;
       box-shadow: none;
-      padding: 8px 0 2px;
+      padding: 10px 0 2px;
       text-align: left;
       font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-      text-shadow:
-        -1px 0 rgba(255, 108, 126, 0.28),
-        1px 0 rgba(109, 196, 255, 0.36),
-        0 0 8px rgba(202, 228, 255, 0.36),
-        0 0 2px rgba(0, 0, 0, 0.75);
+      font-size: 0.86rem;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--hud-main);
+      text-shadow: var(--hud-aberration);
+    }
+
+    #optionsSection {
+      margin-top: 12px;
+      width: min(780px, 100%);
+      border: 0;
+      background: transparent;
+      box-shadow: none;
+      padding: 10px 0 2px;
+      text-align: left;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      font-size: 0.86rem;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--hud-main);
+      text-shadow: var(--hud-aberration);
     }
 
     #controlsBackBtn {
       appearance: none;
       border: 0;
       background: transparent;
-      color: rgba(233, 240, 255, 0.92);
-      padding: 2px 6px 8px 2px;
+      color: var(--hud-mid);
+      padding: 2px 2px 12px 0;
       cursor: pointer;
       font: inherit;
-      font-size: 1.5rem;
+      font-size: 1.3rem;
       line-height: 1;
-      text-shadow:
-        -1px 0 rgba(255, 108, 126, 0.32),
-        1px 0 rgba(109, 196, 255, 0.4),
-        0 0 8px rgba(202, 228, 255, 0.4),
-        0 0 2px rgba(0, 0, 0, 0.75);
+      text-shadow: var(--hud-aberration);
+      transition:
+        transform var(--hud-fast-transition),
+        opacity var(--hud-fast-transition);
+    }
+
+    #optionsBackBtn {
+      appearance: none;
+      border: 0;
+      background: transparent;
+      color: var(--hud-mid);
+      padding: 2px 2px 12px 0;
+      cursor: pointer;
+      font: inherit;
+      font-size: 1.3rem;
+      line-height: 1;
+      text-shadow: var(--hud-aberration);
+      transition:
+        transform var(--hud-fast-transition),
+        opacity var(--hud-fast-transition);
     }
 
     #controlsBackBtn:hover {
-      color: #cfe4ff;
+      opacity: 1;
+      transform: translateX(-2px);
+    }
+
+    #optionsBackBtn:hover {
+      opacity: 1;
+      transform: translateX(-2px);
+    }
+
+    #bindRows {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      margin-bottom: 10px;
     }
 
     .controlRow {
-      display: flex;
+      position: relative;
+      display: grid;
+      grid-template-columns: auto 1fr;
       align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-      padding: 5px 0;
+      gap: 16px;
+      min-height: 28px;
+      padding: 4px 0;
       border-bottom: 0;
-      color: rgba(233, 240, 255, 0.92);
-      font-size: 0.9rem;
+      color: var(--hud-mid);
+      font-size: 0.79rem;
+      letter-spacing: 0.08em;
+      line-height: 1.2;
+      transition:
+        opacity var(--hud-fast-transition),
+        transform var(--hud-fast-transition),
+        text-shadow var(--hud-fast-transition);
     }
 
     .controlRow:last-child {
       border-bottom: 0;
     }
 
+    .controlRow::after {
+      content: "";
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      height: 1px;
+      background: linear-gradient(90deg, rgba(239, 246, 255, 0), rgba(239, 246, 255, 0.16), rgba(239, 246, 255, 0));
+      opacity: 0;
+      transform: scaleX(0.96);
+      transition:
+        opacity var(--hud-fast-transition),
+        transform var(--hud-fast-transition);
+    }
+
+    .controlRow:hover {
+      opacity: 1;
+      transform: translateX(1px);
+      text-shadow: var(--hud-aberration);
+    }
+
+    .controlRow:hover::after {
+      opacity: 1;
+      transform: scaleX(1);
+    }
+
+    .controlRow > :first-child {
+      justify-self: start;
+      opacity: 0.92;
+      display: inline-flex;
+      align-items: center;
+      gap: 9px;
+    }
+
+    .controlRow > :last-child {
+      justify-self: end;
+      text-align: right;
+      opacity: 0.7;
+    }
+
+    #bindRows .controlRow > :first-child {
+      order: 2;
+      justify-self: end;
+      opacity: 0.64;
+      gap: 9px;
+    }
+
+    #bindRows .controlRow > :last-child {
+      order: 1;
+      justify-self: start;
+      text-align: left;
+      opacity: 0.96;
+    }
+
+    .controlRow i {
+      width: 11px;
+      text-align: center;
+      font-size: 0.64rem;
+      opacity: 0.58;
+    }
+
     .bindBtn {
       appearance: none;
       border: 0;
       background: transparent;
-      color: rgba(233, 240, 255, 0.96);
-      padding: 4px 9px;
-      min-width: 116px;
-      text-align: center;
+      color: var(--hud-main);
+      padding: 0;
+      min-width: 110px;
+      text-align: left;
       cursor: pointer;
       font: inherit;
-      letter-spacing: 0.02em;
+      letter-spacing: 0.14em;
+      font-size: 0.82rem;
+      font-weight: 300;
       text-transform: uppercase;
-      text-shadow:
-        -1px 0 rgba(255, 108, 126, 0.28),
-        1px 0 rgba(109, 196, 255, 0.36),
-        0 0 8px rgba(202, 228, 255, 0.34),
-        0 0 2px rgba(0, 0, 0, 0.75);
+      text-shadow: var(--hud-aberration);
+      transition:
+        opacity var(--hud-fast-transition),
+        transform var(--hud-fast-transition);
     }
 
     .bindBtn:hover {
-      color: #cfe4ff;
+      opacity: 1;
+      transform: translateX(1px);
     }
 
     .bindBtn.waiting {
-      border-color: rgba(255, 208, 119, 0.8);
-      color: #ffd89d;
+      opacity: 1;
+      animation: bindPulse 900ms ease-in-out infinite;
     }
 
     .bindBtn.unbound {
-      border-color: rgba(255, 110, 110, 0.8);
-      color: #ff9f9f;
+      opacity: 0.5;
+    }
+
+    @keyframes bindPulse {
+      0% { opacity: 0.42; }
+      50% { opacity: 1; }
+      100% { opacity: 0.42; }
     }
 
     #bindWarnings {
-      margin: 8px 0 4px;
+      margin: 10px 0 6px;
       min-height: 1.25em;
-      color: rgba(255, 185, 120, 0.94);
-      font-size: 0.82rem;
+      color: var(--hud-dim);
+      font-size: 0.72rem;
+      letter-spacing: 0.1em;
     }
 
     #fixedControlsText {
-      margin: 0 0 8px;
-      color: rgba(233, 240, 255, 0.8);
-      font-size: 0.88rem;
+      margin: 0 0 12px;
+      color: var(--hud-dim);
+      font-size: 0.72rem;
+      letter-spacing: 0.14em;
+    }
+
+    #optionsIntroText {
+      margin: 0 0 12px;
+      color: var(--hud-dim);
+      font-size: 0.72rem;
+      letter-spacing: 0.14em;
+    }
+
+    .controlsSubTitle {
+      margin: 14px 0 8px;
+      color: var(--hud-faint);
+      font-size: 0.66rem;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+    }
+
+    .optionRow {
+      display: grid;
+      grid-template-columns: minmax(180px, 1fr) minmax(260px, 1.4fr);
+      align-items: center;
+      gap: 16px;
+      min-height: 30px;
+      padding: 5px 0;
+      color: var(--hud-mid);
+    }
+
+    .optionLabel {
+      justify-self: start;
+      opacity: 0.9;
+    }
+
+    .optionControl {
+      justify-self: end;
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 240px;
+      justify-content: flex-end;
+    }
+
+    .optionSlider {
+      width: min(210px, 42vw);
+      height: 2px;
+      accent-color: rgba(239, 246, 255, 0.92);
+      background: transparent;
+      cursor: pointer;
+    }
+
+    .optionValue {
+      min-width: 48px;
+      text-align: right;
+      color: var(--hud-main);
+      opacity: 0.9;
+      letter-spacing: 0.1em;
+    }
+
+    .optionSelect {
+      appearance: none;
+      border: 0;
+      border-bottom: 1px solid rgba(239, 246, 255, 0.2);
+      background: transparent;
+      color: var(--hud-main);
+      font: inherit;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      padding: 2px 0;
+      min-width: 160px;
+      text-align: right;
+      cursor: pointer;
+    }
+
+    .optionSelect:focus {
+      outline: none;
+      border-bottom-color: rgba(239, 246, 255, 0.48);
+    }
+
+    .optionToggleBtn {
+      appearance: none;
+      border: 0;
+      background: transparent;
+      color: var(--hud-main);
+      font: inherit;
+      letter-spacing: 0.11em;
+      text-transform: uppercase;
+      padding: 0;
+      min-width: 148px;
+      text-align: right;
+      cursor: pointer;
+      text-shadow: var(--hud-aberration);
+      opacity: 0.9;
+      transition:
+        opacity var(--hud-fast-transition),
+        transform var(--hud-fast-transition);
+    }
+
+    .optionToggleBtn:hover {
+      opacity: 1;
+      transform: translateX(1px);
+    }
+
+    @media (max-width: 760px) {
+      .optionRow {
+        grid-template-columns: 1fr;
+        gap: 6px;
+        padding: 8px 0;
+      }
+
+      .optionControl {
+        justify-self: start;
+        width: 100%;
+        justify-content: space-between;
+      }
+
+      .optionSlider {
+        width: min(260px, 72vw);
+      }
+
+      .optionSelect,
+      .optionToggleBtn {
+        text-align: left;
+      }
+    }
+
+    #fixedRows {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
     }
 
     #ammoHud {
       position: fixed;
-      right: 20px;
-      bottom: 18px;
-      min-width: 0;
+      right: clamp(16px, 2vw, 30px);
+      bottom: clamp(16px, 2.4vh, 30px);
+      min-width: clamp(210px, 24vw, 280px);
       border: 0;
       background: transparent;
-      color: rgba(239, 246, 255, 0.94);
+      color: var(--hud-main);
       padding: 0;
       font-family: "Trebuchet MS", "Segoe UI", sans-serif;
-      font-size: 0.92rem;
+      font-size: clamp(1.75rem, 3.3vw, 2.9rem);
       font-weight: 300;
-      letter-spacing: 0.09em;
-      line-height: 1.1;
+      letter-spacing: 0.04em;
+      line-height: 1;
       text-transform: uppercase;
       text-align: right;
       z-index: 12;
       pointer-events: none;
-      white-space: pre;
-      text-shadow:
-        -1px 0 rgba(255, 108, 126, 0.42),
-        1px 0 rgba(109, 196, 255, 0.46),
-        0 0 10px rgba(202, 228, 255, 0.5),
-        0 0 2px rgba(0, 0, 0, 0.75);
+      white-space: pre-line;
+      text-shadow: var(--hud-aberration);
+      transition:
+        opacity var(--hud-fast-transition),
+        transform var(--hud-fast-transition);
+      transform: scale(var(--hud-scale));
+      transform-origin: bottom right;
+      opacity: var(--hud-opacity);
+    }
+
+    #ammoHud.switch-glitch {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      letter-spacing: 0.13em;
+      animation: hudCodeFlicker 150ms steps(2, end) infinite;
+    }
+
+    @keyframes hudCodeFlicker {
+      0% { opacity: 0.96; }
+      50% { opacity: 0.72; }
+      100% { opacity: 0.96; }
+    }
+
+    #ammoHud::first-line {
+      font-size: clamp(0.68rem, 1.05vw, 0.9rem);
+      letter-spacing: 0.2em;
+      color: var(--hud-dim);
+      font-weight: 300;
     }
 
     #reloadHud {
       position: fixed;
-      right: 20px;
-      bottom: 52px;
-      width: 132px;
-      height: 8px;
-      border: 1px solid rgba(233, 240, 255, 0.42);
-      background: rgba(5, 10, 18, 0.45);
-      box-shadow:
-        -1px 0 rgba(255, 108, 126, 0.28),
-        1px 0 rgba(109, 196, 255, 0.32),
-        0 0 8px rgba(202, 228, 255, 0.26);
+      right: clamp(16px, 2vw, 30px);
+      bottom: clamp(92px, 12vh, 118px);
+      width: clamp(150px, 24vw, 290px);
+      height: 3px;
+      border: 0;
+      background: rgba(239, 246, 255, 0.16);
+      box-shadow: 0 0 10px rgba(239, 246, 255, 0.16);
       z-index: 12;
       pointer-events: none;
       overflow: hidden;
+      transition: opacity var(--hud-fast-transition);
+      transform: scale(var(--hud-scale));
+      transform-origin: bottom right;
+      opacity: var(--hud-opacity);
     }
 
     #reloadBarFill {
       width: 0%;
       height: 100%;
-      background: linear-gradient(90deg, rgba(87, 165, 255, 0.82), rgba(194, 230, 255, 0.92));
-      box-shadow: 0 0 8px rgba(126, 194, 255, 0.45);
+      background: rgba(239, 246, 255, 0.96);
+      box-shadow: 0 0 9px rgba(239, 246, 255, 0.5);
       transition: width 0.03s linear;
+    }
+
+    body.hud-fast #statusHud,
+    body.hud-fast #ammoHud,
+    body.hud-fast #reloadHud {
+      opacity: 0.62;
     }
   </style>
 </head>
 <body>
   <div id="app"></div>
   <div id="crosshair"></div>
+  <div id="statusHud" aria-label="Estado">
+    <div class="statusRow">
+      <i class="fa-solid fa-heart-pulse" aria-hidden="true"></i>
+      <span class="statusLabel">Health</span>
+      <span id="statusHealthValue" class="statusValue">N/A</span>
+    </div>
+    <div class="statusRow">
+      <i class="fa-solid fa-bolt" aria-hidden="true"></i>
+      <span class="statusLabel">Dash</span>
+      <span id="statusDashValue" class="statusValue">LISTO</span>
+    </div>
+    <div class="statusRow">
+      <i class="fa-solid fa-down-long" aria-hidden="true"></i>
+      <span class="statusLabel">Crouch</span>
+      <span id="statusCrouchValue" class="statusValue">OFF</span>
+    </div>
+    <div class="statusRow">
+      <i class="fa-solid fa-person-running" aria-hidden="true"></i>
+      <span class="statusLabel">Sprint</span>
+      <span id="statusSprintValue" class="statusValue">OFF</span>
+    </div>
+  </div>
   <div id="sniperScope" class="hidden"></div>
   <div id="reloadHud" class="hidden"><div id="reloadBarFill"></div></div>
   <div id="ammoHud"></div>
@@ -430,20 +804,151 @@
       <button id="newGameBtn" class="pauseBtn" type="button">Nuevo Juego</button>
       <button id="resumeBtn" class="pauseBtn" type="button">Reanudar</button>
       <button id="controlsToggle" class="pauseBtn" type="button">Controles</button>
+      <button id="optionsToggle" class="pauseBtn" type="button">Opciones</button>
       <div id="controlsSection" class="hidden">
         <button id="controlsBackBtn" type="button" aria-label="Volver">←</button>
         <p id="fixedControlsText">Controles configurables (click en la tecla para reasignar):</p>
         <div id="bindRows"></div>
-        <div class="controlRow"><span>Auto Jump (obstaculos)</span><button id="autoJumpToggleBtn" class="bindBtn" type="button">ON</button></div>
+        <p class="controlsSubTitle">Ajustes</p>
+        <div class="controlRow"><span><i class="fa-solid fa-angles-up" aria-hidden="true"></i>Auto Jump (obstaculos)</span><button id="autoJumpToggleBtn" class="bindBtn" type="button">ON</button></div>
         <p id="bindWarnings"></p>
-        <div class="controlRow"><span>[W][W]</span><span>Sprint</span></div>
-        <div class="controlRow"><span>[ESPACIO en pared]</span><span>Wall Jump x3</span></div>
-        <div class="controlRow"><span>[Click Izq]</span><span>Disparar / Puño Izquierdo</span></div>
-        <div class="controlRow"><span>[Click Der]</span><span>ADS / Puño Derecho</span></div>
-        <div class="controlRow"><span>[Rueda]</span><span>Cambiar arma</span></div>
-        <div class="controlRow"><span>[C]</span><span>Agacharse</span></div>
-        <div class="controlRow"><span>[ESC]</span><span>Pausar (desbloquear mouse)</span></div>
-        <div class="controlRow"><span>[Click NUEVO JUEGO / REANUDAR]</span><span>Entrar al juego</span></div>
+        <p class="controlsSubTitle">Acciones fijas</p>
+        <div id="fixedRows">
+          <div class="controlRow"><span><i class="fa-solid fa-vector-square" aria-hidden="true"></i>[ESPACIO EN PARED]</span><span>Wall Jump x3</span></div>
+          <div class="controlRow"><span><i class="fa-solid fa-bullseye" aria-hidden="true"></i>[CLICK IZQ]</span><span>Disparar / Puño Izquierdo</span></div>
+          <div class="controlRow"><span><i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i>[CLICK DER]</span><span>ADS / Puño Derecho</span></div>
+          <div class="controlRow"><span><i class="fa-solid fa-crosshairs" aria-hidden="true"></i>[RUEDA]</span><span>Cambiar arma</span></div>
+          <div class="controlRow"><span><i class="fa-solid fa-pause" aria-hidden="true"></i>[ESC]</span><span>Pausar (desbloquear mouse)</span></div>
+          <div class="controlRow"><span><i class="fa-solid fa-play" aria-hidden="true"></i>[CLICK NUEVO JUEGO / REANUDAR]</span><span>Entrar al juego</span></div>
+        </div>
+      </div>
+      <div id="optionsSection" class="hidden">
+        <button id="optionsBackBtn" type="button" aria-label="Volver">←</button>
+        <p id="optionsIntroText">Opciones de comodidad y experiencia:</p>
+
+        <p class="controlsSubTitle">Sonido</p>
+        <div class="optionRow">
+          <span class="optionLabel">Volumen General</span>
+          <div class="optionControl">
+            <input id="optMasterVolume" class="optionSlider" type="range" min="0" max="100" step="1" value="100">
+            <span id="optMasterVolumeValue" class="optionValue">100%</span>
+          </div>
+        </div>
+        <div class="optionRow">
+          <span class="optionLabel">Musica de Fondo</span>
+          <div class="optionControl">
+            <input id="optMusicVolume" class="optionSlider" type="range" min="0" max="100" step="1" value="100">
+            <span id="optMusicVolumeValue" class="optionValue">100%</span>
+          </div>
+        </div>
+        <div class="optionRow">
+          <span class="optionLabel">Efectos de Armas</span>
+          <div class="optionControl">
+            <input id="optWeaponFxVolume" class="optionSlider" type="range" min="0" max="100" step="1" value="100">
+            <span id="optWeaponFxVolumeValue" class="optionValue">100%</span>
+          </div>
+        </div>
+        <div class="optionRow">
+          <span class="optionLabel">Intensidad del Bajo</span>
+          <div class="optionControl">
+            <input id="optBassIntensity" class="optionSlider" type="range" min="0" max="100" step="1" value="50">
+            <span id="optBassIntensityValue" class="optionValue">50%</span>
+          </div>
+        </div>
+
+        <p class="controlsSubTitle">Interfaz</p>
+        <div class="optionRow">
+          <span class="optionLabel">Tamano del HUD</span>
+          <div class="optionControl">
+            <select id="optHudSize" class="optionSelect">
+              <option value="pequeno">Pequeno</option>
+              <option value="normal" selected>Normal</option>
+              <option value="grande">Grande</option>
+            </select>
+          </div>
+        </div>
+        <div class="optionRow">
+          <span class="optionLabel">Opacidad del HUD</span>
+          <div class="optionControl">
+            <input id="optHudOpacity" class="optionSlider" type="range" min="30" max="100" step="1" value="92">
+            <span id="optHudOpacityValue" class="optionValue">92%</span>
+          </div>
+        </div>
+        <div class="optionRow">
+          <span class="optionLabel">Tamano de Mira</span>
+          <div class="optionControl">
+            <input id="optCrosshairSize" class="optionSlider" type="range" min="70" max="160" step="1" value="100">
+            <span id="optCrosshairSizeValue" class="optionValue">100%</span>
+          </div>
+        </div>
+        <div class="optionRow">
+          <span class="optionLabel">Mostrar iconos en HUD</span>
+          <div class="optionControl">
+            <button id="optHudIcons" class="optionToggleBtn" type="button">Activado</button>
+          </div>
+        </div>
+
+        <p class="controlsSubTitle">Rendimiento</p>
+        <div class="optionRow">
+          <span class="optionLabel">Calidad Visual</span>
+          <div class="optionControl">
+            <select id="optVisualQuality" class="optionSelect">
+              <option value="baja">Baja</option>
+              <option value="media" selected>Media</option>
+              <option value="alta">Alta</option>
+            </select>
+          </div>
+        </div>
+        <div class="optionRow">
+          <span class="optionLabel">Brillo Neon</span>
+          <div class="optionControl">
+            <select id="optNeonBrightness" class="optionSelect">
+              <option value="bajo">Bajo</option>
+              <option value="medio" selected>Medio</option>
+              <option value="alto">Alto</option>
+            </select>
+          </div>
+        </div>
+        <div class="optionRow">
+          <span class="optionLabel">Efectos de Particulas</span>
+          <div class="optionControl">
+            <button id="optParticleEffects" class="optionToggleBtn" type="button">Activado</button>
+          </div>
+        </div>
+        <div class="optionRow">
+          <span class="optionLabel">Estilo Pixelado</span>
+          <div class="optionControl">
+            <button id="optPixelStyle" class="optionToggleBtn" type="button">Activado</button>
+          </div>
+        </div>
+
+        <p class="controlsSubTitle">Jugabilidad</p>
+        <div class="optionRow">
+          <span class="optionLabel">Sensibilidad del Mouse</span>
+          <div class="optionControl">
+            <input id="optMouseSensitivity" class="optionSlider" type="range" min="0" max="100" step="1" value="55">
+            <span id="optMouseSensitivityValue" class="optionValue">55%</span>
+          </div>
+        </div>
+        <div class="optionRow">
+          <span class="optionLabel">Vibracion de Disparo</span>
+          <div class="optionControl">
+            <input id="optRecoilVibration" class="optionSlider" type="range" min="0" max="120" step="1" value="100">
+            <span id="optRecoilVibrationValue" class="optionValue">100%</span>
+          </div>
+        </div>
+        <div class="optionRow">
+          <span class="optionLabel">Sacudida de Camara</span>
+          <div class="optionControl">
+            <button id="optCameraShake" class="optionToggleBtn" type="button">Activada</button>
+          </div>
+        </div>
+        <div class="optionRow">
+          <span class="optionLabel">Auto Jump</span>
+          <div class="optionControl">
+            <button id="optAutoJump" class="optionToggleBtn" type="button">Activado</button>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -532,6 +1037,7 @@
           { id: "right", label: "Derecha", defaultCode: "KeyD" },
           { id: "jump", label: "Saltar", defaultCode: "Space" },
           { id: "dash", label: "Dash", defaultCode: "ShiftLeft" },
+          { id: "crouch", label: "Agacharse", defaultCode: "KeyC" },
           { id: "reload", label: "Recargar", defaultCode: "KeyR" },
           { id: "weapon1", label: "Arma 1", defaultCode: "Digit1" },
           { id: "weapon2", label: "Arma 2", defaultCode: "Digit2" },
@@ -690,14 +1196,46 @@
     const newGameBtn = document.getElementById("newGameBtn");
     const resumeBtn = document.getElementById("resumeBtn");
     const controlsToggle = document.getElementById("controlsToggle");
+    const optionsToggle = document.getElementById("optionsToggle");
     const controlsSection = document.getElementById("controlsSection");
+    const optionsSection = document.getElementById("optionsSection");
     const controlsBackBtn = document.getElementById("controlsBackBtn");
+    const optionsBackBtn = document.getElementById("optionsBackBtn");
     const bindRows = document.getElementById("bindRows");
     const autoJumpToggleBtn = document.getElementById("autoJumpToggleBtn");
     const bindWarnings = document.getElementById("bindWarnings");
     const ammoHud = document.getElementById("ammoHud");
     const reloadHud = document.getElementById("reloadHud");
     const reloadBarFill = document.getElementById("reloadBarFill");
+    const statusHealthValue = document.getElementById("statusHealthValue");
+    const statusDashValue = document.getElementById("statusDashValue");
+    const statusCrouchValue = document.getElementById("statusCrouchValue");
+    const statusSprintValue = document.getElementById("statusSprintValue");
+
+    const optMasterVolume = document.getElementById("optMasterVolume");
+    const optMasterVolumeValue = document.getElementById("optMasterVolumeValue");
+    const optMusicVolume = document.getElementById("optMusicVolume");
+    const optMusicVolumeValue = document.getElementById("optMusicVolumeValue");
+    const optWeaponFxVolume = document.getElementById("optWeaponFxVolume");
+    const optWeaponFxVolumeValue = document.getElementById("optWeaponFxVolumeValue");
+    const optBassIntensity = document.getElementById("optBassIntensity");
+    const optBassIntensityValue = document.getElementById("optBassIntensityValue");
+    const optHudSize = document.getElementById("optHudSize");
+    const optHudOpacity = document.getElementById("optHudOpacity");
+    const optHudOpacityValue = document.getElementById("optHudOpacityValue");
+    const optCrosshairSize = document.getElementById("optCrosshairSize");
+    const optCrosshairSizeValue = document.getElementById("optCrosshairSizeValue");
+    const optHudIcons = document.getElementById("optHudIcons");
+    const optVisualQuality = document.getElementById("optVisualQuality");
+    const optNeonBrightness = document.getElementById("optNeonBrightness");
+    const optParticleEffects = document.getElementById("optParticleEffects");
+    const optPixelStyle = document.getElementById("optPixelStyle");
+    const optMouseSensitivity = document.getElementById("optMouseSensitivity");
+    const optMouseSensitivityValue = document.getElementById("optMouseSensitivityValue");
+    const optRecoilVibration = document.getElementById("optRecoilVibration");
+    const optRecoilVibrationValue = document.getElementById("optRecoilVibrationValue");
+    const optCameraShake = document.getElementById("optCameraShake");
+    const optAutoJump = document.getElementById("optAutoJump");
 
     const renderer = new THREE.WebGLRenderer({
       antialias: false,
@@ -785,6 +1323,10 @@
     const backgroundMusicOpenCutoff = 18000;
     const backgroundMusicPausedCutoff = 3200;
     const backgroundMusicTransition = 0.24;
+    let backgroundMusicMasterLevel = 1;
+    let backgroundMusicMusicLevel = 1;
+    let backgroundMusicBassLevel = 0.5;
+    let weaponEffectsVolumeLevel = 1;
     let backgroundMusicStarted = false;
 
     const backgroundMusicElement = new Audio("./loop_music.ogg");
@@ -797,8 +1339,11 @@
 
     const updateBackgroundMusicState = (paused) => {
       const now = audioListener.context.currentTime;
-      const targetVolume = paused ? backgroundMusicPausedVolume : backgroundMusicActiveVolume;
-      const targetCutoff = paused ? backgroundMusicPausedCutoff : backgroundMusicOpenCutoff;
+      const baseVolume = paused ? backgroundMusicPausedVolume : backgroundMusicActiveVolume;
+      const baseCutoff = paused ? backgroundMusicPausedCutoff : backgroundMusicOpenCutoff;
+      const bassCutoffScale = THREE.MathUtils.lerp(1.2, 0.45, backgroundMusicBassLevel);
+      const targetVolume = baseVolume * backgroundMusicMasterLevel * backgroundMusicMusicLevel;
+      const targetCutoff = THREE.MathUtils.clamp(baseCutoff * bassCutoffScale, 120, 22000);
 
       backgroundMusic.gain.gain.cancelScheduledValues(now);
       backgroundMusic.gain.gain.setValueAtTime(backgroundMusic.gain.gain.value, now);
@@ -1222,7 +1767,7 @@
     const dreamSparkArea = mapHalfSize - 2;
     const dreamSparkMinY = 0.2;
     const dreamSparkMaxY = mapWallHeight * 0.8;
-    const dreamSparksPerTick = Math.max(48, Math.round(sparkCount * 0.45));
+    let dreamSparksPerTick = Math.max(48, Math.round(sparkCount * 0.45));
     let dreamSparkUpdateCursor = 0;
     let dreamSparkTime = 0;
 
@@ -2310,6 +2855,8 @@
       if (glowPreset) {
         neonBlocksList.push({
           mesh,
+          material: blockMat,
+          baseEmissiveIntensity: blockMat.emissiveIntensity || 3.5,
           lightColor: glowPreset.lightColor,
           lightIntensity: glowPreset.lightIntensity,
           lightDistance: glowPreset.lightDistance,
@@ -2597,7 +3144,7 @@
         tempNeonLightPos.y += neonBlock.lightOffsetY;
         pooledLight.position.copy(tempNeonLightPos);
         pooledLight.color.setHex(neonBlock.lightColor);
-        pooledLight.intensity = neonBlock.lightIntensity;
+        pooledLight.intensity = neonBlock.lightIntensity * neonBrightnessScale;
         pooledLight.distance = neonBlock.lightDistance;
         pooledLight.decay = neonBlock.lightDecay;
         pooledLight.visible = true;
@@ -2791,6 +3338,8 @@
     let fireCooldown = 0;
     let recoilBack = 0;
     let recoilCamPitch = 0;
+    let recoilEffectScale = 1;
+    let cameraShakeEnabled = true;
     let muzzleFlashTimer = 0;
     let activeMuzzleFlash = null;
     let fistPunchTimer = 0;
@@ -3029,6 +3578,73 @@
     const playerVelocity = velocity;
     const impulsePhysicsEntities = [];
     let lastAmmoHudText = "";
+    const lastStatusHudText = {
+      health: "",
+      dash: "",
+      crouch: "",
+      sprint: ""
+    };
+    let switchCodeFxTimer = 0;
+    let switchCodeFxTick = 0;
+    let switchCodeFxText = "";
+    const switchCodeFxDuration = Math.max(0.18, switchDownDuration + switchUpDuration + 0.06);
+    const switchCodeFxRefresh = 0.045;
+    const switchCodeOpcodes = ["MOV", "XOR", "CMP", "JMP", "PUSH", "POP", "ERR", "NULL", "WPN"];
+    const switchCodeSegments = ["PTR", "STACK", "CACHE", "SYNC", "MEM", "BUS", "CORE", "PIPE"];
+    const switchCodeNoiseChars = "01[]{}<>/\\|;:_-=+*ABCDEF";
+
+    const pickSwitchCodeToken = (list) => list[(Math.random() * list.length) | 0];
+
+    const randomHexString = (length) => {
+      let out = "";
+      for (let i = 0; i < length; i++) {
+        out += ((Math.random() * 16) | 0).toString(16).toUpperCase();
+      }
+      return out;
+    };
+
+    const randomSwitchNoise = (length) => {
+      let out = "";
+      for (let i = 0; i < length; i++) {
+        out += switchCodeNoiseChars[(Math.random() * switchCodeNoiseChars.length) | 0];
+      }
+      return out;
+    };
+
+    const generateSwitchCodeFxText = () => {
+      const opcode = pickSwitchCodeToken(switchCodeOpcodes);
+      const segment = pickSwitchCodeToken(switchCodeSegments);
+      const addr = `0x${randomHexString(4)}`;
+      const noise = randomSwitchNoise(5 + ((Math.random() * 4) | 0));
+      return `${addr} ${opcode}_${segment} ${noise}`;
+    };
+
+    const triggerSwitchCodeFx = () => {
+      switchCodeFxTimer = switchCodeFxDuration;
+      switchCodeFxTick = 0;
+      switchCodeFxText = generateSwitchCodeFxText();
+    };
+
+    const setStatusHudText = (element, key, nextText) => {
+      if (!element) return;
+      if (lastStatusHudText[key] === nextText) return;
+      lastStatusHudText[key] = nextText;
+      element.textContent = nextText;
+    };
+
+    const updateStatusHud = (isDashing, isSprinting) => {
+      const dashText = isDashing
+        ? "ACTIVO"
+        : (dashCooldownTimer > 0 ? `CD ${dashCooldownTimer.toFixed(1)}s` : "LISTO");
+      const crouchText = (isCrouching || crouchBlend > 0.1) ? "ON" : "OFF";
+      const sprintText = isSprinting ? "ON" : "OFF";
+
+      setStatusHudText(statusHealthValue, "health", "N/A");
+      setStatusHudText(statusDashValue, "dash", dashText);
+      setStatusHudText(statusCrouchValue, "crouch", crouchText);
+      setStatusHudText(statusSprintValue, "sprint", sprintText);
+    };
+    updateStatusHud(false, false);
 
     const registerImpulseEntity = (entity) => {
       if (!entity || !entity.position || !entity.velocity) return null;
@@ -3104,12 +3720,14 @@
       const ammoText = activeWeapon.clipSize === 0
         ? "∞"
         : `${activeWeapon.currentAmmo}/${activeWeapon.reserveAmmo}`;
-      const stateText = isReloading ? "RECARGA" : (switchPhase !== "idle" ? "CAMBIO" : "");
+      const hasSwitchCodeFx = !isReloading && switchCodeFxTimer > 0;
+      const stateText = isReloading ? "RECARGA" : (hasSwitchCodeFx ? switchCodeFxText : "");
       const nextHudText = `${activeWeapon.name}\n${ammoText}${stateText ? `  ${stateText}` : ""}`;
       if (nextHudText !== lastAmmoHudText) {
         lastAmmoHudText = nextHudText;
         ammoHud.textContent = nextHudText;
       }
+      ammoHud.classList.toggle("switch-glitch", hasSwitchCodeFx);
 
       if (isReloading && activeWeapon.clipSize > 0 && activeWeapon.reloadTime > 0) {
         const reloadProgress = THREE.MathUtils.clamp(
@@ -3194,11 +3812,32 @@
       updateBindingUi();
     };
 
+    const bindActionIconMap = {
+      forward: "fa-arrow-up",
+      backward: "fa-arrow-down",
+      left: "fa-arrow-left",
+      right: "fa-arrow-right",
+      jump: "fa-angles-up",
+      dash: "fa-bolt",
+      crouch: "fa-down-long",
+      reload: "fa-rotate-right",
+      weapon1: "fa-crosshairs",
+      weapon2: "fa-crosshairs",
+      weapon3: "fa-crosshairs",
+      weapon4: "fa-crosshairs",
+      weapon5: "fa-crosshairs"
+    };
+
     for (const entry of bindableActions) {
       const row = document.createElement("div");
       row.className = "controlRow";
       const label = document.createElement("span");
-      label.textContent = entry.label;
+      const icon = document.createElement("i");
+      icon.className = `fa-solid ${bindActionIconMap[entry.id] || "fa-circle"}`;
+      icon.setAttribute("aria-hidden", "true");
+      const labelText = document.createElement("span");
+      labelText.textContent = entry.label;
+      label.append(icon, labelText);
       const button = document.createElement("button");
       button.type = "button";
       button.className = "bindBtn";
@@ -3208,6 +3847,310 @@
       bindRows.appendChild(row);
     }
     updateBindingUi();
+
+    const OPTIONS_STORAGE_KEY = "lucid_dreamfight_options_v1";
+    const optionDefaults = {
+      masterVolume: 100,
+      musicVolume: 100,
+      weaponFxVolume: 100,
+      bassIntensity: 50,
+      hudSize: "normal",
+      hudOpacity: 92,
+      crosshairSize: 100,
+      showHudIcons: true,
+      visualQuality: "media",
+      neonBrightness: "medio",
+      particleEffectsReduced: false,
+      pixelStyle: true,
+      mouseSensitivity: 55,
+      recoilVibration: 100,
+      cameraShake: true,
+      autoJump: true
+    };
+    const optionState = { ...optionDefaults };
+
+    let runtimeParticleQualityScale = particleQualityScale;
+    let runtimeLightQualityScale = lightQualityScale;
+    let runtimeFireflyStep = GameConfig.renderer.fireflyStep;
+    let runtimeAmbientStep = GameConfig.renderer.ambientStep;
+    let runtimeDreamSparkStep = GameConfig.renderer.dreamSparkStep;
+    let runtimeLightStep = GameConfig.renderer.lightStep;
+    let runtimeMaxActiveFireflyLights = tunedMaxActiveFireflyLights;
+    let neonBrightnessScale = 1;
+    const baseDreamSparksPerTick = dreamSparksPerTick;
+    const baseFireflyCoreOpacity = fireflyGlowMat.opacity;
+    const baseFireflyHaloOpacity = fireflyHaloMat.opacity;
+    const baseFireflyAuraOpacity = fireflyAuraMat.opacity;
+    const baseDreamSparkOpacity = dreamSparksMaterial.opacity;
+    const baseAmbientOpacity = ambientParticleMat.opacity;
+    const baseBloomStrength = postUniforms.bloomStrength.value;
+    const basePostExposure = postUniforms.postExposure.value;
+    const baseAberrationStrength = postUniforms.aberrationStrength.value;
+
+    const clampNumber = (value, min, max, fallback) => {
+      const parsed = Number(value);
+      if (!Number.isFinite(parsed)) return fallback;
+      return THREE.MathUtils.clamp(parsed, min, max);
+    };
+
+    const normalizeChoice = (value, allowed, fallback) => (
+      allowed.includes(value) ? value : fallback
+    );
+
+    const setToggleText = (button, active, onText = "Activado", offText = "Desactivado") => {
+      if (!button) return;
+      button.textContent = active ? onText : offText;
+    };
+
+    const saveOptionsToStorage = () => {
+      try {
+        localStorage.setItem(OPTIONS_STORAGE_KEY, JSON.stringify(optionState));
+      } catch (_) {
+      }
+    };
+
+    const loadOptionsFromStorage = () => {
+      try {
+        const raw = localStorage.getItem(OPTIONS_STORAGE_KEY);
+        if (!raw) return;
+        const parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== "object") return;
+
+        optionState.masterVolume = clampNumber(parsed.masterVolume, 0, 100, optionDefaults.masterVolume);
+        optionState.musicVolume = clampNumber(parsed.musicVolume, 0, 100, optionDefaults.musicVolume);
+        optionState.weaponFxVolume = clampNumber(parsed.weaponFxVolume, 0, 100, optionDefaults.weaponFxVolume);
+        optionState.bassIntensity = clampNumber(parsed.bassIntensity, 0, 100, optionDefaults.bassIntensity);
+        optionState.hudSize = normalizeChoice(parsed.hudSize, ["pequeno", "normal", "grande"], optionDefaults.hudSize);
+        optionState.hudOpacity = clampNumber(parsed.hudOpacity, 30, 100, optionDefaults.hudOpacity);
+        optionState.crosshairSize = clampNumber(parsed.crosshairSize, 70, 160, optionDefaults.crosshairSize);
+        optionState.showHudIcons = parsed.showHudIcons !== false;
+        optionState.visualQuality = normalizeChoice(parsed.visualQuality, ["baja", "media", "alta"], optionDefaults.visualQuality);
+        optionState.neonBrightness = normalizeChoice(parsed.neonBrightness, ["bajo", "medio", "alto"], optionDefaults.neonBrightness);
+        optionState.particleEffectsReduced = parsed.particleEffectsReduced === true;
+        optionState.pixelStyle = parsed.pixelStyle !== false;
+        optionState.mouseSensitivity = clampNumber(parsed.mouseSensitivity, 0, 100, optionDefaults.mouseSensitivity);
+        optionState.recoilVibration = clampNumber(parsed.recoilVibration, 0, 120, optionDefaults.recoilVibration);
+        optionState.cameraShake = parsed.cameraShake !== false;
+        optionState.autoJump = parsed.autoJump !== false;
+      } catch (_) {
+      }
+    };
+
+    const updateOptionUiValues = () => {
+      if (optMasterVolume) optMasterVolume.value = String(optionState.masterVolume);
+      if (optMasterVolumeValue) optMasterVolumeValue.textContent = `${Math.round(optionState.masterVolume)}%`;
+
+      if (optMusicVolume) optMusicVolume.value = String(optionState.musicVolume);
+      if (optMusicVolumeValue) optMusicVolumeValue.textContent = `${Math.round(optionState.musicVolume)}%`;
+
+      if (optWeaponFxVolume) optWeaponFxVolume.value = String(optionState.weaponFxVolume);
+      if (optWeaponFxVolumeValue) optWeaponFxVolumeValue.textContent = `${Math.round(optionState.weaponFxVolume)}%`;
+
+      if (optBassIntensity) optBassIntensity.value = String(optionState.bassIntensity);
+      if (optBassIntensityValue) optBassIntensityValue.textContent = `${Math.round(optionState.bassIntensity)}%`;
+
+      if (optHudSize) optHudSize.value = optionState.hudSize;
+      if (optHudOpacity) optHudOpacity.value = String(optionState.hudOpacity);
+      if (optHudOpacityValue) optHudOpacityValue.textContent = `${Math.round(optionState.hudOpacity)}%`;
+
+      if (optCrosshairSize) optCrosshairSize.value = String(optionState.crosshairSize);
+      if (optCrosshairSizeValue) optCrosshairSizeValue.textContent = `${Math.round(optionState.crosshairSize)}%`;
+
+      if (optVisualQuality) optVisualQuality.value = optionState.visualQuality;
+      if (optNeonBrightness) optNeonBrightness.value = optionState.neonBrightness;
+
+      if (optMouseSensitivity) optMouseSensitivity.value = String(optionState.mouseSensitivity);
+      if (optMouseSensitivityValue) optMouseSensitivityValue.textContent = `${Math.round(optionState.mouseSensitivity)}%`;
+
+      if (optRecoilVibration) optRecoilVibration.value = String(optionState.recoilVibration);
+      if (optRecoilVibrationValue) optRecoilVibrationValue.textContent = `${Math.round(optionState.recoilVibration)}%`;
+
+      setToggleText(optHudIcons, optionState.showHudIcons, "Activado", "Oculto");
+      setToggleText(optParticleEffects, !optionState.particleEffectsReduced, "Activado", "Reducido");
+      setToggleText(optPixelStyle, optionState.pixelStyle, "Activado", "Desactivado");
+      setToggleText(optCameraShake, optionState.cameraShake, "Activada", "Desactivada");
+      setToggleText(optAutoJump, optionState.autoJump, "Activado", "Desactivado");
+    };
+
+    const applySoundOptions = () => {
+      backgroundMusicMasterLevel = clampNumber(optionState.masterVolume, 0, 100, optionDefaults.masterVolume) / 100;
+      backgroundMusicMusicLevel = clampNumber(optionState.musicVolume, 0, 100, optionDefaults.musicVolume) / 100;
+      backgroundMusicBassLevel = clampNumber(optionState.bassIntensity, 0, 100, optionDefaults.bassIntensity) / 100;
+      weaponEffectsVolumeLevel = clampNumber(optionState.weaponFxVolume, 0, 100, optionDefaults.weaponFxVolume) / 100;
+      void syncBackgroundMusicPlayback(isPaused, false);
+    };
+
+    const applyHudOptions = () => {
+      const hudScaleMap = { pequeno: 0.86, normal: 1.0, grande: 1.2 };
+      const hudScale = hudScaleMap[optionState.hudSize] || 1.0;
+      const hudOpacity = clampNumber(optionState.hudOpacity, 30, 100, optionDefaults.hudOpacity) / 100;
+      const crosshairPixels = 18 * (clampNumber(optionState.crosshairSize, 70, 160, optionDefaults.crosshairSize) / 100);
+
+      document.documentElement.style.setProperty("--hud-scale", hudScale.toFixed(3));
+      document.documentElement.style.setProperty("--hud-opacity", hudOpacity.toFixed(3));
+      document.documentElement.style.setProperty("--crosshair-size", `${crosshairPixels.toFixed(1)}px`);
+      document.body.classList.toggle("hud-icons-off", !optionState.showHudIcons);
+    };
+
+    const applyPerformanceOptions = () => {
+      const visualProfile = {
+        baja: { particle: 0.72, light: 0.72, bloom: 0.82, exposure: 0.92, aberration: 0.9 },
+        media: { particle: 1.0, light: 1.0, bloom: 1.0, exposure: 1.0, aberration: 1.0 },
+        alta: { particle: 1.18, light: 1.12, bloom: 1.14, exposure: 1.06, aberration: 1.06 }
+      }[optionState.visualQuality] || { particle: 1.0, light: 1.0, bloom: 1.0, exposure: 1.0, aberration: 1.0 };
+
+      const neonScaleMap = { bajo: 0.72, medio: 1.0, alto: 1.34 };
+      neonBrightnessScale = neonScaleMap[optionState.neonBrightness] || 1.0;
+
+      runtimeParticleQualityScale = particleQualityScale * visualProfile.particle;
+      runtimeLightQualityScale = lightQualityScale * visualProfile.light;
+
+      const particleReductionScale = optionState.particleEffectsReduced ? 0.62 : 1.0;
+      const effectiveParticleScale = THREE.MathUtils.clamp(runtimeParticleQualityScale * particleReductionScale, 0.35, 1.8);
+      const effectiveLightScale = THREE.MathUtils.clamp(runtimeLightQualityScale, 0.4, 1.6);
+
+      runtimeFireflyStep = GameConfig.renderer.fireflyStep / effectiveParticleScale;
+      runtimeAmbientStep = GameConfig.renderer.ambientStep / effectiveParticleScale;
+      runtimeDreamSparkStep = GameConfig.renderer.dreamSparkStep / effectiveParticleScale;
+      runtimeLightStep = GameConfig.renderer.lightStep / effectiveLightScale;
+      runtimeMaxActiveFireflyLights = Math.max(
+        2,
+        Math.round(tunedMaxActiveFireflyLights * effectiveLightScale * (optionState.particleEffectsReduced ? 0.7 : 1))
+      );
+      dreamSparksPerTick = Math.max(24, Math.round(baseDreamSparksPerTick * effectiveParticleScale));
+
+      const particleOpacityScale = optionState.particleEffectsReduced ? 0.58 : 1.0;
+      fireflyGlowMat.opacity = baseFireflyCoreOpacity * particleOpacityScale;
+      fireflyHaloMat.opacity = baseFireflyHaloOpacity * particleOpacityScale;
+      fireflyAuraMat.opacity = baseFireflyAuraOpacity * particleOpacityScale;
+      dreamSparksMaterial.opacity = baseDreamSparkOpacity * particleOpacityScale;
+      ambientParticleMat.opacity = baseAmbientOpacity * particleOpacityScale;
+
+      const fireflyVisibleCount = Math.max(120, Math.round(fireflyCount * (optionState.particleEffectsReduced ? 0.58 : 1)));
+      fireflyCoreInstanced.count = fireflyVisibleCount;
+      fireflyHaloInstanced.count = fireflyVisibleCount;
+      fireflyAuraInstanced.count = fireflyVisibleCount;
+
+      const dreamSparkVisibleCount = Math.max(64, Math.round(sparkCount * (optionState.particleEffectsReduced ? 0.6 : 1)));
+      dreamSparksInstanced.count = dreamSparkVisibleCount;
+
+      const ambientVisibleCount = Math.max(420, Math.round(ambientParticleCount * (optionState.particleEffectsReduced ? 0.68 : 1)));
+      ambientParticles.count = ambientVisibleCount;
+
+      postUniforms.bloomStrength.value = baseBloomStrength * visualProfile.bloom;
+      postUniforms.postExposure.value = basePostExposure * visualProfile.exposure;
+      postUniforms.aberrationStrength.value = baseAberrationStrength * visualProfile.aberration;
+
+      for (const neonBlock of neonBlocksList) {
+        const material = neonBlock.material;
+        if (!material || !material.emissive) continue;
+        material.emissiveIntensity = (neonBlock.baseEmissiveIntensity || 3.5) * neonBrightnessScale;
+      }
+
+      renderer.domElement.style.imageRendering = optionState.pixelStyle ? "pixelated" : "auto";
+    };
+
+    const applyGameplayComfortOptions = () => {
+      const sensitivityT = clampNumber(optionState.mouseSensitivity, 0, 100, optionDefaults.mouseSensitivity) / 100;
+      controls.pointerSpeed = THREE.MathUtils.lerp(0.4, 2.4, sensitivityT);
+
+      recoilEffectScale = clampNumber(optionState.recoilVibration, 0, 120, optionDefaults.recoilVibration) / 100;
+      cameraShakeEnabled = !!optionState.cameraShake;
+
+      if (!cameraShakeEnabled) {
+        viewRoll.rotation.z = 0;
+        viewKick.rotation.x = 0;
+      }
+    };
+
+    const applyAutoJumpOption = (syncUi = false) => {
+      autoJumpEnabled = !!optionState.autoJump;
+      if (syncUi) updateBindingUi();
+    };
+
+    const commitOptionChange = (applyFn, refreshUi = true) => {
+      applyFn();
+      if (refreshUi) updateOptionUiValues();
+      saveOptionsToStorage();
+    };
+
+    loadOptionsFromStorage();
+    updateOptionUiValues();
+    applySoundOptions();
+    applyHudOptions();
+    applyPerformanceOptions();
+    applyGameplayComfortOptions();
+    applyAutoJumpOption(true);
+
+    optMasterVolume?.addEventListener("input", () => {
+      optionState.masterVolume = clampNumber(optMasterVolume.value, 0, 100, optionDefaults.masterVolume);
+      commitOptionChange(applySoundOptions);
+    });
+    optMusicVolume?.addEventListener("input", () => {
+      optionState.musicVolume = clampNumber(optMusicVolume.value, 0, 100, optionDefaults.musicVolume);
+      commitOptionChange(applySoundOptions);
+    });
+    optWeaponFxVolume?.addEventListener("input", () => {
+      optionState.weaponFxVolume = clampNumber(optWeaponFxVolume.value, 0, 100, optionDefaults.weaponFxVolume);
+      commitOptionChange(applySoundOptions);
+    });
+    optBassIntensity?.addEventListener("input", () => {
+      optionState.bassIntensity = clampNumber(optBassIntensity.value, 0, 100, optionDefaults.bassIntensity);
+      commitOptionChange(applySoundOptions);
+    });
+
+    optHudSize?.addEventListener("change", () => {
+      optionState.hudSize = normalizeChoice(optHudSize.value, ["pequeno", "normal", "grande"], optionDefaults.hudSize);
+      commitOptionChange(applyHudOptions);
+    });
+    optHudOpacity?.addEventListener("input", () => {
+      optionState.hudOpacity = clampNumber(optHudOpacity.value, 30, 100, optionDefaults.hudOpacity);
+      commitOptionChange(applyHudOptions);
+    });
+    optCrosshairSize?.addEventListener("input", () => {
+      optionState.crosshairSize = clampNumber(optCrosshairSize.value, 70, 160, optionDefaults.crosshairSize);
+      commitOptionChange(applyHudOptions);
+    });
+    optHudIcons?.addEventListener("click", () => {
+      optionState.showHudIcons = !optionState.showHudIcons;
+      commitOptionChange(applyHudOptions);
+    });
+
+    optVisualQuality?.addEventListener("change", () => {
+      optionState.visualQuality = normalizeChoice(optVisualQuality.value, ["baja", "media", "alta"], optionDefaults.visualQuality);
+      commitOptionChange(applyPerformanceOptions);
+    });
+    optNeonBrightness?.addEventListener("change", () => {
+      optionState.neonBrightness = normalizeChoice(optNeonBrightness.value, ["bajo", "medio", "alto"], optionDefaults.neonBrightness);
+      commitOptionChange(applyPerformanceOptions);
+    });
+    optParticleEffects?.addEventListener("click", () => {
+      optionState.particleEffectsReduced = !optionState.particleEffectsReduced;
+      commitOptionChange(applyPerformanceOptions);
+    });
+    optPixelStyle?.addEventListener("click", () => {
+      optionState.pixelStyle = !optionState.pixelStyle;
+      commitOptionChange(applyPerformanceOptions);
+    });
+
+    optMouseSensitivity?.addEventListener("input", () => {
+      optionState.mouseSensitivity = clampNumber(optMouseSensitivity.value, 0, 100, optionDefaults.mouseSensitivity);
+      commitOptionChange(applyGameplayComfortOptions);
+    });
+    optRecoilVibration?.addEventListener("input", () => {
+      optionState.recoilVibration = clampNumber(optRecoilVibration.value, 0, 120, optionDefaults.recoilVibration);
+      commitOptionChange(applyGameplayComfortOptions);
+    });
+    optCameraShake?.addEventListener("click", () => {
+      optionState.cameraShake = !optionState.cameraShake;
+      commitOptionChange(applyGameplayComfortOptions);
+    });
+    optAutoJump?.addEventListener("click", () => {
+      optionState.autoJump = !optionState.autoJump;
+      applyAutoJumpOption(true);
+      updateOptionUiValues();
+      saveOptionsToStorage();
+    });
 
     const setActiveWeapon = (index) => {
       currentWeaponIndex = THREE.MathUtils.clamp(index, 0, weapons.length - 1);
@@ -3262,6 +4205,7 @@
       pendingWeaponIndex = nextIndex;
       switchPhase = "down";
       switchTimer = 0;
+      triggerSwitchCodeFx();
       inputManager.setMouseButtonState(2, false);
       isReloading = false;
       reloadTimer = 0;
@@ -3282,8 +4226,8 @@
       if (isReloading || switchPhase !== "idle") return;
       isReloading = true;
       reloadTimer = activeWeapon.reloadTime;
-      recoilBack = Math.min(recoilBack + 0.22, 0.85);
-      recoilCamPitch = Math.min(recoilCamPitch + 0.05, 0.26);
+      recoilBack = Math.min(recoilBack + 0.22 * recoilEffectScale, 0.85);
+      recoilCamPitch = Math.min(recoilCamPitch + 0.05 * recoilEffectScale, 0.26);
       updateAmmoHud();
     };
 
@@ -4029,8 +4973,8 @@
       fireCooldown = activeWeapon.fireInterval;
       camera.getWorldDirection(tempShootDir).normalize();
       applyWeaponRecoilImpulse(activeWeapon, tempShootDir);
-      recoilBack = Math.min(recoilBack + (activeWeapon.recoilBack || 0) * 1.9, 0.62);
-      recoilCamPitch = Math.min(recoilCamPitch + (activeWeapon.recoilCam || 0) * 1.7, 0.2);
+      recoilBack = Math.min(recoilBack + (activeWeapon.recoilBack || 0) * 1.9 * recoilEffectScale, 0.62);
+      recoilCamPitch = Math.min(recoilCamPitch + (activeWeapon.recoilCam || 0) * 1.7 * recoilEffectScale, 0.2);
       muzzleFlashTimer = 0;
       if (activeMuzzleFlash) activeMuzzleFlash.visible = false;
       updateAmmoHud();
@@ -4391,8 +5335,8 @@
       }
       fireCooldown = activeWeapon.fireInterval;
       applyWeaponRecoilImpulse(activeWeapon, tempShootDir);
-      recoilBack = Math.min(recoilBack + (activeWeapon.recoilBack || 0) * 2.3, 0.78);
-      recoilCamPitch = Math.min(recoilCamPitch + (activeWeapon.recoilCam || 0) * 1.95, 0.26);
+      recoilBack = Math.min(recoilBack + (activeWeapon.recoilBack || 0) * 2.3 * recoilEffectScale, 0.78);
+      recoilCamPitch = Math.min(recoilCamPitch + (activeWeapon.recoilCam || 0) * 1.95 * recoilEffectScale, 0.26);
       muzzleFlashTimer = 0.05;
       if (activeMuzzleFlash) activeMuzzleFlash.visible = true;
       updateAmmoHud();
@@ -4436,6 +5380,7 @@
       sniperScopeActive = false;
       sniperScope.classList.add("hidden");
       closeControlsMenu();
+      closeOptionsMenu();
       menuScreen.classList.remove("hidden");
       crosshair.classList.add("hidden");
     };
@@ -4446,13 +5391,29 @@
     };
 
     const openControlsMenu = () => {
+      closeOptionsMenu();
       menuScreen.classList.add("controls-open");
       controlsSection.classList.remove("hidden");
     };
 
     const closeControlsMenu = () => {
-      menuScreen.classList.remove("controls-open");
       controlsSection.classList.add("hidden");
+      if (optionsSection.classList.contains("hidden")) {
+        menuScreen.classList.remove("controls-open");
+      }
+    };
+
+    const openOptionsMenu = () => {
+      closeControlsMenu();
+      menuScreen.classList.add("controls-open");
+      optionsSection.classList.remove("hidden");
+    };
+
+    const closeOptionsMenu = () => {
+      optionsSection.classList.add("hidden");
+      if (controlsSection.classList.contains("hidden")) {
+        menuScreen.classList.remove("controls-open");
+      }
     };
 
     const setSniperScopeActive = (active) => {
@@ -4487,7 +5448,7 @@
         if (down && !keyState.dash) dashQueued = true;
         keyState.dash = down;
       }
-      if (code === "KeyC") {
+      if (code === actionBindings.crouch) {
         keyState.crouch = down;
         isCrouching = down;
       }
@@ -4550,6 +5511,7 @@
         camera.updateProjectionMatrix();
       }
       camera.position.set(0, PLAYER_HEIGHT_STAND, 0);
+      updateStatusHud(false, false);
     };
 
     document.addEventListener("keydown", (e) => {
@@ -4585,7 +5547,7 @@
         }
       }
 
-      if (normalizedCode === actionBindings.jump) e.preventDefault();
+      if (normalizedCode === actionBindings.jump || normalizedCode === actionBindings.crouch) e.preventDefault();
       setKeyState(normalizedCode, true);
     });
 
@@ -4652,13 +5614,23 @@
       openControlsMenu();
     });
 
+    optionsToggle.addEventListener("click", () => {
+      openOptionsMenu();
+    });
+
     controlsBackBtn.addEventListener("click", () => {
       closeControlsMenu();
     });
 
+    optionsBackBtn.addEventListener("click", () => {
+      closeOptionsMenu();
+    });
+
     autoJumpToggleBtn.addEventListener("click", () => {
-      autoJumpEnabled = !autoJumpEnabled;
-      updateBindingUi();
+      optionState.autoJump = !optionState.autoJump;
+      applyAutoJumpOption(true);
+      updateOptionUiValues();
+      saveOptionsToStorage();
       updateAmmoHud();
     });
 
@@ -4754,10 +5726,6 @@
     let ambientParticleAccumulator = 0;
     let dreamSparkAccumulator = 0;
     let lightAccumulator = 0;
-    const fireflyStep = GameConfig.renderer.fireflyStep;
-    const ambientStep = GameConfig.renderer.ambientStep;
-    const dreamSparkStep = GameConfig.renderer.dreamSparkStep;
-    const lightStep = GameConfig.renderer.lightStep;
     let wallJumpCharges = wallJumpMaxCharges;
     let wallContactTimer = 0;
     const lastWallContactNormal = new THREE.Vector3();
@@ -5363,12 +6331,17 @@
       let landingChecksThisFrame = 0;
       let matricesDirty = false;
       let colorsDirty = false;
+      const visibleFireflyCount = fireflyCoreInstanced.count;
 
       const start = fireflyUpdateCursor;
       const end = Math.min(fireflies.length, start + firefliesPerTick);
 
       for (let i = start; i < end; i++) {
         const bug = fireflies[i];
+        if (bug.index >= visibleFireflyCount) {
+          if (bug.light) bug.light.visible = false;
+          continue;
+        }
         const simDt = Math.max(dt, bug.pendingDt || 0);
         bug.pendingDt = 0;
 
@@ -5492,12 +6465,16 @@
       let activeLightCount = 0;
       for (const bug of fireflies) {
         if (!bug.light) continue;
+        if (bug.index >= visibleFireflyCount) {
+          bug.light.visible = false;
+          continue;
+        }
         tempFireflyPos.copy(bug.currentPos);
         const dx = tempFireflyPos.x - player.position.x;
         const dy = tempFireflyPos.y - (player.position.y + currentEyeHeight);
         const dz = tempFireflyPos.z - player.position.z;
         const nearPlayer = (dx * dx + dy * dy + dz * dz) <= fireflyLightCullRadiusSq;
-        const canEnable = nearPlayer && activeLightCount < tunedMaxActiveFireflyLights;
+        const canEnable = nearPlayer && activeLightCount < runtimeMaxActiveFireflyLights;
         bug.light.visible = canEnable;
         if (canEnable) {
           activeLightCount += 1;
@@ -5595,6 +6572,15 @@
     };
 
     const updateWeaponStateTimers = (dt) => {
+      if (switchCodeFxTimer > 0) {
+        switchCodeFxTimer = Math.max(0, switchCodeFxTimer - dt);
+        switchCodeFxTick = Math.max(0, switchCodeFxTick - dt);
+        if (switchCodeFxTick <= 0 && switchCodeFxTimer > 0) {
+          switchCodeFxTick = switchCodeFxRefresh;
+          switchCodeFxText = generateSwitchCodeFxText();
+        }
+      }
+
       if (isReloading) {
         reloadTimer = Math.max(0, reloadTimer - dt);
         if (reloadTimer <= 0) {
@@ -5622,6 +6608,7 @@
             pendingWeaponIndex = queuedWeaponIndex;
             queuedWeaponIndex = -1;
             switchPhase = "down";
+            triggerSwitchCodeFx();
           } else {
             queuedWeaponIndex = -1;
           }
@@ -5973,6 +6960,7 @@
       const isSprinting = !crouchBlocksSprint && sprintFromDoubleTap && inputManager.isPressed("forward") && !inputManager.isPressed("backward") && !isDashing;
       const standingTargetSpeed = isSprinting ? sprintGroundSpeed : PLAYER_SPEED_STAND;
       const targetSpeed = THREE.MathUtils.lerp(standingTargetSpeed, PLAYER_SPEED_CROUCH, crouchBlend);
+      updateStatusHud(isDashing, isSprinting);
 
       if (isGrounded && !isDashing) {
         applyGroundFriction(dt);
@@ -6018,23 +7006,29 @@
       setSniperScopeActive(sniperScopeRequested);
       weaponRig.visible = !sniperScopeRequested;
       const adsMotionScale = THREE.MathUtils.lerp(1.0, 0.12, adsWeight);
+      const cameraShakeScale = cameraShakeEnabled ? 1 : 0;
 
       const tiltLerp = 1 - Math.exp(-12 * dt);
       const dashTilt = isDashing ? -THREE.MathUtils.clamp(dashDirection.dot(right), -1, 1) * 0.006 : 0;
-      const targetTilt = (-THREE.MathUtils.clamp(direction.x, -1, 1) * maxTilt + dashTilt) * THREE.MathUtils.lerp(1, 0.1, adsWeight);
+      const targetTilt =
+        (-THREE.MathUtils.clamp(direction.x, -1, 1) * maxTilt + dashTilt) *
+        THREE.MathUtils.lerp(1, 0.1, adsWeight) *
+        cameraShakeScale;
       const nextTilt = THREE.MathUtils.lerp(viewRoll.rotation.z, targetTilt, tiltLerp);
       viewRoll.rotation.z = THREE.MathUtils.clamp(nextTilt, -maxTilt, maxTilt);
 
       recoilBack = THREE.MathUtils.lerp(recoilBack, 0, 1 - Math.exp(-11.5 * dt));
       recoilCamPitch = THREE.MathUtils.lerp(recoilCamPitch, 0, 1 - Math.exp(-14 * dt));
-      viewKick.rotation.x = THREE.MathUtils.lerp(viewKick.rotation.x, -recoilCamPitch, 1 - Math.exp(-20 * dt));
+      viewKick.rotation.x = THREE.MathUtils.lerp(viewKick.rotation.x, -recoilCamPitch * cameraShakeScale, 1 - Math.exp(-20 * dt));
 
       const movementFactor = THREE.MathUtils.clamp(horizontalSpeed / sprintGroundSpeed, 0, 1);
       bobTime += dt * (7.0 + horizontalSpeed * 0.45);
       const bobGroundScale = isGrounded ? 1.0 : 0.35;
       const bobAdsScale = THREE.MathUtils.lerp(1, 0.3, adsWeight);
-      const bobTargetX = Math.sin(bobTime * 1.8) * bobSideAmplitude * movementFactor * bobGroundScale * bobAdsScale;
-      const bobTargetY = Math.abs(Math.sin(bobTime * 3.2)) * bobUpAmplitude * movementFactor * bobGroundScale * bobAdsScale;
+      const bobTargetX =
+        Math.sin(bobTime * 1.8) * bobSideAmplitude * movementFactor * bobGroundScale * bobAdsScale * cameraShakeScale;
+      const bobTargetY =
+        Math.abs(Math.sin(bobTime * 3.2)) * bobUpAmplitude * movementFactor * bobGroundScale * bobAdsScale * cameraShakeScale;
       const bobLerp = 1 - Math.exp(-10 * dt);
       bobOffsetX = THREE.MathUtils.lerp(bobOffsetX, bobTargetX, bobLerp);
       bobOffsetY = THREE.MathUtils.lerp(bobOffsetY, bobTargetY, bobLerp);
@@ -6044,7 +7038,8 @@
       const dashBreathScale = isDashing ? 0.06 : 1.0;
       const adsBreathScale = THREE.MathUtils.lerp(1, 0.2, adsWeight);
       breathTime += dt * breathFrequency;
-      const targetBreath = Math.sin(breathTime) * breathAmplitude * idleFactor * sprintBreathScale * dashBreathScale * adsBreathScale;
+      const targetBreath =
+        Math.sin(breathTime) * breathAmplitude * idleFactor * sprintBreathScale * dashBreathScale * adsBreathScale * cameraShakeScale;
       const breathLerp = 1 - Math.exp(-6 * dt);
       breathOffset = THREE.MathUtils.lerp(breathOffset, targetBreath, breathLerp);
       camera.position.set(bobOffsetX, currentEyeHeight + breathOffset + bobOffsetY, 0);
@@ -6122,17 +7117,17 @@
       const pausedVisualStepFactor = isPaused ? 2 : 1;
       skyMat.uniforms.time.value += frameDt * 0.45;
       fireflyAccumulator = Math.min(fireflyAccumulator + frameDt, 0.2);
-      if (fireflyAccumulator >= fireflyStep * pausedVisualStepFactor) {
+      if (fireflyAccumulator >= runtimeFireflyStep * pausedVisualStepFactor) {
         updateFireflies(fireflyAccumulator);
         fireflyAccumulator = 0;
       }
       dreamSparkAccumulator = Math.min(dreamSparkAccumulator + frameDt, 0.2);
-      if (dreamSparkAccumulator >= dreamSparkStep * pausedVisualStepFactor) {
+      if (dreamSparkAccumulator >= runtimeDreamSparkStep * pausedVisualStepFactor) {
         updateDreamSparks(dreamSparkAccumulator);
         dreamSparkAccumulator = 0;
       }
       ambientParticleAccumulator = Math.min(ambientParticleAccumulator + frameDt, 0.2);
-      if (ambientParticleAccumulator >= ambientStep * pausedVisualStepFactor) {
+      if (ambientParticleAccumulator >= runtimeAmbientStep * pausedVisualStepFactor) {
         updateAmbientParticles(ambientParticleAccumulator);
         ambientParticleAccumulator = 0;
       }
@@ -6150,7 +7145,7 @@
         physicsAccumulator = 0;
       }
       lightAccumulator = Math.min(lightAccumulator + frameDt, 0.3);
-      if (lightAccumulator >= lightStep * pausedVisualStepFactor) {
+      if (lightAccumulator >= runtimeLightStep * pausedVisualStepFactor) {
         updateNeonLights(player.position);
         lightAccumulator = 0;
       }
