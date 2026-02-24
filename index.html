@@ -205,21 +205,28 @@
 
     #ammoHud {
       position: fixed;
-      right: 18px;
-      bottom: 16px;
-      min-width: 180px;
-      border: 1px solid rgba(233, 240, 255, 0.35);
-      background: rgba(8, 12, 20, 0.72);
-      color: rgba(233, 240, 255, 0.95);
-      padding: 8px 10px;
-      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-      font-size: 0.86rem;
-      line-height: 1.25;
+      right: 20px;
+      bottom: 18px;
+      min-width: 0;
+      border: 0;
+      background: transparent;
+      color: rgba(239, 246, 255, 0.94);
+      padding: 0;
+      font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+      font-size: 0.92rem;
+      font-weight: 300;
+      letter-spacing: 0.09em;
+      line-height: 1.1;
+      text-transform: uppercase;
       text-align: right;
       z-index: 12;
       pointer-events: none;
       white-space: pre;
-      text-shadow: 1px 1px #000;
+      text-shadow:
+        -1px 0 rgba(255, 108, 126, 0.42),
+        1px 0 rgba(109, 196, 255, 0.46),
+        0 0 10px rgba(202, 228, 255, 0.5),
+        0 0 2px rgba(0, 0, 0, 0.75);
     }
   </style>
 </head>
@@ -286,9 +293,9 @@
     app.appendChild(renderer.domElement);
 
     const scene = new THREE.Scene();
-    const dreamFogColor = new THREE.Color(0xa99bcb);
+    const dreamFogColor = new THREE.Color(0xb7b0d8);
     scene.background = dreamFogColor.clone();
-    scene.fog = new THREE.Fog(dreamFogColor.getHex(), 34, 138);
+    scene.fog = new THREE.Fog(dreamFogColor.getHex(), 24, 126);
 
     const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.05, 300);
 
@@ -303,25 +310,59 @@
     viewRoll.add(viewKick);
     viewKick.add(camera);
 
-    const hemiLight = new THREE.HemisphereLight(0xcab9f4, 0x5b547f, 1.0);
+    const hemiLight = new THREE.HemisphereLight(0xd8c8ff, 0x6a638f, 1.36);
     scene.add(hemiLight);
 
-    const dirLight = new THREE.DirectionalLight(0xfff2fd, 0.58);
+    const dirLight = new THREE.DirectionalLight(0xfff2fd, 0.96);
     dirLight.position.set(18, 26, 6);
     scene.add(dirLight);
+
+    const ambientFill = new THREE.AmbientLight(0xc7d4ff, 0.28);
+    scene.add(ambientFill);
 
     const mapHalfSize = 52;
     const mapFloorSize = mapHalfSize * 2;
     const mapWallThickness = 2.2;
     const mapWallHeight = 24.0;
     const perfConfig = {
-      fireflyCount: 72,
-      fireflyPointLights: 8,
+      fireflyCount: 168,
+      fireflyPointLights: 72,
+      ambientParticleCount: 260,
       maxProjectiles: 14,
       maxImpactMarks: 80,
       maxDebrisChunks: 120,
       maxDetachedChunks: 22,
       maxDetachedRenderVoxels: 140
+    };
+
+    const buildStratifiedScatter = (count, halfExtent, minY, maxY, jitter = 0.35) => {
+      const positions = new Array(count);
+      const cols = Math.max(1, Math.ceil(Math.sqrt(count)));
+      const rows = Math.max(1, Math.ceil(count / cols));
+      const cellW = (halfExtent * 2) / cols;
+      const cellH = (halfExtent * 2) / rows;
+      const jitterX = cellW * jitter * 0.5;
+      const jitterZ = cellH * jitter * 0.5;
+
+      for (let i = 0; i < count; i++) {
+        const col = i % cols;
+        const row = Math.floor(i / cols);
+        const xCenter = -halfExtent + cellW * (col + 0.5);
+        const zCenter = -halfExtent + cellH * (row + 0.5);
+        const x = THREE.MathUtils.clamp(xCenter + (Math.random() * 2 - 1) * jitterX, -halfExtent, halfExtent);
+        const z = THREE.MathUtils.clamp(zCenter + (Math.random() * 2 - 1) * jitterZ, -halfExtent, halfExtent);
+        const y = minY + Math.random() * (maxY - minY);
+        positions[i] = { x, y, z };
+      }
+
+      for (let i = positions.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        const tmp = positions[i];
+        positions[i] = positions[j];
+        positions[j] = tmp;
+      }
+
+      return positions;
     };
 
     const skyMat = new THREE.ShaderMaterial({
@@ -367,46 +408,154 @@
     const fireflies = [];
     const fireflyCount = perfConfig.fireflyCount;
     const fireflyArea = mapHalfSize - 1.2;
+    const fireflyPlacement = buildStratifiedScatter(fireflyCount, fireflyArea, 0.72, mapWallHeight * 0.26, 0.84);
+    const fireflyGlowTexture = (() => {
+      const size = 256;
+      const canvas = document.createElement("canvas");
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext("2d");
+      const g = ctx.createRadialGradient(size * 0.5, size * 0.5, size * 0.01, size * 0.5, size * 0.5, size * 0.5);
+      g.addColorStop(0.0, "rgba(255,255,255,0.86)");
+      g.addColorStop(0.06, "rgba(255,255,255,0.6)");
+      g.addColorStop(0.2, "rgba(248,255,220,0.24)");
+      g.addColorStop(0.56, "rgba(225,255,160,0.08)");
+      g.addColorStop(1.0, "rgba(225,255,160,0)");
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, size, size);
+      const tex = new THREE.CanvasTexture(canvas);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      tex.magFilter = THREE.LinearFilter;
+      tex.minFilter = THREE.LinearMipmapLinearFilter;
+      tex.generateMipmaps = true;
+      return tex;
+    })();
     const fireflyGlowMat = new THREE.SpriteMaterial({
-      color: 0xe8ff8a,
+      map: fireflyGlowTexture,
+      color: 0xfbffca,
       transparent: true,
-      opacity: 0.78,
+      opacity: 0.5,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    });
+    const fireflyHaloMat = new THREE.SpriteMaterial({
+      map: fireflyGlowTexture,
+      color: 0xe7ffb8,
+      transparent: true,
+      opacity: 0.11,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    });
+    const fireflyAuraMat = new THREE.SpriteMaterial({
+      map: fireflyGlowTexture,
+      color: 0xdaf1ab,
+      transparent: true,
+      opacity: 0.045,
       blending: THREE.AdditiveBlending,
       depthWrite: false
     });
 
     for (let i = 0; i < fireflyCount; i++) {
       const sprite = new THREE.Sprite(fireflyGlowMat.clone());
-      const x = (Math.random() * 2 - 1) * fireflyArea;
-      const z = (Math.random() * 2 - 1) * fireflyArea;
-      const y = 0.9 + Math.random() * (mapWallHeight - 1.8);
+      const halo = new THREE.Sprite(fireflyHaloMat.clone());
+      const aura = new THREE.Sprite(fireflyAuraMat.clone());
+      const point = fireflyPlacement[i];
+      const x = point.x;
+      const z = point.z;
+      const y = point.y;
       sprite.position.set(x, y, z);
-      const s = 0.08 + Math.random() * 0.08;
+      halo.position.copy(sprite.position);
+      aura.position.copy(sprite.position);
+      const s = 0.17 + Math.random() * 0.1;
       sprite.scale.set(s, s, s);
+      halo.scale.set(s * 6.4, s * 6.4, s * 6.4);
+      aura.scale.set(s * 12.5, s * 12.5, s * 12.5);
       fireflyGroup.add(sprite);
+      fireflyGroup.add(halo);
+      fireflyGroup.add(aura);
 
       let light = null;
+      let lightBaseDistance = 0;
       if (i < perfConfig.fireflyPointLights) {
-        light = new THREE.PointLight(0xc9ff7a, 0.34 + Math.random() * 0.22, 11 + Math.random() * 5, 2);
+        lightBaseDistance = 24 + Math.random() * 12;
+        light = new THREE.PointLight(0xf0ffc4, 2.2 + Math.random() * 0.9, lightBaseDistance, 1.05);
         light.position.copy(sprite.position);
         scene.add(light);
       }
 
       fireflies.push({
         sprite,
+        halo,
+        aura,
         light,
+        baseScale: s,
+        lightBaseDistance,
         baseX: x,
         baseY: y,
         baseZ: z,
-        driftRadius: 0.9 + Math.random() * 1.8,
-        speed: 0.42 + Math.random() * 0.9,
+        driftRadius: 0.6 + Math.random() * 1.4,
+        speed: 0.28 + Math.random() * 0.66,
+        driftFreqX: 0.62 + Math.random() * 0.68,
+        driftFreqZ: 0.58 + Math.random() * 0.74,
         phase: Math.random() * Math.PI * 2,
         bobPhase: Math.random() * Math.PI * 2,
-        bobSpeed: 0.9 + Math.random() * 1.4,
+        bobSpeed: 0.38 + Math.random() * 0.72,
+        bobAmp: 0.16 + Math.random() * 0.22,
         flickerPhase: Math.random() * Math.PI * 2,
-        flickerSpeed: 3.0 + Math.random() * 4.5
+        flickerSpeed: 0.34 + Math.random() * 0.66,
+        flickerPhaseB: Math.random() * Math.PI * 2,
+        flickerSpeedB: 0.18 + Math.random() * 0.54,
+        flickerAmount: 0.72 + Math.random() * 0.44,
+        pulseBias: Math.random() * Math.PI * 2
       });
     }
+
+    const ambientParticleCount = perfConfig.ambientParticleCount;
+    const ambientParticleArea = mapHalfSize - 1.4;
+    const ambientParticleMinY = 0.6;
+    const ambientParticleMaxY = mapWallHeight * 0.72;
+    const ambientScatter = buildStratifiedScatter(
+      ambientParticleCount,
+      ambientParticleArea,
+      ambientParticleMinY,
+      ambientParticleMaxY,
+      0.96
+    );
+    const ambientParticleGeometry = new THREE.BufferGeometry();
+    const ambientParticlePositions = new Float32Array(ambientParticleCount * 3);
+    const ambientParticleVelocities = new Float32Array(ambientParticleCount * 3);
+    const ambientParticlePhases = new Float32Array(ambientParticleCount);
+    const ambientParticleSpeeds = new Float32Array(ambientParticleCount);
+    const ambientParticleDrifts = new Float32Array(ambientParticleCount);
+    const ambientParticleBobs = new Float32Array(ambientParticleCount);
+
+    for (let i = 0; i < ambientParticleCount; i++) {
+      const idx = i * 3;
+      const point = ambientScatter[i];
+      ambientParticlePositions[idx] = point.x;
+      ambientParticlePositions[idx + 1] = point.y;
+      ambientParticlePositions[idx + 2] = point.z;
+      ambientParticleVelocities[idx] = (Math.random() * 2 - 1) * 0.085;
+      ambientParticleVelocities[idx + 1] = -(0.07 + Math.random() * 0.08);
+      ambientParticleVelocities[idx + 2] = (Math.random() * 2 - 1) * 0.085;
+      ambientParticlePhases[i] = Math.random() * Math.PI * 2;
+      ambientParticleSpeeds[i] = 0.48 + Math.random() * 0.92;
+      ambientParticleDrifts[i] = 0.012 + Math.random() * 0.03;
+      ambientParticleBobs[i] = 0.006 + Math.random() * 0.016;
+    }
+
+    ambientParticleGeometry.setAttribute("position", new THREE.BufferAttribute(ambientParticlePositions, 3));
+    const ambientParticleMat = new THREE.PointsMaterial({
+      color: 0xd6d0c6,
+      size: 0.038,
+      transparent: true,
+      opacity: 0.44,
+      blending: THREE.NormalBlending,
+      depthWrite: false,
+      sizeAttenuation: true
+    });
+    const ambientParticles = new THREE.Points(ambientParticleGeometry, ambientParticleMat);
+    scene.add(ambientParticles);
 
     const pixelWidth = 320;
     const pixelHeight = 240;
@@ -422,9 +571,79 @@
 
     const postScene = new THREE.Scene();
     const postCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
-    const screenMat = new THREE.MeshBasicMaterial({ map: renderTarget.texture });
-    screenMat.map.magFilter = THREE.NearestFilter;
-    screenMat.map.minFilter = THREE.NearestFilter;
+    const postUniforms = {
+      tDiffuse: { value: renderTarget.texture },
+      texelSize: { value: new THREE.Vector2(1 / pixelWidth, 1 / pixelHeight) },
+      aberrationStrength: { value: 1.12 },
+      aberrationMix: { value: 0.94 },
+      postExposure: { value: 1.28 },
+      bloomRadius: { value: 2.8 },
+      bloomThreshold: { value: 0.26 },
+      bloomStrength: { value: 1.2 },
+      shadowLift: { value: 0.035 }
+    };
+    const screenMat = new THREE.ShaderMaterial({
+      uniforms: postUniforms,
+      vertexShader: `
+        varying vec2 vUv;
+        void main() {
+          vUv = uv;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: `
+        uniform sampler2D tDiffuse;
+        uniform vec2 texelSize;
+        uniform float aberrationStrength;
+        uniform float aberrationMix;
+        uniform float postExposure;
+        uniform float bloomRadius;
+        uniform float bloomThreshold;
+        uniform float bloomStrength;
+        uniform float shadowLift;
+        varying vec2 vUv;
+
+        vec3 sampleBright(vec2 uv) {
+          vec3 c = texture2D(tDiffuse, clamp(uv, vec2(0.0), vec2(1.0))).rgb;
+          return max(c - vec3(bloomThreshold), vec3(0.0));
+        }
+
+        void main() {
+          vec3 baseCol = texture2D(tDiffuse, vUv).rgb;
+          vec2 centered = vUv - 0.5;
+          float radius = length(centered) * 1.41421356;
+          vec2 direction = centered / max(length(centered), 0.0001);
+          float edgeMask = smoothstep(0.16, 0.92, radius);
+          vec2 shift = direction * texelSize * aberrationStrength * edgeMask;
+
+          vec2 uvR = clamp(vUv + shift, vec2(0.0), vec2(1.0));
+          vec2 uvB = clamp(vUv - shift, vec2(0.0), vec2(1.0));
+
+          vec4 rCol = texture2D(tDiffuse, uvR);
+          vec4 gCol = texture2D(tDiffuse, vUv);
+          vec4 bCol = texture2D(tDiffuse, uvB);
+          vec3 caCol = vec3(rCol.r, gCol.g, bCol.b);
+          vec2 bloomStep = texelSize * bloomRadius;
+          vec3 bloom = sampleBright(vUv) * 0.24;
+          bloom += sampleBright(vUv + vec2(bloomStep.x, 0.0)) * 0.12;
+          bloom += sampleBright(vUv + vec2(-bloomStep.x, 0.0)) * 0.12;
+          bloom += sampleBright(vUv + vec2(0.0, bloomStep.y)) * 0.12;
+          bloom += sampleBright(vUv + vec2(0.0, -bloomStep.y)) * 0.12;
+          bloom += sampleBright(vUv + vec2(bloomStep.x, bloomStep.y)) * 0.09;
+          bloom += sampleBright(vUv + vec2(-bloomStep.x, bloomStep.y)) * 0.09;
+          bloom += sampleBright(vUv + vec2(bloomStep.x, -bloomStep.y)) * 0.09;
+          bloom += sampleBright(vUv + vec2(-bloomStep.x, -bloomStep.y)) * 0.09;
+          bloom += sampleBright(vUv + vec2(bloomStep.x * 2.0, 0.0)) * 0.07;
+          bloom += sampleBright(vUv + vec2(-bloomStep.x * 2.0, 0.0)) * 0.07;
+          bloom += sampleBright(vUv + vec2(0.0, bloomStep.y * 2.0)) * 0.07;
+          bloom += sampleBright(vUv + vec2(0.0, -bloomStep.y * 2.0)) * 0.07;
+
+          vec3 litCol = mix(baseCol, caCol, aberrationMix);
+          vec3 finalCol = litCol * postExposure + bloom * bloomStrength + vec3(shadowLift);
+          gl_FragColor = vec4(finalCol, 1.0);
+        }
+      `
+    });
     const screenQuad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), screenMat);
     postScene.add(screenQuad);
 
@@ -468,7 +687,7 @@
     const boxes = new THREE.Group();
     const boxColliders = [];
     const boundaryWalls = new THREE.Group();
-    const wallMat = new THREE.MeshLambertMaterial({ color: 0x2b3344 });
+    const wallMat = new THREE.MeshLambertMaterial({ color: 0x3a455c });
     const wallOffset = mapHalfSize + mapWallThickness * 0.5;
     const addBoundaryWall = (sx, sy, sz, px, py, pz) => {
       const wall = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), wallMat);
@@ -484,12 +703,12 @@
     scene.add(boundaryWalls);
 
     const platformMats = [
-      new THREE.MeshLambertMaterial({ color: 0x44506a }),
-      new THREE.MeshLambertMaterial({ color: 0x3f5d5a }),
-      new THREE.MeshLambertMaterial({ color: 0x5f4f44 }),
-      new THREE.MeshLambertMaterial({ color: 0x4b4360 }),
-      new THREE.MeshLambertMaterial({ color: 0x3f3f4a }),
-      new THREE.MeshLambertMaterial({ color: 0x6f6c43 })
+      new THREE.MeshLambertMaterial({ color: 0x54627e }),
+      new THREE.MeshLambertMaterial({ color: 0x51746f }),
+      new THREE.MeshLambertMaterial({ color: 0x786255 }),
+      new THREE.MeshLambertMaterial({ color: 0x5f5479 }),
+      new THREE.MeshLambertMaterial({ color: 0x565664 }),
+      new THREE.MeshLambertMaterial({ color: 0x85804e })
     ];
     const voxelCubeGeometry = new THREE.BoxGeometry(1, 1, 1);
     const voxelBuildMatrix = new THREE.Matrix4();
@@ -1301,6 +1520,7 @@
     const tempImpactDir = new THREE.Vector3();
     const tempChunkAxis = new THREE.Vector3();
     const tempChunkRotation = new THREE.Quaternion();
+    const tempFireflyPos = new THREE.Vector3();
     let lastAmmoHudText = "";
 
     const getActiveWeapon = () => weapons[currentWeaponIndex];
@@ -1308,11 +1528,10 @@
     const updateAmmoHud = () => {
       const activeWeapon = getActiveWeapon();
       const ammoText = activeWeapon.clipSize === 0
-        ? "INF"
+        ? "∞"
         : `${activeWeapon.currentAmmo}/${activeWeapon.reserveAmmo}`;
-      const stateText = isReloading ? "RELOAD..." : (switchPhase !== "idle" ? "SWITCH..." : "");
-      const autoJumpText = `AJ:${autoJumpEnabled ? "ON" : "OFF"}`;
-      const nextHudText = `${activeWeapon.name}\n${ammoText}${stateText ? `\n${stateText}` : ""}\n${autoJumpText}`;
+      const stateText = isReloading ? "RECARGA" : (switchPhase !== "idle" ? "CAMBIO" : "");
+      const nextHudText = `${activeWeapon.name}\n${ammoText}${stateText ? `  ${stateText}` : ""}`;
       if (nextHudText === lastAmmoHudText) return;
       lastAmmoHudText = nextHudText;
       ammoHud.textContent = nextHudText;
@@ -3076,27 +3295,124 @@
       }
     };
 
+    const keepFireflyOutsideBlocks = (pos, clearance = 0.22) => {
+      let collided = false;
+      for (let iteration = 0; iteration < 2; iteration++) {
+        let touched = false;
+        for (const box of boxColliders) {
+          const minX = box.min.x - clearance;
+          const maxX = box.max.x + clearance;
+          const minY = box.min.y - clearance;
+          const maxY = box.max.y + clearance;
+          const minZ = box.min.z - clearance;
+          const maxZ = box.max.z + clearance;
+          if (
+            pos.x <= minX || pos.x >= maxX ||
+            pos.y <= minY || pos.y >= maxY ||
+            pos.z <= minZ || pos.z >= maxZ
+          ) continue;
+
+          const toMinX = Math.abs(pos.x - minX);
+          const toMaxX = Math.abs(maxX - pos.x);
+          const toMinZ = Math.abs(pos.z - minZ);
+          const toMaxZ = Math.abs(maxZ - pos.z);
+          const minPen = Math.min(toMinX, toMaxX, toMinZ, toMaxZ);
+          if (minPen === toMinX) pos.x = minX;
+          else if (minPen === toMaxX) pos.x = maxX;
+          else if (minPen === toMinZ) pos.z = minZ;
+          else pos.z = maxZ;
+          touched = true;
+          collided = true;
+        }
+        if (!touched) break;
+      }
+
+      pos.x = THREE.MathUtils.clamp(pos.x, -mapHalfSize + clearance, mapHalfSize - clearance);
+      pos.z = THREE.MathUtils.clamp(pos.z, -mapHalfSize + clearance, mapHalfSize - clearance);
+      pos.y = THREE.MathUtils.clamp(pos.y, 0.66, mapWallHeight * 0.4);
+      return collided;
+    };
+
     const updateFireflies = (dt) => {
       for (const bug of fireflies) {
         bug.phase += dt * bug.speed;
         bug.bobPhase += dt * bug.bobSpeed;
         bug.flickerPhase += dt * bug.flickerSpeed;
+        bug.flickerPhaseB += dt * bug.flickerSpeedB;
 
-        const px = bug.baseX + Math.cos(bug.phase) * bug.driftRadius;
-        const pz = bug.baseZ + Math.sin(bug.phase * 0.92) * bug.driftRadius;
-        const py = bug.baseY + Math.sin(bug.bobPhase) * 0.45;
-        bug.sprite.position.set(px, py, pz);
+        const px = bug.baseX + Math.cos(bug.phase * bug.driftFreqX) * bug.driftRadius;
+        const pz = bug.baseZ + Math.sin(bug.phase * bug.driftFreqZ + bug.pulseBias) * bug.driftRadius;
+        const py = bug.baseY + Math.sin(bug.bobPhase) * bug.bobAmp;
+        tempFireflyPos.set(px, py, pz);
+        const collided = keepFireflyOutsideBlocks(tempFireflyPos, 0.24);
+        if (collided) {
+          bug.baseX = THREE.MathUtils.lerp(bug.baseX, tempFireflyPos.x, 0.14);
+          bug.baseZ = THREE.MathUtils.lerp(bug.baseZ, tempFireflyPos.z, 0.14);
+        }
 
-        const pulse = 0.55 + 0.45 * (0.5 + 0.5 * Math.sin(bug.flickerPhase));
-        const s = 0.06 + pulse * 0.14;
-        bug.sprite.scale.set(s, s, s);
-        bug.sprite.material.opacity = 0.36 + pulse * 0.58;
+        bug.sprite.position.copy(tempFireflyPos);
+        bug.halo.position.copy(bug.sprite.position);
+        bug.aura.position.copy(bug.sprite.position);
+
+        const slowFlicker = 0.5 + 0.5 * Math.sin(bug.flickerPhase + Math.sin(bug.phase * 0.27 + bug.pulseBias) * 0.35);
+        const sideFlicker = 0.5 + 0.5 * Math.sin(bug.flickerPhaseB);
+        const pulse = THREE.MathUtils.clamp(0.28 + slowFlicker * (0.56 * bug.flickerAmount) + sideFlicker * 0.18, 0.05, 1.0);
+        const coreScale = bug.baseScale * (0.7 + pulse * 1.05);
+        const haloScale = coreScale * (7.2 + pulse * 2.4);
+        const auraScale = coreScale * (13.5 + pulse * 4.2);
+        bug.sprite.scale.set(coreScale, coreScale, coreScale);
+        bug.halo.scale.set(haloScale, haloScale, haloScale);
+        bug.aura.scale.set(auraScale, auraScale, auraScale);
+        bug.sprite.material.opacity = 0.5 + pulse * 0.24;
+        bug.halo.material.opacity = 0.09 + pulse * 0.17;
+        bug.aura.material.opacity = 0.02 + pulse * 0.1;
 
         if (bug.light) {
           bug.light.position.copy(bug.sprite.position);
-          bug.light.intensity = 0.2 + pulse * 0.55;
+          bug.light.distance = bug.lightBaseDistance + pulse * 12.5;
+          bug.light.intensity = 1.8 + pulse * 2.55;
         }
       }
+    };
+
+    const updateAmbientParticles = (dt) => {
+      const positions = ambientParticleGeometry.attributes.position.array;
+      for (let i = 0; i < ambientParticleCount; i++) {
+        const idx = i * 3;
+        ambientParticlePhases[i] += dt * ambientParticleSpeeds[i];
+        const phase = ambientParticlePhases[i];
+        const drift = ambientParticleDrifts[i];
+        const flutter = ambientParticleBobs[i];
+
+        const windX = Math.sin(phase + positions[idx + 2] * 0.03) * drift;
+        const windZ = Math.cos(phase * 1.13 + positions[idx] * 0.025) * drift;
+        const softLift = Math.sin(phase * 2.0 + i * 0.19) * flutter;
+
+        positions[idx] += (ambientParticleVelocities[idx] + windX) * dt;
+        positions[idx + 1] += (ambientParticleVelocities[idx + 1] + softLift) * dt;
+        positions[idx + 2] += (ambientParticleVelocities[idx + 2] + windZ) * dt;
+
+        if (positions[idx] < -ambientParticleArea) {
+          positions[idx] += ambientParticleArea * 2;
+        } else if (positions[idx] > ambientParticleArea) {
+          positions[idx] -= ambientParticleArea * 2;
+        }
+
+        if (positions[idx + 2] < -ambientParticleArea) {
+          positions[idx + 2] += ambientParticleArea * 2;
+        } else if (positions[idx + 2] > ambientParticleArea) {
+          positions[idx + 2] -= ambientParticleArea * 2;
+        }
+
+        if (positions[idx + 1] < ambientParticleMinY) {
+          positions[idx + 1] = ambientParticleMaxY - Math.random() * 0.35;
+          positions[idx] = (Math.random() * 2 - 1) * ambientParticleArea;
+          positions[idx + 2] = (Math.random() * 2 - 1) * ambientParticleArea;
+        } else if (positions[idx + 1] > ambientParticleMaxY) {
+          positions[idx + 1] = ambientParticleMinY + Math.random() * 0.2;
+        }
+      }
+      ambientParticleGeometry.attributes.position.needsUpdate = true;
     };
 
     const updatePlayerPhysics = (dt) => {
@@ -3543,6 +3859,7 @@
       fireflyAccumulator = Math.min(fireflyAccumulator + frameDt, 0.2);
       if (fireflyAccumulator >= fireflyStep) {
         updateFireflies(fireflyAccumulator);
+        updateAmbientParticles(fireflyAccumulator);
         fireflyAccumulator = 0;
       }
 
