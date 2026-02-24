@@ -104,6 +104,107 @@
       height: 2px;
     }
 
+    #sniperScope {
+      position: fixed;
+      inset: 0;
+      z-index: 13;
+      pointer-events: none;
+      background:
+        radial-gradient(
+          circle at center,
+          rgba(2, 4, 8, 0) 0 22%,
+          rgba(2, 4, 8, 0.12) 22% 23%,
+          rgba(2, 4, 8, 0.26) 23% 24%,
+          rgba(2, 4, 8, 0.42) 24% 25%,
+          rgba(2, 4, 8, 0.58) 25% 26%,
+          rgba(2, 4, 8, 0.74) 26% 27%,
+          rgba(2, 4, 8, 0.92) 27% 100%
+        );
+    }
+
+    #sniperScope::before,
+    #sniperScope::after {
+      content: "";
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      pointer-events: none;
+    }
+
+    #sniperScope::before {
+      width: min(58vmin, 440px);
+      height: min(58vmin, 440px);
+      background:
+        linear-gradient(rgba(234, 0, 0, 0.96), rgba(234, 0, 0, 0.96)),
+        linear-gradient(rgba(234, 0, 0, 0.96), rgba(234, 0, 0, 0.96)),
+        linear-gradient(rgba(234, 0, 0, 0.96), rgba(234, 0, 0, 0.96)),
+        linear-gradient(rgba(234, 0, 0, 0.96), rgba(234, 0, 0, 0.96));
+      background-repeat: no-repeat;
+      background-size:
+        1.9% 18%,
+        1.9% 18%,
+        18% 1.9%,
+        18% 1.9%;
+      background-position:
+        50% 22%,
+        50% 78%,
+        22% 50%,
+        78% 50%;
+      image-rendering: pixelated;
+      clip-path: polygon(
+        50% 0%,
+        61% 0%,
+        61% 6%,
+        71% 6%,
+        71% 12%,
+        80% 12%,
+        80% 20%,
+        87% 20%,
+        87% 30%,
+        92% 30%,
+        92% 70%,
+        87% 70%,
+        87% 80%,
+        80% 80%,
+        80% 88%,
+        71% 88%,
+        71% 94%,
+        61% 94%,
+        61% 100%,
+        39% 100%,
+        39% 94%,
+        29% 94%,
+        29% 88%,
+        20% 88%,
+        20% 80%,
+        13% 80%,
+        13% 70%,
+        8% 70%,
+        8% 30%,
+        13% 30%,
+        13% 20%,
+        20% 20%,
+        20% 12%,
+        29% 12%,
+        29% 6%,
+        39% 6%,
+        39% 0%
+      );
+      filter:
+        drop-shadow(0 0 3px rgba(234, 0, 0, 0.34))
+        drop-shadow(0 0 2px rgba(234, 0, 0, 0.26));
+    }
+
+    #sniperScope::after {
+      width: clamp(8px, 1.25vmin, 12px);
+      height: clamp(8px, 1.25vmin, 12px);
+      background: #0b111b;
+      image-rendering: pixelated;
+      box-shadow:
+        0 0 4px rgba(234, 0, 0, 0.2);
+    }
+
     #menuTitle {
       margin: 0;
       font-size: clamp(2.4rem, 11vw, 7.2rem);
@@ -111,6 +212,11 @@
       font-weight: 300;
       color: #f2f7ff;
       text-transform: uppercase;
+      text-shadow:
+        -1px 0 rgba(255, 108, 126, 0.4),
+        1px 0 rgba(109, 196, 255, 0.46),
+        0 0 14px rgba(202, 228, 255, 0.55),
+        0 0 2px rgba(0, 0, 0, 0.75);
     }
 
     .pauseBtn {
@@ -123,11 +229,15 @@
       font: inherit;
       letter-spacing: 0.08em;
       text-transform: uppercase;
-      text-shadow: 2px 2px #000;
+      text-shadow:
+        -1px 0 rgba(255, 108, 126, 0.32),
+        1px 0 rgba(109, 196, 255, 0.4),
+        0 0 10px rgba(202, 228, 255, 0.42),
+        0 0 2px rgba(0, 0, 0, 0.75);
     }
 
     .pauseBtn:hover {
-      color: #57a5ff;
+      color: #8bc0ff;
     }
 
     #controlsToggle {
@@ -138,12 +248,17 @@
     #controlsSection {
       margin-top: 8px;
       width: min(760px, 100%);
-      border: 1px solid rgba(233, 240, 255, 0.32);
-      background: rgba(8, 12, 20, 0.62);
-      box-shadow: 0 12px 28px rgba(0, 0, 0, 0.3);
-      padding: 16px;
+      border: 0;
+      background: transparent;
+      box-shadow: none;
+      padding: 8px 0 2px;
       text-align: left;
       font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      text-shadow:
+        -1px 0 rgba(255, 108, 126, 0.28),
+        1px 0 rgba(109, 196, 255, 0.36),
+        0 0 8px rgba(202, 228, 255, 0.36),
+        0 0 2px rgba(0, 0, 0, 0.75);
     }
 
     .controlRow {
@@ -151,9 +266,9 @@
       align-items: center;
       justify-content: space-between;
       gap: 12px;
-      padding: 6px 0;
-      border-bottom: 1px dashed rgba(233, 240, 255, 0.14);
-      color: rgba(233, 240, 255, 0.9);
+      padding: 5px 0;
+      border-bottom: 0;
+      color: rgba(233, 240, 255, 0.92);
       font-size: 0.9rem;
     }
 
@@ -163,8 +278,8 @@
 
     .bindBtn {
       appearance: none;
-      border: 1px solid rgba(233, 240, 255, 0.34);
-      background: rgba(16, 22, 34, 0.84);
+      border: 0;
+      background: transparent;
       color: rgba(233, 240, 255, 0.96);
       padding: 4px 9px;
       min-width: 116px;
@@ -173,10 +288,14 @@
       font: inherit;
       letter-spacing: 0.02em;
       text-transform: uppercase;
+      text-shadow:
+        -1px 0 rgba(255, 108, 126, 0.28),
+        1px 0 rgba(109, 196, 255, 0.36),
+        0 0 8px rgba(202, 228, 255, 0.34),
+        0 0 2px rgba(0, 0, 0, 0.75);
     }
 
     .bindBtn:hover {
-      border-color: rgba(87, 165, 255, 0.72);
       color: #cfe4ff;
     }
 
@@ -233,11 +352,13 @@
 <body>
   <div id="app"></div>
   <div id="crosshair"></div>
+  <div id="sniperScope" class="hidden"></div>
   <div id="ammoHud"></div>
   <div id="menuScreen">
     <div class="menuRoot">
       <h1 id="menuTitle">Lucid Dreamfight</h1>
-      <button id="resumeBtn" class="pauseBtn" type="button">Iniciar / Reanudar</button>
+      <button id="newGameBtn" class="pauseBtn" type="button">Nuevo Juego</button>
+      <button id="resumeBtn" class="pauseBtn" type="button">Reanudar</button>
       <button id="controlsToggle" class="pauseBtn" type="button">Controles</button>
       <div id="controlsSection" class="hidden">
         <p id="fixedControlsText">Controles configurables (click en la tecla para reasignar):</p>
@@ -250,7 +371,7 @@
         <div class="controlRow"><span>[Click Der]</span><span>ADS / Puño Derecho</span></div>
         <div class="controlRow"><span>[Rueda]</span><span>Cambiar arma</span></div>
         <div class="controlRow"><span>[ESC]</span><span>Pausar (desbloquear mouse)</span></div>
-        <div class="controlRow"><span>[Click INICIAR/REANUDAR]</span><span>Entrar al juego</span></div>
+        <div class="controlRow"><span>[Click NUEVO JUEGO / REANUDAR]</span><span>Entrar al juego</span></div>
       </div>
     </div>
   </div>
@@ -290,9 +411,9 @@
         wallHeight: 24.0
       },
       perf: {
-        fireflyCount: 320,
-        fireflyPointLights: 24,
-        ambientParticleCount: 260,
+        fireflyCount: 920,
+        fireflyPointLights: 40,
+        ambientParticleCount: 3500,
         maxProjectiles: 14,
         maxImpactMarks: 80,
         maxDebrisChunks: 120,
@@ -300,8 +421,8 @@
         maxDetachedRenderVoxels: 140
       },
       lighting: {
-        fireflyLightCullRadius: 15,
-        maxActiveFireflyLights: 8
+        fireflyLightCullRadius: 24,
+        maxActiveFireflyLights: 14
       },
       physicsFlags: {
         useRapierWorld: true,
@@ -468,7 +589,9 @@
     // Setup
     const app = document.getElementById("app");
     const crosshair = document.getElementById("crosshair");
+    const sniperScope = document.getElementById("sniperScope");
     const menuScreen = document.getElementById("menuScreen");
+    const newGameBtn = document.getElementById("newGameBtn");
     const resumeBtn = document.getElementById("resumeBtn");
     const controlsToggle = document.getElementById("controlsToggle");
     const controlsSection = document.getElementById("controlsSection");
@@ -605,8 +728,10 @@
     scene.add(fireflyGroup);
     const fireflies = [];
     const fireflyCount = perfConfig.fireflyCount;
-    const fireflyArea = mapHalfSize - 1.2;
-    const fireflyPlacement = buildStratifiedScatter(fireflyCount, fireflyArea, 0.72, mapWallHeight * 0.26, 0.84);
+    const fireflyArea = mapHalfSize - 2.0;
+    const fireflyMinY = mapWallHeight * 0.32;
+    const fireflyMaxY = mapWallHeight * 0.72;
+    const fireflyPlacement = buildStratifiedScatter(fireflyCount, fireflyArea, fireflyMinY, fireflyMaxY, 0.96);
     const fireflyGlowTexture = (() => {
       const size = 256;
       const canvas = document.createElement("canvas");
@@ -633,7 +758,7 @@
       map: fireflyGlowTexture,
       color: GameConfig.colors.fireflyCore,
       transparent: true,
-      opacity: 0.5,
+      opacity: 0.78,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
       side: THREE.DoubleSide,
@@ -643,7 +768,7 @@
       map: fireflyGlowTexture,
       color: GameConfig.colors.fireflyHalo,
       transparent: true,
-      opacity: 0.11,
+      opacity: 0.2,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
       side: THREE.DoubleSide,
@@ -653,7 +778,7 @@
       map: fireflyGlowTexture,
       color: GameConfig.colors.fireflyAura,
       transparent: true,
-      opacity: 0.045,
+      opacity: 0.09,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
       side: THREE.DoubleSide,
@@ -682,8 +807,10 @@
     const fireflySpawnPos = new THREE.Vector3();
     const tempFireflyStart = new THREE.Vector3();
     const tempFireflyTarget = new THREE.Vector3();
-    const tempFireflyPerch = new THREE.Vector3();
+    const tempFireflyLanding = new THREE.Vector3();
     const fireflyLightCullRadiusSq = GameConfig.lighting.fireflyLightCullRadius * GameConfig.lighting.fireflyLightCullRadius;
+    const FIREFLY_STATE_FLYING = "FLYING";
+    const FIREFLY_STATE_LANDED = "LANDED";
 
     for (let i = 0; i < fireflyCount; i++) {
       const point = fireflyPlacement[i];
@@ -691,7 +818,7 @@
       const z = point.z;
       const y = point.y;
       fireflySpawnPos.set(x, y, z);
-      const s = 0.17 + Math.random() * 0.1;
+      const s = 0.24 + Math.random() * 0.14;
       fireflyInstanceScale.set(s, s, s);
       fireflyInstanceQuat.identity();
       fireflyInstanceMatrix.compose(fireflySpawnPos, fireflyInstanceQuat, fireflyInstanceScale);
@@ -710,20 +837,26 @@
       let lightBaseDistance = 0;
       if (i < perfConfig.fireflyPointLights) {
         lightBaseDistance = 24 + Math.random() * 12;
-        light = new THREE.PointLight(GameConfig.colors.fireflyLight, 2.2 + Math.random() * 0.9, lightBaseDistance, 1.05);
+        light = new THREE.PointLight(GameConfig.colors.fireflyLight, 3.0 + Math.random() * 1.2, lightBaseDistance, 1.05);
         light.position.set(x, y, z);
         scene.add(light);
       }
 
+      const startsLanded = false;
+      const wantsToLand = false;
       fireflies.push({
         index: i,
         light,
         currentPos: new THREE.Vector3(x, y, z),
-        perchPos: new THREE.Vector3(x, y, z),
-        isPerched: false,
-        perchTimer: 0,
-        perchCooldown: Math.random() * 2.2,
-        perchWobblePhase: Math.random() * Math.PI * 2,
+        spawnPos: new THREE.Vector3(x, y, z),
+        startsLanded,
+        state: startsLanded ? FIREFLY_STATE_LANDED : FIREFLY_STATE_FLYING,
+        wantsToLand,
+        landingTarget: new THREE.Vector3(x, Math.max(fireflyMinY, y - (1.2 + Math.random() * 1.6)), z),
+        hasLandingTarget: false,
+        landingSearchTimer: Math.random() * 0.35,
+        landingFallSpeed: 0.46 + Math.random() * 0.36,
+        landingApproach: 2.8 + Math.random() * 1.9,
         baseScale: s,
         lightBaseDistance,
         baseX: x,
@@ -742,12 +875,7 @@
         flickerPhaseB: Math.random() * Math.PI * 2,
         flickerSpeedB: 0.18 + Math.random() * 0.54,
         flickerAmount: 0.72 + Math.random() * 0.44,
-        pulseBias: Math.random() * Math.PI * 2,
-        perchChance: 0.22 + Math.random() * 0.28,
-        perchDurationMin: 0.9,
-        perchDurationMax: 3.1,
-        perchCooldownMin: 0.45,
-        perchCooldownMax: 2.6
+        pulseBias: Math.random() * Math.PI * 2
       });
     }
     fireflyCoreInstanced.instanceMatrix.needsUpdate = true;
@@ -769,13 +897,13 @@
       0.96
     );
     const ambientParticlePositions = new Float32Array(ambientParticleCount * 3);
-    const ambientParticleVelocities = new Float32Array(ambientParticleCount * 3);
     const ambientParticlePhases = new Float32Array(ambientParticleCount);
-    const ambientParticleSpeeds = new Float32Array(ambientParticleCount);
+    const ambientParticleFallSpeeds = new Float32Array(ambientParticleCount);
+    const ambientParticleDriftSpeeds = new Float32Array(ambientParticleCount);
     const ambientParticleDrifts = new Float32Array(ambientParticleCount);
-    const ambientParticleBobs = new Float32Array(ambientParticleCount);
+    const ambientParticleTwists = new Float32Array(ambientParticleCount);
     const ambientParticleScales = new Float32Array(ambientParticleCount);
-    const ambientParticleGeometry = new THREE.PlaneGeometry(1, 1);
+    const ambientParticleGeometry = new THREE.PlaneGeometry(0.05, 0.05);
     const ambientParticleMat = new THREE.MeshBasicMaterial({
       color: GameConfig.colors.ambientParticle,
       transparent: true,
@@ -790,6 +918,9 @@
     ambientParticles.frustumCulled = false;
     const ambientBaseColor = new THREE.Color(GameConfig.colors.ambientParticle);
     const ambientInstancePos = new THREE.Vector3();
+    const ambientInstanceMatrix = new THREE.Matrix4();
+    const ambientInstanceQuat = new THREE.Quaternion();
+    const ambientInstanceScale = new THREE.Vector3();
     scene.add(ambientParticles);
 
     for (let i = 0; i < ambientParticleCount; i++) {
@@ -798,19 +929,17 @@
       ambientParticlePositions[idx] = point.x;
       ambientParticlePositions[idx + 1] = point.y;
       ambientParticlePositions[idx + 2] = point.z;
-      ambientParticleVelocities[idx] = (Math.random() * 2 - 1) * 0.085;
-      ambientParticleVelocities[idx + 1] = -(0.07 + Math.random() * 0.08);
-      ambientParticleVelocities[idx + 2] = (Math.random() * 2 - 1) * 0.085;
       ambientParticlePhases[i] = Math.random() * Math.PI * 2;
-      ambientParticleSpeeds[i] = 0.48 + Math.random() * 0.92;
-      ambientParticleDrifts[i] = 0.012 + Math.random() * 0.03;
-      ambientParticleBobs[i] = 0.006 + Math.random() * 0.016;
-      ambientParticleScales[i] = 0.03 + Math.random() * 0.016;
-      fireflyInstanceScale.set(ambientParticleScales[i], ambientParticleScales[i], ambientParticleScales[i]);
-      fireflyInstanceQuat.identity();
+      ambientParticleFallSpeeds[i] = 0.065 + Math.random() * 0.11;
+      ambientParticleDriftSpeeds[i] = 0.45 + Math.random() * 0.9;
+      ambientParticleDrifts[i] = 0.02 + Math.random() * 0.05;
+      ambientParticleTwists[i] = Math.random() * Math.PI * 2;
+      ambientParticleScales[i] = 0.78 + Math.random() * 0.85;
+      ambientInstanceScale.set(ambientParticleScales[i], ambientParticleScales[i], ambientParticleScales[i]);
+      ambientInstanceQuat.identity();
       ambientInstancePos.set(point.x, point.y, point.z);
-      fireflyInstanceMatrix.compose(ambientInstancePos, fireflyInstanceQuat, fireflyInstanceScale);
-      ambientParticles.setMatrixAt(i, fireflyInstanceMatrix);
+      ambientInstanceMatrix.compose(ambientInstancePos, ambientInstanceQuat, ambientInstanceScale);
+      ambientParticles.setMatrixAt(i, ambientInstanceMatrix);
       ambientParticles.setColorAt(i, ambientBaseColor);
     }
     ambientParticles.instanceMatrix.needsUpdate = true;
@@ -1027,6 +1156,27 @@
       new THREE.MeshLambertMaterial({ color: 0x565664 }),
       new THREE.MeshLambertMaterial({ color: 0x85804e })
     ];
+    const neonGlowPresets = [
+      { baseColor: 0x445f73, emissiveColor: 0x67f6ff, emissiveIntensity: 0.34, lightColor: 0x85fbff, lightIntensity: 3.4, lightDistance: 19, lightDecay: 1.35 },
+      { baseColor: 0x5d4b7c, emissiveColor: 0xff6ce7, emissiveIntensity: 0.36, lightColor: 0xff92ef, lightIntensity: 3.3, lightDistance: 18, lightDecay: 1.35 },
+      { baseColor: 0x4a6a4f, emissiveColor: 0x88ff6f, emissiveIntensity: 0.32, lightColor: 0xa0ff8b, lightIntensity: 3.1, lightDistance: 18, lightDecay: 1.35 },
+      { baseColor: 0x6c5e47, emissiveColor: 0xffc45a, emissiveIntensity: 0.31, lightColor: 0xffd77f, lightIntensity: 3.0, lightDistance: 17, lightDecay: 1.35 },
+      { baseColor: 0x4a4f7d, emissiveColor: 0x7aa4ff, emissiveIntensity: 0.33, lightColor: 0x98b8ff, lightIntensity: 3.2, lightDistance: 18, lightDecay: 1.35 }
+    ];
+    const maxNeonGlowBlocks = 40;
+    let neonGlowBlocksPlaced = 0;
+    const neonBlocksList = [];
+    const neonLightPoolSize = 4;
+    const neonLightActivationDistance = 24;
+    const neonLightPool = [];
+    const tempNeonLightPos = new THREE.Vector3();
+    const neonLightActivationDistanceSq = neonLightActivationDistance * neonLightActivationDistance;
+    for (let i = 0; i < neonLightPoolSize; i++) {
+      const pooledNeonLight = new THREE.PointLight(0xffffff, 0, 1, 1.35);
+      pooledNeonLight.visible = false;
+      scene.add(pooledNeonLight);
+      neonLightPool.push(pooledNeonLight);
+    }
     const voxelCubeGeometry = new THREE.BoxGeometry(1, 1, 1);
     const voxelBuildMatrix = new THREE.Matrix4();
     const voxelIdentityQuaternion = new THREE.Quaternion();
@@ -1557,7 +1707,7 @@
       const voxelSizeZ = sz / voxelCountZ;
       const totalVoxels = voxelCountX * voxelCountY * voxelCountZ;
 
-      const voxelMesh = new THREE.InstancedMesh(voxelCubeGeometry, material, totalVoxels);
+      const voxelMesh = new THREE.InstancedMesh(voxelCubeGeometry.clone(), material, totalVoxels);
       voxelMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
       voxelMesh.userData.shootable = shootable;
 
@@ -1733,14 +1883,29 @@
       }
     };
 
-    const addArenaBlock = (sx, sy, sz, x, y, z, matIndex = 0, shootable = false, motionPreset = null) => {
+    const addArenaBlock = (sx, sy, sz, x, y, z, matIndex = 0, shootable = false, motionPreset = null, glowPreset = null) => {
       const sourceMat = platformMats[matIndex % platformMats.length];
       const blockMat = sourceMat.clone();
       blockMat.emissive = blockMat.emissive || new THREE.Color(0x000000);
+      if (glowPreset) {
+        blockMat.color.setHex(glowPreset.baseColor);
+        blockMat.emissive.setHex(glowPreset.emissiveColor);
+        blockMat.emissiveIntensity = 3.5;
+      }
 
       const voxelGrid = buildVoxelGrid(sx, sy, sz, blockMat, shootable);
       const mesh = voxelGrid.root;
       mesh.position.set(x, y, z);
+      if (glowPreset) {
+        neonBlocksList.push({
+          mesh,
+          lightColor: glowPreset.lightColor,
+          lightIntensity: glowPreset.lightIntensity,
+          lightDistance: glowPreset.lightDistance,
+          lightDecay: glowPreset.lightDecay,
+          lightOffsetY: sy * 0.5 + 0.18
+        });
+      }
       boxes.add(mesh);
       mesh.updateMatrixWorld(true);
 
@@ -1888,6 +2053,28 @@
         const speedClusterX = Math.floor(gx / 3);
         const speedClusterZ = Math.floor(gz / 3);
         const isSpawnCell = gx === spawnCellX && gz === spawnCellZ;
+        let glowPreset = null;
+        const isNearSpawn =
+          Math.abs(gx - spawnCellX) <= 1 &&
+          Math.abs(gz - spawnCellZ) <= 1;
+        if (!isSpawnCell && !isNearSpawn && neonGlowBlocksPlaced < maxNeonGlowBlocks) {
+          const glowNoise = terrainHash(gx, gz, 887);
+          const isLocalPeak =
+            glowNoise > 0.58 &&
+            glowNoise >= terrainHash(gx - 1, gz, 887) &&
+            glowNoise >= terrainHash(gx + 1, gz, 887) &&
+            glowNoise >= terrainHash(gx, gz - 1, 887) &&
+            glowNoise >= terrainHash(gx, gz + 1, 887) &&
+            glowNoise >= terrainHash(gx - 1, gz - 1, 887) &&
+            glowNoise >= terrainHash(gx + 1, gz - 1, 887) &&
+            glowNoise >= terrainHash(gx - 1, gz + 1, 887) &&
+            glowNoise >= terrainHash(gx + 1, gz + 1, 887);
+          if (isLocalPeak) {
+            const presetIndex = Math.floor(terrainHash(gx, gz, 941) * neonGlowPresets.length) % neonGlowPresets.length;
+            glowPreset = neonGlowPresets[presetIndex];
+            neonGlowBlocksPlaced += 1;
+          }
+        }
 
         let minTop = Math.max(0.82, baseTop - (0.18 + terrainHash(gx, gz, 53) * 0.42));
         let maxTop = THREE.MathUtils.clamp(
@@ -1935,7 +2122,8 @@
             pauseMin,
             pauseMax,
             moveUp
-          }
+          },
+          glowPreset
         );
 
         if (isSpawnCell) {
@@ -1948,6 +2136,59 @@
 
     playerBody.position.set(spawnFeetX, spawnFeetY, spawnFeetZ);
     scene.add(boxes);
+
+    const updateNeonLights = (playerPos) => {
+      if (neonBlocksList.length === 0) {
+        for (const pooledLight of neonLightPool) pooledLight.visible = false;
+        return;
+      }
+
+      neonBlocksList.sort((a, b) => {
+        const aMesh = a.mesh;
+        const bMesh = b.mesh;
+        const aDead = !aMesh || !aMesh.parent || aMesh.userData?.blockState?.destroyed;
+        const bDead = !bMesh || !bMesh.parent || bMesh.userData?.blockState?.destroyed;
+        if (aDead && bDead) return 0;
+        if (aDead) return 1;
+        if (bDead) return -1;
+        const adx = aMesh.position.x - playerPos.x;
+        const ady = aMesh.position.y - playerPos.y;
+        const adz = aMesh.position.z - playerPos.z;
+        const bdx = bMesh.position.x - playerPos.x;
+        const bdy = bMesh.position.y - playerPos.y;
+        const bdz = bMesh.position.z - playerPos.z;
+        return (adx * adx + ady * ady + adz * adz) - (bdx * bdx + bdy * bdy + bdz * bdz);
+      });
+
+      let poolIndex = 0;
+      for (const neonBlock of neonBlocksList) {
+        if (poolIndex >= neonLightPool.length) break;
+        const mesh = neonBlock.mesh;
+        if (!mesh || !mesh.parent || mesh.userData?.blockState?.destroyed) continue;
+
+        const dx = mesh.position.x - playerPos.x;
+        const dy = mesh.position.y - playerPos.y;
+        const dz = mesh.position.z - playerPos.z;
+        const distSq = dx * dx + dy * dy + dz * dz;
+        if (distSq > neonLightActivationDistanceSq) break;
+
+        const pooledLight = neonLightPool[poolIndex];
+        tempNeonLightPos.copy(mesh.position);
+        tempNeonLightPos.y += neonBlock.lightOffsetY;
+        pooledLight.position.copy(tempNeonLightPos);
+        pooledLight.color.setHex(neonBlock.lightColor);
+        pooledLight.intensity = neonBlock.lightIntensity;
+        pooledLight.distance = neonBlock.lightDistance;
+        pooledLight.decay = neonBlock.lightDecay;
+        pooledLight.visible = true;
+        poolIndex += 1;
+      }
+
+      while (poolIndex < neonLightPool.length) {
+        neonLightPool[poolIndex].visible = false;
+        poolIndex += 1;
+      }
+    };
 
     const weaponRig = new THREE.Group();
     const weaponHipPos = new THREE.Vector3(0.17, -0.28, -0.52);
@@ -2143,53 +2384,37 @@
     const projectilePool = [];
     const impactMarkPool = [];
     const debrisChunkPool = [];
+    const detachedVoxelChunkPool = [];
     const raycaster = new THREE.Raycaster();
     const bulletTargets = [boxes, boundaryWalls, ground];
     const impactUp = new THREE.Vector3(0, 0, 1);
     const worldUp = new THREE.Vector3(0, 1, 0);
 
-    const disposeObject = (obj) => {
-      if (!obj) return;
+    const disposeObject = (mesh) => {
+      if (!mesh) return;
+      if (mesh.parent) mesh.parent.remove(mesh);
 
-      const disposedMaterials = new Set();
       const disposedGeometries = new Set();
-      const disposedTextures = new Set();
+      const disposedMaterials = new Set();
+      mesh.traverse((child) => {
+        const geometry = child.geometry;
+        if (geometry && !disposedGeometries.has(geometry) && typeof geometry.dispose === "function") {
+          disposedGeometries.add(geometry);
+          geometry.dispose();
+        }
 
-      const disposeTexture = (value) => {
-        if (!value || typeof value !== "object" || !value.isTexture) return;
-        if (disposedTextures.has(value)) return;
-        disposedTextures.add(value);
-        value.dispose();
-      };
-
-      const disposeMaterial = (material) => {
-        if (!material || disposedMaterials.has(material)) return;
-        disposedMaterials.add(material);
-
-        for (const value of Object.values(material)) {
-          if (Array.isArray(value)) {
-            for (const nested of value) disposeTexture(nested);
-          } else {
-            disposeTexture(value);
+        const material = child.material;
+        if (Array.isArray(material)) {
+          for (const entry of material) {
+            if (!entry || disposedMaterials.has(entry) || typeof entry.dispose !== "function") continue;
+            disposedMaterials.add(entry);
+            entry.dispose();
           }
-        }
-        material.dispose();
-      };
-
-      obj.traverse((child) => {
-        if (child.geometry && !disposedGeometries.has(child.geometry)) {
-          disposedGeometries.add(child.geometry);
-          child.geometry.dispose();
-        }
-
-        if (Array.isArray(child.material)) {
-          for (const material of child.material) disposeMaterial(material);
-        } else if (child.material) {
-          disposeMaterial(child.material);
+        } else if (material && !disposedMaterials.has(material) && typeof material.dispose === "function") {
+          disposedMaterials.add(material);
+          material.dispose();
         }
       });
-
-      if (obj.parent) obj.parent.remove(obj);
     };
 
     const disposeProjectile = (projectile) => {
@@ -2238,7 +2463,17 @@
         physicsBridge.unregisterHandle(chunk.rapierHandle);
         chunk.rapierHandle = null;
       }
-      disposeObject(chunk.root);
+      if (chunk.inPool) return;
+      chunk.active = false;
+      chunk.life = 0;
+      chunk.maxLife = 0;
+      chunk.mesh.material.opacity = 0;
+      chunk.mesh.count = 0;
+      chunk.mesh.instanceMatrix.needsUpdate = true;
+      chunk.mesh.visible = false;
+      chunk.root.visible = false;
+      chunk.inPool = true;
+      detachedVoxelChunkPool.push(chunk);
     };
 
     const velocity = new THREE.Vector3();
@@ -2325,6 +2560,8 @@
     };
 
     let isPaused = true;
+    let sniperScopeActive = false;
+    const sniperScopeZoomFov = 25;
     let autoJumpEnabled = true;
     let autoJumpCooldown = 0;
     let jumpBufferTime = 0;
@@ -2351,6 +2588,9 @@
     const tempImpactDir = new THREE.Vector3();
     const tempChunkAxis = new THREE.Vector3();
     const tempChunkRotation = new THREE.Quaternion();
+    const tempImpactMarkNormal = new THREE.Vector3();
+    const tempDetachedImpactDir = new THREE.Vector3();
+    const tempDetachedAway = new THREE.Vector3();
     const tempFireflyPos = new THREE.Vector3();
     let lastAmmoHudText = "";
 
@@ -2545,6 +2785,7 @@
     const pooledImpactMaterial = () => new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0 });
     const pooledDebrisMaterial = () => new THREE.MeshLambertMaterial({ color: 0xffffff, transparent: true, opacity: 0 });
     const pooledProjectileMaterial = () => new THREE.MeshLambertMaterial({ color: 0xb8d15e });
+    const pooledDetachedVoxelMaterial = () => new THREE.MeshLambertMaterial({ color: 0xffffff, transparent: true, opacity: 0 });
 
     const acquirePooledImpactMark = () => {
       let mark = impactMarkPool.pop();
@@ -2584,6 +2825,25 @@
       }
       chunk.inPool = false;
       chunk.active = true;
+      return chunk;
+    };
+
+    const acquirePooledDetachedVoxelChunk = () => {
+      let chunk = detachedVoxelChunkPool.pop();
+      if (!chunk && detachedVoxelChunks.length > 0) {
+        const recycled = detachedVoxelChunks.shift();
+        disposeDetachedVoxelChunk(recycled);
+        chunk = detachedVoxelChunkPool.pop() || null;
+      }
+      if (!chunk) return null;
+      if (chunk.rapierHandle != null) {
+        physicsBridge.unregisterHandle(chunk.rapierHandle);
+        chunk.rapierHandle = null;
+      }
+      chunk.inPool = false;
+      chunk.active = true;
+      chunk.root.visible = true;
+      chunk.mesh.visible = true;
       return chunk;
     };
 
@@ -2637,6 +2897,37 @@
       });
     }
 
+    for (let i = 0; i < perfConfig.maxDetachedChunks; i++) {
+      const chunkMesh = new THREE.InstancedMesh(
+        voxelCubeGeometry,
+        pooledDetachedVoxelMaterial(),
+        perfConfig.maxDetachedRenderVoxels
+      );
+      chunkMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      chunkMesh.frustumCulled = false;
+      chunkMesh.count = 0;
+      chunkMesh.visible = false;
+      const chunkRoot = new THREE.Group();
+      chunkRoot.visible = false;
+      chunkRoot.add(chunkMesh);
+      scene.add(chunkRoot);
+      detachedVoxelChunkPool.push({
+        root: chunkRoot,
+        mesh: chunkMesh,
+        velocity: new THREE.Vector3(),
+        spin: new THREE.Vector3(),
+        localMin: new THREE.Vector3(),
+        localMax: new THREE.Vector3(),
+        life: 0,
+        maxLife: 0,
+        bounce: 0.2,
+        drag: 1.0,
+        active: false,
+        inPool: true,
+        rapierHandle: null
+      });
+    }
+
     const createImpactMark = (point, normal, size = 0.08, life = 0.32, color = 0xf2c988) => {
       const mark = acquirePooledImpactMark();
       if (!mark) return;
@@ -2644,7 +2935,8 @@
       decal.visible = true;
       decal.position.copy(point).addScaledVector(normal, 0.02);
       decal.scale.set(size, size, size);
-      decal.quaternion.setFromUnitVectors(impactUp, normal.clone().normalize());
+      tempImpactMarkNormal.copy(normal).normalize();
+      decal.quaternion.setFromUnitVectors(impactUp, tempImpactMarkNormal);
       decal.material.color.setHex(color);
       decal.material.opacity = 0.95;
       mark.life = life;
@@ -2728,26 +3020,27 @@
 
     const spawnDetachedVoxelChunk = (blockState, voxelIndices, hitPoint, impactDir, energy = 1) => {
       if (!voxelIndices || voxelIndices.length === 0) return;
+      const detachedChunkState = acquirePooledDetachedVoxelChunk();
+      if (!detachedChunkState) return;
 
       const maxRenderVoxels = perfConfig.maxDetachedRenderVoxels;
-      let renderIndices = voxelIndices;
-      if (voxelIndices.length > maxRenderVoxels) {
-        renderIndices = [];
-        const step = voxelIndices.length / maxRenderVoxels;
-        for (let i = 0; i < maxRenderVoxels; i++) {
-          renderIndices.push(voxelIndices[Math.floor(i * step)]);
-        }
+      const renderCount = Math.min(voxelIndices.length, maxRenderVoxels);
+      if (renderCount <= 0) {
+        disposeDetachedVoxelChunk(detachedChunkState);
+        return;
       }
-
-      const chunkMaterial = new THREE.MeshLambertMaterial({
-        color: blockState.material?.color
-          ? blockState.material.color.clone().offsetHSL((Math.random() - 0.5) * 0.03, 0, (Math.random() - 0.5) * 0.06)
-          : new THREE.Color(0x8d93a2),
-        transparent: true,
-        opacity: 0.98
-      });
-      const chunkMesh = new THREE.InstancedMesh(voxelCubeGeometry, chunkMaterial, renderIndices.length);
-      chunkMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      const chunkRoot = detachedChunkState.root;
+      const chunkMesh = detachedChunkState.mesh;
+      const chunkMaterial = chunkMesh.material;
+      if (blockState.material?.color) {
+        chunkMaterial.color.copy(blockState.material.color).offsetHSL((Math.random() - 0.5) * 0.03, 0, (Math.random() - 0.5) * 0.06);
+      } else {
+        chunkMaterial.color.setHex(0x8d93a2);
+      }
+      chunkMaterial.opacity = 0.98;
+      chunkMesh.visible = true;
+      chunkRoot.visible = true;
+      chunkRoot.quaternion.identity();
 
       const halfVX = blockState.voxelSizeX * 0.5;
       const halfVY = blockState.voxelSizeY * 0.5;
@@ -2783,9 +3076,11 @@
       centroidY *= invCount;
       centroidZ *= invCount;
       voxelTempScale.copy(blockState.voxelScale);
+      const sampleStep = voxelIndices.length / renderCount;
 
-      for (let i = 0; i < renderIndices.length; i++) {
-        const arrIndex = renderIndices[i] * 3;
+      for (let i = 0; i < renderCount; i++) {
+        const sampledIndex = voxelIndices[Math.floor(i * sampleStep)];
+        const arrIndex = sampledIndex * 3;
         voxelTempPos.set(
           blockState.voxelLocalCenters[arrIndex + 0] - centroidX,
           blockState.voxelLocalCenters[arrIndex + 1] - centroidY,
@@ -2794,48 +3089,43 @@
         voxelBuildMatrix.compose(voxelTempPos, voxelIdentityQuaternion, voxelTempScale);
         chunkMesh.setMatrixAt(i, voxelBuildMatrix);
       }
-      chunkMesh.count = renderIndices.length;
+      chunkMesh.count = renderCount;
       chunkMesh.instanceMatrix.needsUpdate = true;
-
-      const chunkRoot = new THREE.Group();
-      chunkRoot.add(chunkMesh);
       chunkRoot.position.set(
         blockState.mesh.position.x + centroidX,
         blockState.mesh.position.y + centroidY,
         blockState.mesh.position.z + centroidZ
       );
-      scene.add(chunkRoot);
 
-      const impactDirection = impactDir.clone().normalize();
-      if (impactDirection.lengthSq() < 0.0001) impactDirection.set(0, 1, 0);
-      const away = chunkRoot.position.clone().sub(hitPoint);
-      if (away.lengthSq() < 0.0001) away.copy(impactDirection);
-      away.normalize();
+      tempDetachedImpactDir.copy(impactDir).normalize();
+      if (tempDetachedImpactDir.lengthSq() < 0.0001) tempDetachedImpactDir.set(0, 1, 0);
+      tempDetachedAway.copy(chunkRoot.position).sub(hitPoint);
+      if (tempDetachedAway.lengthSq() < 0.0001) tempDetachedAway.copy(tempDetachedImpactDir);
+      tempDetachedAway.normalize();
 
       const massFactor = THREE.MathUtils.clamp(voxelIndices.length / 28, 0.85, 6.8);
       const launchSpeed = (2.1 + energy * 2.1 + Math.random() * 0.9) / massFactor;
-      const velocity = away.multiplyScalar(launchSpeed).addScaledVector(impactDirection, (1.6 + energy) / massFactor);
-      velocity.y += 1.0 + Math.random() * 1.8;
+      detachedChunkState.velocity
+        .copy(tempDetachedAway)
+        .multiplyScalar(launchSpeed)
+        .addScaledVector(tempDetachedImpactDir, (1.6 + energy) / massFactor);
+      detachedChunkState.velocity.y += 1.0 + Math.random() * 1.8;
 
       const chunkLife = 1.8 + Math.random() * 1.4 + Math.min(1.2, voxelIndices.length * 0.008);
-      const detachedChunkState = {
-        root: chunkRoot,
-        mesh: chunkMesh,
-        velocity,
-        spin: new THREE.Vector3((Math.random() - 0.5) * 5.5, (Math.random() - 0.5) * 5.5, (Math.random() - 0.5) * 5.5),
-        localMin: new THREE.Vector3(minX - centroidX, minY - centroidY, minZ - centroidZ),
-        localMax: new THREE.Vector3(maxX - centroidX, maxY - centroidY, maxZ - centroidZ),
-        life: chunkLife,
-        maxLife: chunkLife,
-        bounce: 0.16 + Math.random() * 0.13,
-        drag: 0.85 + Math.random() * 0.8
-      };
+      detachedChunkState.spin.set(
+        (Math.random() - 0.5) * 5.5,
+        (Math.random() - 0.5) * 5.5,
+        (Math.random() - 0.5) * 5.5
+      );
+      detachedChunkState.localMin.set(minX - centroidX, minY - centroidY, minZ - centroidZ);
+      detachedChunkState.localMax.set(maxX - centroidX, maxY - centroidY, maxZ - centroidZ);
+      detachedChunkState.life = chunkLife;
+      detachedChunkState.maxLife = chunkLife;
+      detachedChunkState.bounce = 0.16 + Math.random() * 0.13;
+      detachedChunkState.drag = 0.85 + Math.random() * 0.8;
       detachedVoxelChunks.push(detachedChunkState);
       if (physicsFlags.useRapierDebris && physicsBridge.enabled) {
         physicsBridge.registerDetachedChunk(detachedChunkState);
-      }
-      if (detachedVoxelChunks.length > perfConfig.maxDetachedChunks) {
-        disposeDetachedVoxelChunk(detachedVoxelChunks.shift());
       }
     };
 
@@ -3055,15 +3345,12 @@
       if (blockState.dynamicTile) {
         const tileIndex = dynamicTerrainTiles.indexOf(blockState.dynamicTile);
         if (tileIndex >= 0) dynamicTerrainTiles.splice(tileIndex, 1);
+        blockState.dynamicTile = null;
       }
 
       removeColliderFromWorld(blockState.collider);
       physicsBridge.rebuildBlockCollider(blockState);
-      boxes.remove(blockState.mesh);
-      blockState.mesh.visible = false;
-      blockState.voxelMesh.count = 0;
-      blockState.voxelMesh.instanceMatrix.needsUpdate = true;
-      if (blockState.material) blockState.material.dispose();
+      disposeObject(blockState.mesh);
       return true;
     };
 
@@ -3607,14 +3894,22 @@
     };
 
     const showMenu = (mode) => {
-      resumeBtn.textContent = mode === "pause" ? "REANUDAR" : "INICIAR";
+      resumeBtn.textContent = "REANUDAR";
+      sniperScopeActive = false;
+      sniperScope.classList.add("hidden");
       menuScreen.classList.remove("hidden");
       crosshair.classList.add("hidden");
     };
 
     const hideMenu = () => {
       menuScreen.classList.add("hidden");
-      crosshair.classList.remove("hidden");
+      if (!sniperScopeActive) crosshair.classList.remove("hidden");
+    };
+
+    const setSniperScopeActive = (active) => {
+      sniperScopeActive = !!active;
+      sniperScope.classList.toggle("hidden", !sniperScopeActive);
+      crosshair.classList.toggle("hidden", sniperScopeActive);
     };
 
     const setKeyState = (code, down) => {
@@ -3677,8 +3972,14 @@
       lastWallContactNormal.set(0, 0, 0);
       bobOffsetX = 0;
       bobOffsetY = 0;
+      setSniperScopeActive(false);
+      weaponRig.visible = true;
       weaponRig.position.copy(weaponHipPos);
       weaponRig.rotation.copy(weaponHipRot);
+      if (Math.abs(camera.fov - 75) > 0.001) {
+        camera.fov = 75;
+        camera.updateProjectionMatrix();
+      }
       camera.position.set(0, standEyeHeight, 0);
     };
 
@@ -3768,6 +4069,10 @@
 
     window.addEventListener("beforeunload", () => {
       physicsBridge.dispose();
+    });
+
+    newGameBtn.addEventListener("click", () => {
+      window.location.reload();
     });
 
     resumeBtn.addEventListener("click", () => {
@@ -4262,106 +4567,250 @@
 
       pos.x = THREE.MathUtils.clamp(pos.x, -mapHalfSize + clearanceXZ, mapHalfSize - clearanceXZ);
       pos.z = THREE.MathUtils.clamp(pos.z, -mapHalfSize + clearanceXZ, mapHalfSize - clearanceXZ);
-      pos.y = THREE.MathUtils.clamp(pos.y, 0.66, mapWallHeight * 0.4);
+      pos.y = THREE.MathUtils.clamp(pos.y, fireflyMinY, fireflyMaxY);
       return collided;
     };
 
-    const findFireflyPerchSpot = (fromPos, outPos) => {
-      const maxPerchDistSq = 3.4 * 3.4;
+    const getFireflyVoxelTopPoint = (blockState, gx, gz, sampleX, sampleZ, outPos) => {
+      if (
+        gx < 0 || gx >= blockState.voxelCountX ||
+        gz < 0 || gz >= blockState.voxelCountZ
+      ) return false;
+
+      const halfVX = blockState.voxelSizeX * 0.5;
+      const halfVY = blockState.voxelSizeY * 0.5;
+      const halfVZ = blockState.voxelSizeZ * 0.5;
+      const meshPos = blockState.mesh.position;
+      for (let gy = blockState.voxelCountY - 1; gy >= 0; gy--) {
+        const voxelIndex = getVoxelIndex(blockState, gx, gy, gz);
+        if (!blockState.voxelAlive[voxelIndex]) continue;
+        const arrIndex = voxelIndex * 3;
+        const cx = blockState.voxelLocalCenters[arrIndex + 0];
+        const cy = blockState.voxelLocalCenters[arrIndex + 1];
+        const cz = blockState.voxelLocalCenters[arrIndex + 2];
+        const worldCenterX = meshPos.x + cx;
+        const worldCenterY = meshPos.y + cy;
+        const worldCenterZ = meshPos.z + cz;
+        let minX = worldCenterX - halfVX + 0.06;
+        let maxX = worldCenterX + halfVX - 0.06;
+        let minZ = worldCenterZ - halfVZ + 0.06;
+        let maxZ = worldCenterZ + halfVZ - 0.06;
+        if (minX > maxX) minX = maxX = worldCenterX;
+        if (minZ > maxZ) minZ = maxZ = worldCenterZ;
+        outPos.set(
+          THREE.MathUtils.clamp(sampleX, minX, maxX),
+          worldCenterY + halfVY + 0.085,
+          THREE.MathUtils.clamp(sampleZ, minZ, maxZ)
+        );
+        return true;
+      }
+      return false;
+    };
+
+    const findFireflyLandingSpot = (fromPos, outPos) => {
+      const searchRadius = 11.5;
+      const maxVerticalRise = mapWallHeight;
       let bestScore = Infinity;
       let found = false;
 
-      const perchCandidateBoxes = getNearbyColliders(fromPos.x, fromPos.z, 3.2);
-      for (const box of perchCandidateBoxes) {
-        const topY = box.max.y;
-        if (fromPos.y < topY - 0.25 || fromPos.y > topY + 2.6) continue;
-
-        const perchX = THREE.MathUtils.clamp(fromPos.x, box.min.x + 0.12, box.max.x - 0.12);
-        const perchZ = THREE.MathUtils.clamp(fromPos.z, box.min.z + 0.12, box.max.z - 0.12);
-        const dx = fromPos.x - perchX;
-        const dz = fromPos.z - perchZ;
-        const distSq = dx * dx + dz * dz;
-        if (distSq > maxPerchDistSq) continue;
-
-        const candidateY = topY + 0.08 + Math.random() * 0.06;
-        const dy = fromPos.y - candidateY;
-        const score = distSq + dy * dy * 0.25;
-        if (score >= bestScore) continue;
-        bestScore = score;
-        outPos.set(perchX, candidateY, perchZ);
-        found = true;
-      }
-
-      if (!found && fromPos.y < 2.8) {
-        outPos.set(
-          fromPos.x + (Math.random() * 2 - 1) * 0.35,
-          0.1 + Math.random() * 0.03,
-          fromPos.z + (Math.random() * 2 - 1) * 0.35
+      const evaluateBlock = (blockState) => {
+        if (!blockState || blockState.destroyed || blockState.aliveCount <= 0 || !blockState.dynamicTile) return;
+        const localX = fromPos.x - blockState.mesh.position.x;
+        const localZ = fromPos.z - blockState.mesh.position.z;
+        const halfX = blockState.sizeX * 0.5;
+        const halfZ = blockState.sizeZ * 0.5;
+        const centerGX = THREE.MathUtils.clamp(
+          Math.floor((localX + halfX) / blockState.voxelSizeX),
+          0,
+          blockState.voxelCountX - 1
         );
-        found = true;
+        const centerGZ = THREE.MathUtils.clamp(
+          Math.floor((localZ + halfZ) / blockState.voxelSizeZ),
+          0,
+          blockState.voxelCountZ - 1
+        );
+
+        for (let dz = -1; dz <= 1; dz++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            const gx = centerGX + dx;
+            const gz = centerGZ + dz;
+            if (!getFireflyVoxelTopPoint(blockState, gx, gz, fromPos.x, fromPos.z, tempFireflyLanding)) continue;
+            if (tempFireflyLanding.y > fromPos.y + maxVerticalRise) continue;
+            const diffX = fromPos.x - tempFireflyLanding.x;
+            const diffZ = fromPos.z - tempFireflyLanding.z;
+            const rise = Math.max(0, tempFireflyLanding.y - fromPos.y);
+            const score = diffX * diffX + diffZ * diffZ + rise * rise * 2.2;
+            if (score >= bestScore) continue;
+            bestScore = score;
+            outPos.copy(tempFireflyLanding);
+            found = true;
+          }
+        }
+      };
+
+      const nearbyBoxes = getNearbyColliders(fromPos.x, fromPos.z, searchRadius);
+      for (const box of nearbyBoxes) {
+        const blockState = colliderToBlockState.get(box);
+        evaluateBlock(blockState);
       }
 
-      if (found) keepFireflyOutsideBlocks(outPos, 0.18, 0.015);
-      return found;
+      if (!found) {
+        const fallbackRadiusSq = searchRadius * searchRadius * 5.4;
+        for (const tile of dynamicTerrainTiles) {
+          const blockState = tile?.blockState;
+          if (!blockState || blockState.destroyed || blockState.aliveCount <= 0) continue;
+          const box = blockState.collider;
+          const closestX = THREE.MathUtils.clamp(fromPos.x, box.min.x, box.max.x);
+          const closestZ = THREE.MathUtils.clamp(fromPos.z, box.min.z, box.max.z);
+          const dx = fromPos.x - closestX;
+          const dz = fromPos.z - closestZ;
+          if (dx * dx + dz * dz > fallbackRadiusSq) continue;
+          evaluateBlock(blockState);
+        }
+      }
+
+      if (!found) return false;
+      outPos.x = THREE.MathUtils.clamp(outPos.x, -mapHalfSize + 0.18, mapHalfSize - 0.18);
+      outPos.z = THREE.MathUtils.clamp(outPos.z, -mapHalfSize + 0.18, mapHalfSize - 0.18);
+      return true;
     };
 
     const traceFireflyMotion = (startPos, targetPos, outPos) => {
-      tempFireflyStart.copy(startPos);
-      const distance = tempFireflyStart.distanceTo(targetPos);
-      const steps = Math.max(1, Math.min(10, Math.ceil(distance / 0.2)));
-      for (let step = 1; step <= steps; step++) {
-        outPos.lerpVectors(tempFireflyStart, targetPos, 1 / (steps - step + 1));
-        keepFireflyOutsideBlocks(outPos, 0.24, 0.03);
-        tempFireflyStart.copy(outPos);
+      outPos.lerpVectors(startPos, targetPos, 0.1);
+      keepFireflyOutsideBlocks(outPos, 0.1, 0.05);
+    };
+
+    const preLandFirefliesOnLoad = () => {
+      const landedPulse = 0.62;
+      fireflyInstanceQuat.identity();
+      for (const bug of fireflies) {
+        if (!bug.startsLanded) continue;
+
+        bug.currentPos.copy(bug.spawnPos);
+        const foundLandingSpot = findFireflyLandingSpot(bug.spawnPos, bug.currentPos);
+        if (!foundLandingSpot) {
+          bug.state = FIREFLY_STATE_FLYING;
+          bug.wantsToLand = false;
+          continue;
+        }
+
+        bug.state = FIREFLY_STATE_LANDED;
+        bug.wantsToLand = false;
+        bug.hasLandingTarget = true;
+        bug.landingTarget.copy(bug.currentPos);
+        bug.speed = 0;
+        bug.bobSpeed = 0;
+        bug.baseX = bug.currentPos.x;
+        bug.baseY = bug.currentPos.y;
+        bug.baseZ = bug.currentPos.z;
+
+        const coreScale = bug.baseScale * (0.7 + landedPulse * 1.05);
+        const haloScale = coreScale * (7.2 + landedPulse * 2.4);
+        const auraScale = coreScale * (13.5 + landedPulse * 4.2);
+        fireflyInstanceScale.set(coreScale, coreScale, coreScale);
+        fireflyInstanceMatrix.compose(bug.currentPos, fireflyInstanceQuat, fireflyInstanceScale);
+        fireflyCoreInstanced.setMatrixAt(bug.index, fireflyInstanceMatrix);
+        fireflyInstanceScale.set(haloScale, haloScale, haloScale);
+        fireflyInstanceMatrix.compose(bug.currentPos, fireflyInstanceQuat, fireflyInstanceScale);
+        fireflyHaloInstanced.setMatrixAt(bug.index, fireflyInstanceMatrix);
+        fireflyInstanceScale.set(auraScale, auraScale, auraScale);
+        fireflyInstanceMatrix.compose(bug.currentPos, fireflyInstanceQuat, fireflyInstanceScale);
+        fireflyAuraInstanced.setMatrixAt(bug.index, fireflyInstanceMatrix);
+        fireflyCoreInstanced.setColorAt(bug.index, fireflyCoreBaseColor);
+        fireflyHaloInstanced.setColorAt(bug.index, fireflyHaloBaseColor);
+        fireflyAuraInstanced.setColorAt(bug.index, fireflyAuraBaseColor);
+
+        if (bug.light) {
+          bug.light.position.copy(bug.currentPos);
+          bug.light.distance = bug.lightBaseDistance + landedPulse * 16.5;
+          bug.light.intensity = 2.6 + landedPulse * 3.35;
+        }
       }
+      fireflyCoreInstanced.instanceMatrix.needsUpdate = true;
+      fireflyHaloInstanced.instanceMatrix.needsUpdate = true;
+      fireflyAuraInstanced.instanceMatrix.needsUpdate = true;
+      if (fireflyCoreInstanced.instanceColor) fireflyCoreInstanced.instanceColor.needsUpdate = true;
+      if (fireflyHaloInstanced.instanceColor) fireflyHaloInstanced.instanceColor.needsUpdate = true;
+      if (fireflyAuraInstanced.instanceColor) fireflyAuraInstanced.instanceColor.needsUpdate = true;
     };
 
     const updateFireflies = (dt) => {
       fireflyInstanceQuat.copy(camera.quaternion);
+      let landingChecksThisFrame = 0;
       let activeLightCount = 0;
       for (const bug of fireflies) {
-        bug.phase += dt * bug.speed;
-        bug.bobPhase += dt * bug.bobSpeed;
         bug.flickerPhase += dt * bug.flickerSpeed;
         bug.flickerPhaseB += dt * bug.flickerSpeedB;
 
-        bug.perchCooldown = Math.max(0, bug.perchCooldown - dt);
-        bug.perchWobblePhase += dt * 1.25;
-
-        if (bug.isPerched) {
-          bug.perchTimer -= dt;
-          tempFireflyTarget.copy(bug.perchPos);
-          tempFireflyTarget.y += Math.sin(bug.perchWobblePhase) * 0.018;
-          if (bug.perchTimer <= 0) {
-            bug.isPerched = false;
-            bug.perchCooldown = bug.perchCooldownMin + Math.random() * (bug.perchCooldownMax - bug.perchCooldownMin);
-          }
-        } else {
-          const px = bug.baseX + Math.cos(bug.phase * bug.driftFreqX) * bug.driftRadius;
-          const pz = bug.baseZ + Math.sin(bug.phase * bug.driftFreqZ + bug.pulseBias) * bug.driftRadius;
-          const py = bug.baseY + Math.sin(bug.bobPhase) * bug.bobAmp;
-          tempFireflyTarget.set(px, py, pz);
-          if (bug.perchCooldown <= 0 && Math.random() < dt * bug.perchChance) {
-            if (findFireflyPerchSpot(bug.currentPos, tempFireflyPerch)) {
-              bug.isPerched = true;
-              bug.perchPos.copy(tempFireflyPerch);
-              bug.perchTimer = bug.perchDurationMin + Math.random() * (bug.perchDurationMax - bug.perchDurationMin);
-              tempFireflyTarget.copy(bug.perchPos);
+        if (bug.state === FIREFLY_STATE_FLYING) {
+          if (bug.wantsToLand) {
+            bug.phase += dt * bug.speed * 0.45;
+            bug.bobPhase += dt * bug.bobSpeed * 0.35;
+            bug.landingSearchTimer -= dt;
+            if (!bug.hasLandingTarget || bug.landingSearchTimer <= 0) {
+              if (landingChecksThisFrame < 2) {
+                bug.hasLandingTarget = findFireflyLandingSpot(bug.currentPos, bug.landingTarget);
+                landingChecksThisFrame += 1;
+                if (bug.hasLandingTarget) {
+                  bug.landingSearchTimer = 0.45 + Math.random() * 0.65;
+                } else {
+                  bug.wantsToLand = false;
+                  bug.landingSearchTimer = 0;
+                }
+              }
             }
+
+            if (bug.hasLandingTarget) {
+              const approachT = 1 - Math.exp(-bug.landingApproach * dt);
+              bug.currentPos.x = THREE.MathUtils.lerp(bug.currentPos.x, bug.landingTarget.x, approachT);
+              bug.currentPos.z = THREE.MathUtils.lerp(bug.currentPos.z, bug.landingTarget.z, approachT);
+              bug.currentPos.y = Math.max(bug.landingTarget.y, bug.currentPos.y - bug.landingFallSpeed * dt);
+
+              const toLandX = bug.landingTarget.x - bug.currentPos.x;
+              const toLandZ = bug.landingTarget.z - bug.currentPos.z;
+              if (toLandX * toLandX + toLandZ * toLandZ <= 0.0008 && Math.abs(bug.currentPos.y - bug.landingTarget.y) <= 0.02) {
+                bug.currentPos.copy(bug.landingTarget);
+                bug.state = FIREFLY_STATE_LANDED;
+                bug.speed = 0;
+                bug.bobSpeed = 0;
+              }
+            } else {
+              const fallbackTargetX = bug.baseX + Math.cos(bug.phase * bug.driftFreqX) * bug.driftRadius;
+              const fallbackTargetZ = bug.baseZ + Math.sin(bug.phase * bug.driftFreqZ + bug.pulseBias) * bug.driftRadius;
+              const fallbackTargetY = bug.baseY + Math.sin(bug.bobPhase) * bug.bobAmp;
+              tempFireflyTarget.set(fallbackTargetX, fallbackTargetY, fallbackTargetZ);
+              traceFireflyMotion(bug.currentPos, tempFireflyTarget, tempFireflyPos);
+              bug.currentPos.copy(tempFireflyPos);
+              bug.baseX = THREE.MathUtils.lerp(bug.baseX, tempFireflyPos.x, 0.035);
+              bug.baseZ = THREE.MathUtils.lerp(bug.baseZ, tempFireflyPos.z, 0.035);
+            }
+
+            bug.currentPos.x = THREE.MathUtils.clamp(bug.currentPos.x, -mapHalfSize + 0.24, mapHalfSize - 0.24);
+            bug.currentPos.z = THREE.MathUtils.clamp(bug.currentPos.z, -mapHalfSize + 0.24, mapHalfSize - 0.24);
+            bug.currentPos.y = THREE.MathUtils.clamp(bug.currentPos.y, fireflyMinY, fireflyMaxY);
+          } else {
+            bug.phase += dt * bug.speed;
+            bug.bobPhase += dt * bug.bobSpeed;
+            const px = bug.baseX + Math.cos(bug.phase * bug.driftFreqX) * bug.driftRadius;
+            const pz = bug.baseZ + Math.sin(bug.phase * bug.driftFreqZ + bug.pulseBias) * bug.driftRadius;
+            const py = bug.baseY + Math.sin(bug.bobPhase) * bug.bobAmp;
+            tempFireflyTarget.set(px, py, pz);
+            traceFireflyMotion(bug.currentPos, tempFireflyTarget, tempFireflyPos);
+            bug.currentPos.copy(tempFireflyPos);
+            bug.baseX = THREE.MathUtils.lerp(bug.baseX, tempFireflyPos.x, 0.035);
+            bug.baseZ = THREE.MathUtils.lerp(bug.baseZ, tempFireflyPos.z, 0.035);
           }
         }
 
-        traceFireflyMotion(bug.currentPos, tempFireflyTarget, tempFireflyPos);
-        bug.currentPos.copy(tempFireflyPos);
-        bug.baseX = THREE.MathUtils.lerp(bug.baseX, tempFireflyPos.x, 0.035);
-        bug.baseZ = THREE.MathUtils.lerp(bug.baseZ, tempFireflyPos.z, 0.035);
+        tempFireflyPos.copy(bug.currentPos);
 
         const slowFlicker = 0.5 + 0.5 * Math.sin(bug.flickerPhase + Math.sin(bug.phase * 0.27 + bug.pulseBias) * 0.35);
         const sideFlicker = 0.5 + 0.5 * Math.sin(bug.flickerPhaseB);
         const pulse = THREE.MathUtils.clamp(0.28 + slowFlicker * (0.56 * bug.flickerAmount) + sideFlicker * 0.18, 0.05, 1.0);
-        const coreScale = bug.baseScale * (0.7 + pulse * 1.05);
-        const haloScale = coreScale * (7.2 + pulse * 2.4);
-        const auraScale = coreScale * (13.5 + pulse * 4.2);
+        const renderPulse = bug.state === FIREFLY_STATE_LANDED ? 0.62 : pulse;
+        const coreScale = bug.baseScale * (0.7 + renderPulse * 1.05);
+        const haloScale = coreScale * (7.2 + renderPulse * 2.4);
+        const auraScale = coreScale * (13.5 + renderPulse * 4.2);
 
         fireflyInstanceScale.set(coreScale, coreScale, coreScale);
         fireflyInstanceMatrix.compose(tempFireflyPos, fireflyInstanceQuat, fireflyInstanceScale);
@@ -4373,12 +4822,18 @@
         fireflyInstanceMatrix.compose(tempFireflyPos, fireflyInstanceQuat, fireflyInstanceScale);
         fireflyAuraInstanced.setMatrixAt(bug.index, fireflyInstanceMatrix);
 
-        fireflyInstanceColor.copy(fireflyCoreBaseColor).multiplyScalar(0.65 + pulse * 0.95);
-        fireflyCoreInstanced.setColorAt(bug.index, fireflyInstanceColor);
-        fireflyInstanceColor.copy(fireflyHaloBaseColor).multiplyScalar(0.42 + pulse * 0.78);
-        fireflyHaloInstanced.setColorAt(bug.index, fireflyInstanceColor);
-        fireflyInstanceColor.copy(fireflyAuraBaseColor).multiplyScalar(0.28 + pulse * 0.64);
-        fireflyAuraInstanced.setColorAt(bug.index, fireflyInstanceColor);
+        if (bug.state === FIREFLY_STATE_LANDED) {
+          fireflyCoreInstanced.setColorAt(bug.index, fireflyCoreBaseColor);
+          fireflyHaloInstanced.setColorAt(bug.index, fireflyHaloBaseColor);
+          fireflyAuraInstanced.setColorAt(bug.index, fireflyAuraBaseColor);
+        } else {
+          fireflyInstanceColor.copy(fireflyCoreBaseColor).multiplyScalar(0.65 + pulse * 0.95);
+          fireflyCoreInstanced.setColorAt(bug.index, fireflyInstanceColor);
+          fireflyInstanceColor.copy(fireflyHaloBaseColor).multiplyScalar(0.42 + pulse * 0.78);
+          fireflyHaloInstanced.setColorAt(bug.index, fireflyInstanceColor);
+          fireflyInstanceColor.copy(fireflyAuraBaseColor).multiplyScalar(0.28 + pulse * 0.64);
+          fireflyAuraInstanced.setColorAt(bug.index, fireflyInstanceColor);
+        }
 
         if (bug.light) {
           const dx = tempFireflyPos.x - player.position.x;
@@ -4390,8 +4845,8 @@
           if (canEnable) {
             activeLightCount += 1;
             bug.light.position.copy(tempFireflyPos);
-            bug.light.distance = bug.lightBaseDistance + pulse * 12.5;
-            bug.light.intensity = 1.8 + pulse * 2.55;
+            bug.light.distance = bug.lightBaseDistance + pulse * 16.5;
+            bug.light.intensity = 2.6 + pulse * 3.35;
           }
         }
       }
@@ -4404,22 +4859,22 @@
     };
 
     const updateAmbientParticles = (dt) => {
-      fireflyInstanceQuat.copy(camera.quaternion);
+      ambientInstanceQuat.copy(camera.quaternion);
       const positions = ambientParticlePositions;
       for (let i = 0; i < ambientParticleCount; i++) {
         const idx = i * 3;
-        ambientParticlePhases[i] += dt * ambientParticleSpeeds[i];
+        ambientParticlePhases[i] += dt * ambientParticleDriftSpeeds[i];
         const phase = ambientParticlePhases[i];
         const drift = ambientParticleDrifts[i];
-        const flutter = ambientParticleBobs[i];
+        const twist = ambientParticleTwists[i];
 
-        const windX = Math.sin(phase + positions[idx + 2] * 0.03) * drift;
-        const windZ = Math.cos(phase * 1.13 + positions[idx] * 0.025) * drift;
-        const softLift = Math.sin(phase * 2.0 + i * 0.19) * flutter;
+        const driftX = Math.sin(phase + twist + positions[idx + 2] * 0.022) * drift;
+        const driftZ = Math.cos(phase * 1.18 + twist + positions[idx] * 0.022) * drift;
+        const fallSpeed = ambientParticleFallSpeeds[i];
 
-        positions[idx] += (ambientParticleVelocities[idx] + windX) * dt;
-        positions[idx + 1] += (ambientParticleVelocities[idx + 1] + softLift) * dt;
-        positions[idx + 2] += (ambientParticleVelocities[idx + 2] + windZ) * dt;
+        positions[idx] += driftX * dt;
+        positions[idx + 1] -= fallSpeed * dt;
+        positions[idx + 2] += driftZ * dt;
 
         if (positions[idx] < -ambientParticleArea) {
           positions[idx] += ambientParticleArea * 2;
@@ -4434,24 +4889,18 @@
         }
 
         if (positions[idx + 1] < ambientParticleMinY) {
-          positions[idx + 1] = ambientParticleMaxY - Math.random() * 0.35;
+          positions[idx + 1] = ambientParticleMaxY - Math.random() * 0.55;
           positions[idx] = (Math.random() * 2 - 1) * ambientParticleArea;
           positions[idx + 2] = (Math.random() * 2 - 1) * ambientParticleArea;
-        } else if (positions[idx + 1] > ambientParticleMaxY) {
-          positions[idx + 1] = ambientParticleMinY + Math.random() * 0.2;
         }
 
-        const flicker = 0.82 + 0.18 * Math.sin(phase * 1.35 + i * 0.11);
-        const scale = ambientParticleScales[i] * (0.9 + 0.12 * Math.sin(phase * 1.8 + i * 0.23));
+        const scale = ambientParticleScales[i] * (0.9 + 0.15 * Math.sin(phase * 1.6 + i * 0.19));
         ambientInstancePos.set(positions[idx], positions[idx + 1], positions[idx + 2]);
-        fireflyInstanceScale.set(scale, scale, scale);
-        fireflyInstanceMatrix.compose(ambientInstancePos, fireflyInstanceQuat, fireflyInstanceScale);
-        ambientParticles.setMatrixAt(i, fireflyInstanceMatrix);
-        fireflyInstanceColor.copy(ambientBaseColor).multiplyScalar(flicker);
-        ambientParticles.setColorAt(i, fireflyInstanceColor);
+        ambientInstanceScale.set(scale, scale, scale);
+        ambientInstanceMatrix.compose(ambientInstancePos, ambientInstanceQuat, ambientInstanceScale);
+        ambientParticles.setMatrixAt(i, ambientInstanceMatrix);
       }
       ambientParticles.instanceMatrix.needsUpdate = true;
-      if (ambientParticles.instanceColor) ambientParticles.instanceColor.needsUpdate = true;
     };
 
     const updateWeaponStateTimers = (dt) => {
@@ -4860,6 +5309,13 @@
       const adsTarget = canAim ? 1 : 0;
       const adsLerp = 1 - Math.exp(-14 * dt);
       adsWeight = THREE.MathUtils.lerp(adsWeight, adsTarget, adsLerp);
+      const sniperScopeRequested =
+        activeWeapon.id === "sniper" &&
+        switchPhase === "idle" &&
+        !isReloading &&
+        (adsWeight > 0.5 || inputManager.isPressed("aim"));
+      setSniperScopeActive(sniperScopeRequested);
+      weaponRig.visible = !sniperScopeRequested;
       const adsMotionScale = THREE.MathUtils.lerp(1.0, 0.12, adsWeight);
 
       const tiltLerp = 1 - Math.exp(-12 * dt);
@@ -4894,7 +5350,10 @@
 
       const movementFov = baseFov + (isSprinting ? sprintFovBoost : 0) + (isDashing ? dashFovBoost : 0);
       const adsFov = activeWeapon.adsFov || movementFov;
-      const finalFovTarget = THREE.MathUtils.lerp(movementFov, adsFov, adsWeight);
+      const scopedFov = THREE.MathUtils.lerp(baseFov, sniperScopeZoomFov, adsWeight);
+      const finalFovTarget = sniperScopeRequested
+        ? scopedFov
+        : THREE.MathUtils.lerp(movementFov, adsFov, adsWeight);
       const fovLerp = 1 - Math.exp(-10 * dt);
       const nextFov = THREE.MathUtils.lerp(camera.fov, finalFovTarget, fovLerp);
       if (Math.abs(nextFov - camera.fov) > 0.001) {
@@ -4946,6 +5405,8 @@
       updateAmmoHud();
     };
 
+    preLandFirefliesOnLoad();
+
     // Rendering
     const animate = () => {
       requestAnimationFrame(animate);
@@ -4954,14 +5415,15 @@
       fireflyAccumulator = Math.min(fireflyAccumulator + frameDt, 0.2);
       if (fireflyAccumulator >= fireflyStep) {
         updateFireflies(fireflyAccumulator);
-        updateAmbientParticles(fireflyAccumulator);
         fireflyAccumulator = 0;
       }
+      updateAmbientParticles(frameDt);
 
       if (controls.isLocked && !isPaused) {
         const simDt = Math.min(frameDt, maxSimDt);
         updatePlayerPhysics(simDt);
       }
+      updateNeonLights(player.position);
 
       renderer.setRenderTarget(renderTarget);
       renderer.clear();
@@ -4982,8 +5444,3 @@
   </script>
 </body>
 </html>
-
-
-
-
-
