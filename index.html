@@ -921,6 +921,12 @@
             <button id="optPixelStyle" class="optionToggleBtn" type="button">Activado</button>
           </div>
         </div>
+        <div class="optionRow">
+          <span class="optionLabel">Muro Onirico</span>
+          <div class="optionControl">
+            <button id="optDreamBoundaryFx" class="optionToggleBtn" type="button">Activado</button>
+          </div>
+        </div>
 
         <p class="controlsSubTitle">Jugabilidad</p>
         <div class="optionRow">
@@ -1230,6 +1236,7 @@
     const optNeonBrightness = document.getElementById("optNeonBrightness");
     const optParticleEffects = document.getElementById("optParticleEffects");
     const optPixelStyle = document.getElementById("optPixelStyle");
+    const optDreamBoundaryFx = document.getElementById("optDreamBoundaryFx");
     const optMouseSensitivity = document.getElementById("optMouseSensitivity");
     const optMouseSensitivityValue = document.getElementById("optMouseSensitivityValue");
     const optRecoilVibration = document.getElementById("optRecoilVibration");
@@ -1820,6 +1827,23 @@
       bloomStrength: { value: 1.2 },
       shadowLift: { value: 0.06 }
     };
+    const DREAM_BOUNDARY_NEAR_START = 6.0;
+    const DREAM_BOUNDARY_NEAR_END = 1.0;
+    const DREAM_BOUNDARY_FLOW_BASE = 0.11;
+    const DREAM_BOUNDARY_FLOW_NEAR = 0.19;
+    const DREAM_BOUNDARY_ABERRATION_BOOST = 0.24;
+    const DREAM_BOUNDARY_ABERRATION_MIX_BOOST = 0.04;
+    const DREAM_BOUNDARY_BLOOM_STRENGTH_BOOST = 0.34;
+    const DREAM_BOUNDARY_BLOOM_RADIUS_BOOST = 0.36;
+    const DREAM_BOUNDARY_OFF_OPACITY_BASE = 0.012;
+    const DREAM_BOUNDARY_OFF_OPACITY_NEAR = 0.038;
+    const DREAM_BOUNDARY_OFF_FLOW_SCALE = 0.45;
+    let dreamBoundaryNearFactor = 0;
+    let dreamBoundaryFxEnabled = true;
+    let postBaseAberrationStrength = postUniforms.aberrationStrength.value;
+    let postBaseAberrationMix = postUniforms.aberrationMix.value;
+    let postBaseBloomStrength = postUniforms.bloomStrength.value;
+    let postBaseBloomRadius = postUniforms.bloomRadius.value;
     const screenMat = new THREE.ShaderMaterial({
       uniforms: postUniforms,
       vertexShader: `
@@ -1981,8 +2005,125 @@
       }
       return nearbyColliders;
     };
+    const createDreamBoundaryVisual = (mapSpan, wallY, wallZOffset, wallThickness) => {
+      const planeHeight = wallY * 1.12;
+      const planeWidth = mapSpan + wallThickness * 2;
+      const geometry = new THREE.PlaneGeometry(planeWidth, planeHeight);
+      const uniforms = {
+        uTime: { value: 0 },
+        uOpacityBase: { value: 0.05 },
+        uOpacityNear: { value: 0.22 },
+        uNearFactor: { value: 0 },
+        uColorA: { value: new THREE.Color(0x9ce9ff) },
+        uColorB: { value: new THREE.Color(0xff9de8) },
+        uNoiseScale: { value: 3.6 },
+        uFlowSpeed: { value: 0.11 }
+      };
+      const material = new THREE.ShaderMaterial({
+        uniforms,
+        transparent: true,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+        side: THREE.DoubleSide,
+        vertexShader: `
+          varying vec2 vUv;
+          void main() {
+            vUv = uv;
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+          }
+        `,
+        fragmentShader: `
+          varying vec2 vUv;
+          uniform float uTime;
+          uniform float uOpacityBase;
+          uniform float uOpacityNear;
+          uniform float uNearFactor;
+          uniform vec3 uColorA;
+          uniform vec3 uColorB;
+          uniform float uNoiseScale;
+          uniform float uFlowSpeed;
+
+          float hash12(vec2 p) {
+            vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+            p3 += dot(p3, p3.yzx + 33.33);
+            return fract((p3.x + p3.y) * p3.z);
+          }
+
+          float noise2(vec2 p) {
+            vec2 i = floor(p);
+            vec2 f = fract(p);
+            vec2 u = f * f * (3.0 - 2.0 * f);
+            float a = hash12(i + vec2(0.0, 0.0));
+            float b = hash12(i + vec2(1.0, 0.0));
+            float c = hash12(i + vec2(0.0, 1.0));
+            float d = hash12(i + vec2(1.0, 1.0));
+            return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+          }
+
+          void main() {
+            vec2 uv = vUv;
+            float centerBand = 1.0 - smoothstep(0.28, 0.5, abs(uv.y - 0.5));
+            float edgeFade = smoothstep(0.02, 0.15, uv.x) * (1.0 - smoothstep(0.85, 0.98, uv.x));
+
+            vec2 flowUv = uv * uNoiseScale + vec2(uTime * uFlowSpeed, -uTime * uFlowSpeed * 0.62);
+            float n1 = noise2(flowUv);
+            float n2 = noise2(flowUv * 1.87 + 11.3);
+            float dissolve = smoothstep(0.24, 0.88, n1 * 0.66 + n2 * 0.34 + uNearFactor * 0.18);
+            float shimmer = 0.85 + 0.15 * sin((uv.y + uTime * 0.08) * 12.0 + n2 * 6.28318);
+
+            float alpha = mix(uOpacityBase, uOpacityNear, uNearFactor) * centerBand * edgeFade * dissolve * shimmer;
+
+            float tintMix = clamp(uv.x * 0.62 + n1 * 0.38, 0.0, 1.0);
+            vec3 tint = mix(uColorA, uColorB, tintMix);
+            vec3 color = mix(tint, vec3(0.96, 0.985, 1.0), 0.62);
+
+            gl_FragColor = vec4(color, alpha);
+          }
+        `
+      });
+
+      const group = new THREE.Group();
+      const centerY = wallY * 0.5;
+      const inset = 0.05;
+
+      const north = new THREE.Mesh(geometry, material);
+      north.position.set(0, centerY, -wallZOffset + inset);
+
+      const south = new THREE.Mesh(geometry, material);
+      south.position.set(0, centerY, wallZOffset - inset);
+      south.rotation.y = Math.PI;
+
+      const west = new THREE.Mesh(geometry, material);
+      west.position.set(-wallZOffset + inset, centerY, 0);
+      west.rotation.y = -Math.PI * 0.5;
+
+      const east = new THREE.Mesh(geometry, material);
+      east.position.set(wallZOffset - inset, centerY, 0);
+      east.rotation.y = Math.PI * 0.5;
+
+      north.frustumCulled = false;
+      south.frustumCulled = false;
+      west.frustumCulled = false;
+      east.frustumCulled = false;
+
+      north.renderOrder = 5;
+      south.renderOrder = 5;
+      west.renderOrder = 5;
+      east.renderOrder = 5;
+
+      group.add(north, south, west, east);
+      scene.add(group);
+
+      return { group, material, uniforms };
+    };
+
     const boundaryWalls = new THREE.Group();
-    const wallMat = new THREE.MeshLambertMaterial({ color: 0x3a455c });
+    const wallMat = new THREE.MeshBasicMaterial({
+      color: 0xffffff,
+      transparent: true,
+      opacity: 0,
+      depthWrite: false
+    });
     const wallOffset = mapHalfSize + mapWallThickness * 0.5;
     const addBoundaryWall = (sx, sy, sz, px, py, pz) => {
       const wall = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), wallMat);
@@ -1997,6 +2138,13 @@
     addBoundaryWall(mapWallThickness, mapWallHeight, mapFloorSize + mapWallThickness * 2, -wallOffset, mapWallHeight * 0.5, 0);
     addBoundaryWall(mapWallThickness, mapWallHeight, mapFloorSize + mapWallThickness * 2, wallOffset, mapWallHeight * 0.5, 0);
     scene.add(boundaryWalls);
+
+    const dreamBoundaryVisual = createDreamBoundaryVisual(
+      mapFloorSize,
+      mapWallHeight,
+      wallOffset,
+      mapWallThickness
+    );
 
     const platformMats = [
       new THREE.MeshLambertMaterial({ color: 0x54627e }),
@@ -3862,6 +4010,7 @@
       neonBrightness: "medio",
       particleEffectsReduced: false,
       pixelStyle: true,
+      dreamBoundaryFx: true,
       mouseSensitivity: 55,
       recoilVibration: 100,
       cameraShake: true,
@@ -3884,8 +4033,10 @@
     const baseDreamSparkOpacity = dreamSparksMaterial.opacity;
     const baseAmbientOpacity = ambientParticleMat.opacity;
     const baseBloomStrength = postUniforms.bloomStrength.value;
+    const baseBloomRadius = postUniforms.bloomRadius.value;
     const basePostExposure = postUniforms.postExposure.value;
     const baseAberrationStrength = postUniforms.aberrationStrength.value;
+    const baseAberrationMix = postUniforms.aberrationMix.value;
 
     const clampNumber = (value, min, max, fallback) => {
       const parsed = Number(value);
@@ -3928,6 +4079,7 @@
         optionState.neonBrightness = normalizeChoice(parsed.neonBrightness, ["bajo", "medio", "alto"], optionDefaults.neonBrightness);
         optionState.particleEffectsReduced = parsed.particleEffectsReduced === true;
         optionState.pixelStyle = parsed.pixelStyle !== false;
+        optionState.dreamBoundaryFx = parsed.dreamBoundaryFx !== false;
         optionState.mouseSensitivity = clampNumber(parsed.mouseSensitivity, 0, 100, optionDefaults.mouseSensitivity);
         optionState.recoilVibration = clampNumber(parsed.recoilVibration, 0, 120, optionDefaults.recoilVibration);
         optionState.cameraShake = parsed.cameraShake !== false;
@@ -3968,6 +4120,7 @@
       setToggleText(optHudIcons, optionState.showHudIcons, "Activado", "Oculto");
       setToggleText(optParticleEffects, !optionState.particleEffectsReduced, "Activado", "Reducido");
       setToggleText(optPixelStyle, optionState.pixelStyle, "Activado", "Desactivado");
+      setToggleText(optDreamBoundaryFx, optionState.dreamBoundaryFx, "Activado", "Desactivado");
       setToggleText(optCameraShake, optionState.cameraShake, "Activada", "Desactivada");
       setToggleText(optAutoJump, optionState.autoJump, "Activado", "Desactivado");
     };
@@ -4037,9 +4190,20 @@
       const ambientVisibleCount = Math.max(420, Math.round(ambientParticleCount * (optionState.particleEffectsReduced ? 0.68 : 1)));
       ambientParticles.count = ambientVisibleCount;
 
-      postUniforms.bloomStrength.value = baseBloomStrength * visualProfile.bloom;
-      postUniforms.postExposure.value = basePostExposure * visualProfile.exposure;
-      postUniforms.aberrationStrength.value = baseAberrationStrength * visualProfile.aberration;
+      const targetBloomStrength = baseBloomStrength * visualProfile.bloom;
+      const targetPostExposure = basePostExposure * visualProfile.exposure;
+      const targetAberrationStrength = baseAberrationStrength * visualProfile.aberration;
+
+      postUniforms.bloomStrength.value = targetBloomStrength;
+      postUniforms.postExposure.value = targetPostExposure;
+      postUniforms.aberrationStrength.value = targetAberrationStrength;
+      postUniforms.aberrationMix.value = baseAberrationMix;
+      postUniforms.bloomRadius.value = baseBloomRadius;
+
+      postBaseBloomStrength = targetBloomStrength;
+      postBaseBloomRadius = baseBloomRadius;
+      postBaseAberrationStrength = targetAberrationStrength;
+      postBaseAberrationMix = baseAberrationMix;
 
       for (const neonBlock of neonBlocksList) {
         const material = neonBlock.material;
@@ -4048,6 +4212,11 @@
       }
 
       renderer.domElement.style.imageRendering = optionState.pixelStyle ? "pixelated" : "auto";
+
+      dreamBoundaryFxEnabled = optionState.dreamBoundaryFx !== false;
+      if (!dreamBoundaryFxEnabled) {
+        dreamBoundaryNearFactor = 0;
+      }
     };
 
     const applyGameplayComfortOptions = () => {
@@ -4130,6 +4299,10 @@
     });
     optPixelStyle?.addEventListener("click", () => {
       optionState.pixelStyle = !optionState.pixelStyle;
+      commitOptionChange(applyPerformanceOptions);
+    });
+    optDreamBoundaryFx?.addEventListener("click", () => {
+      optionState.dreamBoundaryFx = !optionState.dreamBoundaryFx;
       commitOptionChange(applyPerformanceOptions);
     });
 
@@ -6571,6 +6744,93 @@
       ambientParticles.instanceMatrix.needsUpdate = true;
     };
 
+    const updateDreamBoundaryFx = (dt) => {
+      if (!dreamBoundaryVisual || !dreamBoundaryVisual.uniforms) return;
+
+      const boundaryUniforms = dreamBoundaryVisual.uniforms;
+      boundaryUniforms.uTime.value += dt;
+
+      const distToLimit = mapHalfSize - Math.max(Math.abs(player.position.x), Math.abs(player.position.z));
+      const nearLinear = 1 - THREE.MathUtils.clamp(
+        (distToLimit - DREAM_BOUNDARY_NEAR_END) / Math.max(0.0001, DREAM_BOUNDARY_NEAR_START - DREAM_BOUNDARY_NEAR_END),
+        0,
+        1
+      );
+      const nearTarget = dreamBoundaryFxEnabled ? THREE.MathUtils.smoothstep(nearLinear, 0, 1) : 0;
+      const smoothing = 1 - Math.exp(-dt * 8);
+      dreamBoundaryNearFactor = THREE.MathUtils.lerp(dreamBoundaryNearFactor, nearTarget, smoothing);
+
+      const targetOpacityBase = dreamBoundaryFxEnabled ? 0.05 : DREAM_BOUNDARY_OFF_OPACITY_BASE;
+      const targetOpacityNear = dreamBoundaryFxEnabled ? 0.22 : DREAM_BOUNDARY_OFF_OPACITY_NEAR;
+      const flowBase = dreamBoundaryFxEnabled
+        ? DREAM_BOUNDARY_FLOW_BASE
+        : DREAM_BOUNDARY_FLOW_BASE * DREAM_BOUNDARY_OFF_FLOW_SCALE;
+      const flowNear = dreamBoundaryFxEnabled
+        ? DREAM_BOUNDARY_FLOW_NEAR
+        : DREAM_BOUNDARY_FLOW_NEAR * DREAM_BOUNDARY_OFF_FLOW_SCALE;
+      const flowTarget = THREE.MathUtils.lerp(flowBase, flowNear, dreamBoundaryNearFactor);
+
+      boundaryUniforms.uNearFactor.value = dreamBoundaryNearFactor;
+      boundaryUniforms.uOpacityBase.value = THREE.MathUtils.lerp(
+        boundaryUniforms.uOpacityBase.value,
+        targetOpacityBase,
+        smoothing
+      );
+      boundaryUniforms.uOpacityNear.value = THREE.MathUtils.lerp(
+        boundaryUniforms.uOpacityNear.value,
+        targetOpacityNear,
+        smoothing
+      );
+      boundaryUniforms.uFlowSpeed.value = THREE.MathUtils.lerp(
+        boundaryUniforms.uFlowSpeed.value,
+        flowTarget,
+        smoothing
+      );
+
+      const postBoostFactor = dreamBoundaryFxEnabled ? dreamBoundaryNearFactor : 0;
+      const targetAberrationStrength = THREE.MathUtils.clamp(
+        postBaseAberrationStrength + DREAM_BOUNDARY_ABERRATION_BOOST * postBoostFactor,
+        0,
+        3
+      );
+      const targetAberrationMix = THREE.MathUtils.clamp(
+        postBaseAberrationMix + DREAM_BOUNDARY_ABERRATION_MIX_BOOST * postBoostFactor,
+        0,
+        1
+      );
+      const targetBloomStrength = THREE.MathUtils.clamp(
+        postBaseBloomStrength + DREAM_BOUNDARY_BLOOM_STRENGTH_BOOST * postBoostFactor,
+        0,
+        4
+      );
+      const targetBloomRadius = THREE.MathUtils.clamp(
+        postBaseBloomRadius + DREAM_BOUNDARY_BLOOM_RADIUS_BOOST * postBoostFactor,
+        0.1,
+        6
+      );
+
+      postUniforms.aberrationStrength.value = THREE.MathUtils.lerp(
+        postUniforms.aberrationStrength.value,
+        targetAberrationStrength,
+        smoothing
+      );
+      postUniforms.aberrationMix.value = THREE.MathUtils.lerp(
+        postUniforms.aberrationMix.value,
+        targetAberrationMix,
+        smoothing
+      );
+      postUniforms.bloomStrength.value = THREE.MathUtils.lerp(
+        postUniforms.bloomStrength.value,
+        targetBloomStrength,
+        smoothing
+      );
+      postUniforms.bloomRadius.value = THREE.MathUtils.lerp(
+        postUniforms.bloomRadius.value,
+        targetBloomRadius,
+        smoothing
+      );
+    };
+
     const updateWeaponStateTimers = (dt) => {
       if (switchCodeFxTimer > 0) {
         switchCodeFxTimer = Math.max(0, switchCodeFxTimer - dt);
@@ -7149,6 +7409,7 @@
         updateNeonLights(player.position);
         lightAccumulator = 0;
       }
+      updateDreamBoundaryFx(frameDt);
 
       renderer.setRenderTarget(renderTarget);
       renderer.clear();
