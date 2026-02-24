@@ -484,54 +484,251 @@
       new THREE.MeshStandardMaterial({ color: 0x3f3f4a, roughness: 0.9, metalness: 0.02 }),
       new THREE.MeshStandardMaterial({ color: 0x6f6c43, roughness: 0.78, metalness: 0.04 })
     ];
+    const voxelCubeGeometry = new THREE.BoxGeometry(1, 1, 1);
+    const voxelBuildMatrix = new THREE.Matrix4();
+    const voxelIdentityQuaternion = new THREE.Quaternion();
+    const voxelTempScale = new THREE.Vector3();
+    const voxelTempPos = new THREE.Vector3();
     const dynamicTerrainTiles = [];
     const dynamicColliderSet = new Set();
     const destructibleBlockStates = [];
     const colliderToBlockState = new Map();
+    const detachedVoxelChunks = [];
     let nextBlockId = 1;
 
+    const voxelFractureNoise = (seedA, seedB) => {
+      const n = Math.sin(seedA * 12.9898 + seedB * 78.233) * 43758.5453;
+      return n - Math.floor(n);
+    };
+
+    const getVoxelIndex = (state, gx, gy, gz) => gx + state.voxelCountX * (gy + state.voxelCountY * gz);
+    const decodeVoxelIndex = (state, index) => {
+      const layerStride = state.voxelCountX * state.voxelCountY;
+      const gz = Math.floor(index / layerStride);
+      const remLayer = index - gz * layerStride;
+      const gy = Math.floor(remLayer / state.voxelCountX);
+      const gx = remLayer - gy * state.voxelCountX;
+      return { gx, gy, gz };
+    };
+
+    const buildVoxelGrid = (sx, sy, sz, material, shootable = false) => {
+      const targetVoxelXZ = 1.7;
+      const targetVoxelY = 1.9;
+      const voxelCountX = THREE.MathUtils.clamp(Math.round(sx / targetVoxelXZ), 2, 6);
+      const voxelCountY = THREE.MathUtils.clamp(Math.round(sy / targetVoxelY), 8, 30);
+      const voxelCountZ = THREE.MathUtils.clamp(Math.round(sz / targetVoxelXZ), 2, 6);
+      const voxelSizeX = sx / voxelCountX;
+      const voxelSizeY = sy / voxelCountY;
+      const voxelSizeZ = sz / voxelCountZ;
+      const totalVoxels = voxelCountX * voxelCountY * voxelCountZ;
+
+      const voxelMesh = new THREE.InstancedMesh(voxelCubeGeometry, material, totalVoxels);
+      voxelMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      voxelMesh.userData.shootable = shootable;
+
+      const root = new THREE.Group();
+      root.userData.shootable = shootable;
+      root.add(voxelMesh);
+
+      const voxelAlive = new Uint8Array(totalVoxels);
+      const voxelToInstance = new Int32Array(totalVoxels);
+      voxelToInstance.fill(-1);
+      const instanceToVoxel = new Int32Array(totalVoxels);
+      const voxelLocalCenters = new Float32Array(totalVoxels * 3);
+
+      for (let gz = 0; gz < voxelCountZ; gz++) {
+        for (let gy = 0; gy < voxelCountY; gy++) {
+          for (let gx = 0; gx < voxelCountX; gx++) {
+            const voxelIndex = gx + voxelCountX * (gy + voxelCountY * gz);
+            const centerX = -sx * 0.5 + voxelSizeX * (gx + 0.5);
+            const centerY = -sy * 0.5 + voxelSizeY * (gy + 0.5);
+            const centerZ = -sz * 0.5 + voxelSizeZ * (gz + 0.5);
+            const arrIndex = voxelIndex * 3;
+            voxelLocalCenters[arrIndex + 0] = centerX;
+            voxelLocalCenters[arrIndex + 1] = centerY;
+            voxelLocalCenters[arrIndex + 2] = centerZ;
+            voxelAlive[voxelIndex] = 1;
+          }
+        }
+      }
+
+      return {
+        root,
+        voxelMesh,
+        totalVoxels,
+        voxelCountX,
+        voxelCountY,
+        voxelCountZ,
+        voxelSizeX,
+        voxelSizeY,
+        voxelSizeZ,
+        voxelAlive,
+        voxelToInstance,
+        instanceToVoxel,
+        voxelLocalCenters,
+        voxelScale: new THREE.Vector3(voxelSizeX, voxelSizeY, voxelSizeZ)
+      };
+    };
+
+    const rebuildBlockVoxelMesh = (blockState) => {
+      const { voxelMesh, voxelAlive, voxelLocalCenters, voxelToInstance, instanceToVoxel, voxelScale } = blockState;
+      let instanceCount = 0;
+      voxelTempScale.copy(voxelScale);
+
+      for (let i = 0; i < voxelAlive.length; i++) {
+        if (!voxelAlive[i]) {
+          voxelToInstance[i] = -1;
+          continue;
+        }
+        const arrIndex = i * 3;
+        voxelTempPos.set(
+          voxelLocalCenters[arrIndex + 0],
+          voxelLocalCenters[arrIndex + 1],
+          voxelLocalCenters[arrIndex + 2]
+        );
+        voxelBuildMatrix.compose(voxelTempPos, voxelIdentityQuaternion, voxelTempScale);
+        voxelMesh.setMatrixAt(instanceCount, voxelBuildMatrix);
+        voxelToInstance[i] = instanceCount;
+        instanceToVoxel[instanceCount] = i;
+        instanceCount += 1;
+      }
+
+      voxelMesh.count = instanceCount;
+      voxelMesh.instanceMatrix.needsUpdate = true;
+      blockState.aliveCount = instanceCount;
+    };
+
+    const syncBlockCollider = (blockState) => {
+      const px = blockState.mesh.position.x;
+      const py = blockState.mesh.position.y;
+      const pz = blockState.mesh.position.z;
+
+      blockState.collider.min.set(
+        px + blockState.localBoundsMin.x,
+        py + blockState.localBoundsMin.y,
+        pz + blockState.localBoundsMin.z
+      );
+      blockState.collider.max.set(
+        px + blockState.localBoundsMax.x,
+        py + blockState.localBoundsMax.y,
+        pz + blockState.localBoundsMax.z
+      );
+    };
+
+    const updateBlockBoundsFromVoxels = (blockState) => {
+      if (blockState.aliveCount <= 0) {
+        blockState.localBoundsMin.set(0, 0, 0);
+        blockState.localBoundsMax.set(0, 0, 0);
+        blockState.halfX = 0;
+        blockState.halfY = 0;
+        blockState.halfZ = 0;
+        if (blockState.dynamicTile) {
+          blockState.dynamicTile.halfX = 0;
+          blockState.dynamicTile.halfY = 0;
+          blockState.dynamicTile.halfZ = 0;
+        }
+        return;
+      }
+
+      const halfVX = blockState.voxelSizeX * 0.5;
+      const halfVY = blockState.voxelSizeY * 0.5;
+      const halfVZ = blockState.voxelSizeZ * 0.5;
+      let minX = Infinity;
+      let minY = Infinity;
+      let minZ = Infinity;
+      let maxX = -Infinity;
+      let maxY = -Infinity;
+      let maxZ = -Infinity;
+
+      for (let i = 0; i < blockState.voxelAlive.length; i++) {
+        if (!blockState.voxelAlive[i]) continue;
+        const arrIndex = i * 3;
+        const cx = blockState.voxelLocalCenters[arrIndex + 0];
+        const cy = blockState.voxelLocalCenters[arrIndex + 1];
+        const cz = blockState.voxelLocalCenters[arrIndex + 2];
+        minX = Math.min(minX, cx - halfVX);
+        minY = Math.min(minY, cy - halfVY);
+        minZ = Math.min(minZ, cz - halfVZ);
+        maxX = Math.max(maxX, cx + halfVX);
+        maxY = Math.max(maxY, cy + halfVY);
+        maxZ = Math.max(maxZ, cz + halfVZ);
+      }
+
+      blockState.localBoundsMin.set(minX, minY, minZ);
+      blockState.localBoundsMax.set(maxX, maxY, maxZ);
+      blockState.halfX = (maxX - minX) * 0.5;
+      blockState.halfY = (maxY - minY) * 0.5;
+      blockState.halfZ = (maxZ - minZ) * 0.5;
+
+      if (blockState.dynamicTile) {
+        blockState.dynamicTile.halfX = blockState.halfX;
+        blockState.dynamicTile.halfY = blockState.halfY;
+        blockState.dynamicTile.halfZ = blockState.halfZ;
+      }
+    };
 
     const addArenaBlock = (sx, sy, sz, x, y, z, matIndex = 0, shootable = false, motionPreset = null) => {
-      const mesh = new THREE.Mesh(new THREE.BoxGeometry(sx, sy, sz), platformMats[matIndex % platformMats.length]);
+      const sourceMat = platformMats[matIndex % platformMats.length];
+      const blockMat = sourceMat.clone();
+      blockMat.emissive = blockMat.emissive || new THREE.Color(0x000000);
+
+      const voxelGrid = buildVoxelGrid(sx, sy, sz, blockMat, shootable);
+      const mesh = voxelGrid.root;
       mesh.position.set(x, y, z);
-      mesh.userData.shootable = shootable;
       boxes.add(mesh);
       mesh.updateMatrixWorld(true);
 
-      const collider = new THREE.Box3().setFromObject(mesh);
-      boxColliders.push(collider);
-
-      const halfX = sx * 0.5;
-      const halfY = sy * 0.5;
-      const halfZ = sz * 0.5;
-      const fractureLayers = THREE.MathUtils.clamp(Math.round(Math.max(8, sy / 1.5)), 8, 32);
       const durabilityBase = Math.round(
-        160 +
-        sy * 5 +
-        (sx + sz) * 15 +
-        (shootable ? 25 : 0) +
-        (motionPreset ? 60 : 0)
+        190 +
+        sy * 6 +
+        (sx + sz) * 18 +
+        voxelGrid.totalVoxels * 0.8 +
+        (shootable ? 30 : 0) +
+        (motionPreset ? 70 : 0)
       );
-
+      const collider = new THREE.Box3();
       const blockState = {
         id: nextBlockId++,
         mesh,
+        voxelMesh: voxelGrid.voxelMesh,
+        material: blockMat,
         collider,
-        halfX,
-        halfY,
-        halfZ,
-        baseHalfY: halfY,
-        currentHalfY: halfY,
-        fractureLayers,
-        brokenLayers: 0,
-        layerHealth: Math.max(1, durabilityBase / fractureLayers),
+        sizeX: sx,
+        sizeY: sy,
+        sizeZ: sz,
+        voxelCountX: voxelGrid.voxelCountX,
+        voxelCountY: voxelGrid.voxelCountY,
+        voxelCountZ: voxelGrid.voxelCountZ,
+        voxelSizeX: voxelGrid.voxelSizeX,
+        voxelSizeY: voxelGrid.voxelSizeY,
+        voxelSizeZ: voxelGrid.voxelSizeZ,
+        voxelScale: voxelGrid.voxelScale,
+        voxelAlive: voxelGrid.voxelAlive,
+        voxelToInstance: voxelGrid.voxelToInstance,
+        instanceToVoxel: voxelGrid.instanceToVoxel,
+        voxelLocalCenters: voxelGrid.voxelLocalCenters,
+        totalVoxels: voxelGrid.totalVoxels,
+        aliveCount: voxelGrid.totalVoxels,
+        localBoundsMin: new THREE.Vector3(-sx * 0.5, -sy * 0.5, -sz * 0.5),
+        localBoundsMax: new THREE.Vector3(sx * 0.5, sy * 0.5, sz * 0.5),
+        halfX: sx * 0.5,
+        halfY: sy * 0.5,
+        halfZ: sz * 0.5,
+        damagePerVoxel: Math.max(2.25, durabilityBase / Math.max(32, voxelGrid.totalVoxels * 0.9)),
         pendingDamage: 0,
         health: durabilityBase,
         maxHealth: durabilityBase,
         destroyed: false,
         dynamicTile: null
       };
+
+      rebuildBlockVoxelMesh(blockState);
+      updateBlockBoundsFromVoxels(blockState);
+      syncBlockCollider(blockState);
+      boxColliders.push(collider);
+
       mesh.userData.blockState = blockState;
+      voxelGrid.voxelMesh.userData.blockState = blockState;
       colliderToBlockState.set(collider, blockState);
       destructibleBlockStates.push(blockState);
 
@@ -544,9 +741,9 @@
           baseY: y,
           lastY: y,
           deltaY: 0,
-          halfX,
-          halfY,
-          halfZ,
+          halfX: blockState.halfX,
+          halfY: blockState.halfY,
+          halfZ: blockState.halfZ,
           minY: motionPreset.minY,
           maxY: motionPreset.maxY,
           targetY: motionPreset.targetY,
@@ -1035,6 +1232,8 @@
     const tempTraceEnd = new THREE.Vector3();
     const tempTracePos = new THREE.Vector3();
     const tempImpactDir = new THREE.Vector3();
+    const tempChunkAxis = new THREE.Vector3();
+    const tempChunkRotation = new THREE.Quaternion();
 
     const getActiveWeapon = () => weapons[currentWeaponIndex];
 
@@ -1258,95 +1457,373 @@
       colliderToBlockState.delete(collider);
     };
 
-    const spawnBlockDebris = (blockState, hitPoint, hitNormal, impactDir, energy = 1) => {
-      const sourceMaterial = blockState.mesh.material;
-      const baseColor = sourceMaterial?.color ? sourceMaterial.color : new THREE.Color(0x8d93a2);
-      const pieceCount = THREE.MathUtils.clamp(Math.round(2 + energy * 2 + Math.random() * 2), 2, 7);
+    const spawnBlockDebris = (blockState, hitPoint, hitNormal, impactDir, energy = 1, removedCount = 0) => {
+      const baseColor = blockState.material?.color ? blockState.material.color : new THREE.Color(0x8d93a2);
+      const pieceCount = THREE.MathUtils.clamp(
+        Math.round(2 + energy * 2 + removedCount * 0.1 + Math.random() * 2),
+        3,
+        22
+      );
       const normal = hitNormal.clone().normalize();
       const push = impactDir.clone().normalize();
+      const avgVoxelSize = (blockState.voxelSizeX + blockState.voxelSizeY + blockState.voxelSizeZ) / 3;
 
       for (let i = 0; i < pieceCount; i++) {
-        const size = 0.16 + Math.random() * 0.28;
+        const size = avgVoxelSize * (0.25 + Math.random() * 0.38);
         const piece = new THREE.Mesh(
           new THREE.BoxGeometry(size, size, size),
           new THREE.MeshStandardMaterial({
-            color: baseColor.clone().offsetHSL((Math.random() - 0.5) * 0.04, 0, (Math.random() - 0.5) * 0.08),
+            color: baseColor.clone().offsetHSL((Math.random() - 0.5) * 0.05, 0, (Math.random() - 0.5) * 0.1),
             roughness: 0.85,
             metalness: 0.05,
             transparent: true,
-            opacity: 0.95
+            opacity: 0.96
           })
         );
 
         piece.position.copy(hitPoint)
-          .addScaledVector(normal, 0.08 + Math.random() * 0.1)
-          .add(new THREE.Vector3((Math.random() - 0.5) * 0.32, Math.random() * 0.2, (Math.random() - 0.5) * 0.32));
+          .addScaledVector(normal, 0.05 + Math.random() * 0.12)
+          .add(new THREE.Vector3((Math.random() - 0.5) * 0.42, Math.random() * 0.28, (Math.random() - 0.5) * 0.42));
         piece.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
         scene.add(piece);
 
         const velocity = new THREE.Vector3()
           .copy(normal)
-          .multiplyScalar((2.2 + Math.random() * 2.4) * energy)
-          .addScaledVector(push, (1.6 + Math.random() * 2.2) * energy)
-          .add(new THREE.Vector3((Math.random() - 0.5) * 1.8, 2.8 + Math.random() * 2.2, (Math.random() - 0.5) * 1.8));
+          .multiplyScalar((2.0 + Math.random() * 2.8) * energy)
+          .addScaledVector(push, (1.5 + Math.random() * 2.6) * energy)
+          .add(new THREE.Vector3((Math.random() - 0.5) * 2.2, 2.2 + Math.random() * 2.8, (Math.random() - 0.5) * 2.2));
 
         debrisChunks.push({
           mesh: piece,
           velocity,
-          spin: new THREE.Vector3((Math.random() - 0.5) * 8, (Math.random() - 0.5) * 8, (Math.random() - 0.5) * 8),
-          life: 0.65 + Math.random() * 0.55,
-          maxLife: 1.05,
-          bounce: 0.24 + Math.random() * 0.12,
-          drag: 2.6 + Math.random() * 1.2
+          spin: new THREE.Vector3((Math.random() - 0.5) * 9, (Math.random() - 0.5) * 9, (Math.random() - 0.5) * 9),
+          life: 0.7 + Math.random() * 0.65,
+          maxLife: 1.2,
+          bounce: 0.22 + Math.random() * 0.16,
+          drag: 2.1 + Math.random() * 1.4
         });
       }
     };
 
-    const syncBlockCollider = (blockState) => {
-      const halfY = blockState.dynamicTile ? blockState.dynamicTile.halfY : blockState.currentHalfY;
-      blockState.collider.min.set(
-        blockState.mesh.position.x - blockState.halfX,
-        blockState.mesh.position.y - halfY,
-        blockState.mesh.position.z - blockState.halfZ
+    const spawnDetachedVoxelChunk = (blockState, voxelIndices, hitPoint, impactDir, energy = 1) => {
+      if (!voxelIndices || voxelIndices.length === 0) return;
+
+      const maxRenderVoxels = 260;
+      let renderIndices = voxelIndices;
+      if (voxelIndices.length > maxRenderVoxels) {
+        renderIndices = [];
+        const step = voxelIndices.length / maxRenderVoxels;
+        for (let i = 0; i < maxRenderVoxels; i++) {
+          renderIndices.push(voxelIndices[Math.floor(i * step)]);
+        }
+      }
+
+      const chunkMaterial = new THREE.MeshStandardMaterial({
+        color: blockState.material?.color
+          ? blockState.material.color.clone().offsetHSL((Math.random() - 0.5) * 0.03, 0, (Math.random() - 0.5) * 0.06)
+          : new THREE.Color(0x8d93a2),
+        roughness: 0.86,
+        metalness: 0.05,
+        transparent: true,
+        opacity: 0.98
+      });
+      const chunkMesh = new THREE.InstancedMesh(voxelCubeGeometry, chunkMaterial, renderIndices.length);
+      chunkMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+
+      const halfVX = blockState.voxelSizeX * 0.5;
+      const halfVY = blockState.voxelSizeY * 0.5;
+      const halfVZ = blockState.voxelSizeZ * 0.5;
+      let minX = Infinity;
+      let minY = Infinity;
+      let minZ = Infinity;
+      let maxX = -Infinity;
+      let maxY = -Infinity;
+      let maxZ = -Infinity;
+      let centroidX = 0;
+      let centroidY = 0;
+      let centroidZ = 0;
+
+      for (const voxelIndex of voxelIndices) {
+        const arrIndex = voxelIndex * 3;
+        const cx = blockState.voxelLocalCenters[arrIndex + 0];
+        const cy = blockState.voxelLocalCenters[arrIndex + 1];
+        const cz = blockState.voxelLocalCenters[arrIndex + 2];
+        centroidX += cx;
+        centroidY += cy;
+        centroidZ += cz;
+        minX = Math.min(minX, cx - halfVX);
+        minY = Math.min(minY, cy - halfVY);
+        minZ = Math.min(minZ, cz - halfVZ);
+        maxX = Math.max(maxX, cx + halfVX);
+        maxY = Math.max(maxY, cy + halfVY);
+        maxZ = Math.max(maxZ, cz + halfVZ);
+      }
+
+      const invCount = 1 / voxelIndices.length;
+      centroidX *= invCount;
+      centroidY *= invCount;
+      centroidZ *= invCount;
+      voxelTempScale.copy(blockState.voxelScale);
+
+      for (let i = 0; i < renderIndices.length; i++) {
+        const arrIndex = renderIndices[i] * 3;
+        voxelTempPos.set(
+          blockState.voxelLocalCenters[arrIndex + 0] - centroidX,
+          blockState.voxelLocalCenters[arrIndex + 1] - centroidY,
+          blockState.voxelLocalCenters[arrIndex + 2] - centroidZ
+        );
+        voxelBuildMatrix.compose(voxelTempPos, voxelIdentityQuaternion, voxelTempScale);
+        chunkMesh.setMatrixAt(i, voxelBuildMatrix);
+      }
+      chunkMesh.count = renderIndices.length;
+      chunkMesh.instanceMatrix.needsUpdate = true;
+
+      const chunkRoot = new THREE.Group();
+      chunkRoot.add(chunkMesh);
+      chunkRoot.position.set(
+        blockState.mesh.position.x + centroidX,
+        blockState.mesh.position.y + centroidY,
+        blockState.mesh.position.z + centroidZ
       );
-      blockState.collider.max.set(
-        blockState.mesh.position.x + blockState.halfX,
-        blockState.mesh.position.y + halfY,
-        blockState.mesh.position.z + blockState.halfZ
-      );
+      scene.add(chunkRoot);
+
+      const impactDirection = impactDir.clone().normalize();
+      if (impactDirection.lengthSq() < 0.0001) impactDirection.set(0, 1, 0);
+      const away = chunkRoot.position.clone().sub(hitPoint);
+      if (away.lengthSq() < 0.0001) away.copy(impactDirection);
+      away.normalize();
+
+      const massFactor = THREE.MathUtils.clamp(voxelIndices.length / 28, 0.85, 6.8);
+      const launchSpeed = (2.1 + energy * 2.1 + Math.random() * 0.9) / massFactor;
+      const velocity = away.multiplyScalar(launchSpeed).addScaledVector(impactDirection, (1.6 + energy) / massFactor);
+      velocity.y += 1.0 + Math.random() * 1.8;
+
+      const chunkLife = 3.2 + Math.random() * 2.8 + Math.min(2.2, voxelIndices.length * 0.016);
+      detachedVoxelChunks.push({
+        root: chunkRoot,
+        mesh: chunkMesh,
+        velocity,
+        spin: new THREE.Vector3((Math.random() - 0.5) * 5.5, (Math.random() - 0.5) * 5.5, (Math.random() - 0.5) * 5.5),
+        localMin: new THREE.Vector3(minX - centroidX, minY - centroidY, minZ - centroidZ),
+        localMax: new THREE.Vector3(maxX - centroidX, maxY - centroidY, maxZ - centroidZ),
+        life: chunkLife,
+        maxLife: chunkLife,
+        bounce: 0.16 + Math.random() * 0.13,
+        drag: 0.85 + Math.random() * 0.8
+      });
     };
 
-    const chipBlockLayer = (blockState, hitPoint, hitNormal, impactDir, energy = 1) => {
-      if (!blockState || blockState.destroyed) return false;
+    const collectFloatingVoxelIslands = (blockState) => {
+      const totalVoxels = blockState.totalVoxels;
+      const stable = new Uint8Array(totalVoxels);
+      const visited = new Uint8Array(totalVoxels);
+      const queue = new Int32Array(totalVoxels);
+      let head = 0;
+      let tail = 0;
 
-      blockState.brokenLayers += 1;
-      const remainingLayers = Math.max(0, blockState.fractureLayers - blockState.brokenLayers);
-      const remainingRatio = remainingLayers / blockState.fractureLayers;
+      const pushStable = (index) => {
+        stable[index] = 1;
+        queue[tail++] = index;
+      };
 
-      if (remainingLayers <= 0 || remainingRatio <= 0.02) {
-        destroyBlockState(blockState, hitPoint, hitNormal, impactDir, energy * 1.15);
-        return true;
+      for (let gz = 0; gz < blockState.voxelCountZ; gz++) {
+        for (let gx = 0; gx < blockState.voxelCountX; gx++) {
+          const anchorIndex = getVoxelIndex(blockState, gx, 0, gz);
+          if (blockState.voxelAlive[anchorIndex] && !stable[anchorIndex]) pushStable(anchorIndex);
+        }
       }
 
-      blockState.currentHalfY = blockState.baseHalfY * remainingRatio;
-      const newScaleY = Math.max(0.02, blockState.currentHalfY / blockState.baseHalfY);
-      blockState.mesh.scale.y = newScaleY;
+      const tryGrowStable = (gx, gy, gz) => {
+        if (
+          gx < 0 || gy < 0 || gz < 0 ||
+          gx >= blockState.voxelCountX || gy >= blockState.voxelCountY || gz >= blockState.voxelCountZ
+        ) return;
+        const neighborIndex = getVoxelIndex(blockState, gx, gy, gz);
+        if (!blockState.voxelAlive[neighborIndex] || stable[neighborIndex]) return;
+        stable[neighborIndex] = 1;
+        queue[tail++] = neighborIndex;
+      };
 
-      if (blockState.dynamicTile) {
-        blockState.dynamicTile.halfY = blockState.currentHalfY;
+      while (head < tail) {
+        const index = queue[head++];
+        const { gx, gy, gz } = decodeVoxelIndex(blockState, index);
+        tryGrowStable(gx + 1, gy, gz);
+        tryGrowStable(gx - 1, gy, gz);
+        tryGrowStable(gx, gy + 1, gz);
+        tryGrowStable(gx, gy - 1, gz);
+        tryGrowStable(gx, gy, gz + 1);
+        tryGrowStable(gx, gy, gz - 1);
       }
+
+      const floatingComponents = [];
+      const tryGrowFloating = (gx, gy, gz, component) => {
+        if (
+          gx < 0 || gy < 0 || gz < 0 ||
+          gx >= blockState.voxelCountX || gy >= blockState.voxelCountY || gz >= blockState.voxelCountZ
+        ) return;
+        const neighborIndex = getVoxelIndex(blockState, gx, gy, gz);
+        if (!blockState.voxelAlive[neighborIndex] || stable[neighborIndex] || visited[neighborIndex]) return;
+        visited[neighborIndex] = 1;
+        queue[tail++] = neighborIndex;
+        component.push(neighborIndex);
+      };
+
+      for (let i = 0; i < totalVoxels; i++) {
+        if (!blockState.voxelAlive[i] || stable[i] || visited[i]) continue;
+        head = 0;
+        tail = 0;
+        visited[i] = 1;
+        queue[tail++] = i;
+        const component = [i];
+
+        while (head < tail) {
+          const index = queue[head++];
+          const { gx, gy, gz } = decodeVoxelIndex(blockState, index);
+          tryGrowFloating(gx + 1, gy, gz, component);
+          tryGrowFloating(gx - 1, gy, gz, component);
+          tryGrowFloating(gx, gy + 1, gz, component);
+          tryGrowFloating(gx, gy - 1, gz, component);
+          tryGrowFloating(gx, gy, gz + 1, component);
+          tryGrowFloating(gx, gy, gz - 1, component);
+        }
+
+        if (component.length > 0) floatingComponents.push(component);
+      }
+
+      return floatingComponents;
+    };
+
+    const carveBlockVoxels = (blockState, hitPoint, hitNormal, impactDir, damage, energy = 1) => {
+      if (!blockState || blockState.destroyed || blockState.aliveCount <= 0) return 0;
+
+      const localHitX = hitPoint.x - blockState.mesh.position.x;
+      const localHitY = hitPoint.y - blockState.mesh.position.y;
+      const localHitZ = hitPoint.z - blockState.mesh.position.z;
+      const avgVoxelSize = (blockState.voxelSizeX + blockState.voxelSizeY + blockState.voxelSizeZ) / 3;
+      const maxRadius = Math.max(blockState.sizeX, blockState.sizeY, blockState.sizeZ) * 0.68;
+      const radius = THREE.MathUtils.clamp(
+        (avgVoxelSize * 0.72 + Math.sqrt(Math.max(0.1, damage)) * avgVoxelSize * 0.18) * THREE.MathUtils.clamp(energy, 0.6, 3.8),
+        avgVoxelSize * 0.52,
+        maxRadius
+      );
+      const radiusSq = radius * radius;
+      const localHalfX = blockState.sizeX * 0.5;
+      const localHalfY = blockState.sizeY * 0.5;
+      const localHalfZ = blockState.sizeZ * 0.5;
+
+      const minGX = THREE.MathUtils.clamp(
+        Math.floor((localHitX - radius + localHalfX) / blockState.voxelSizeX),
+        0,
+        blockState.voxelCountX - 1
+      );
+      const maxGX = THREE.MathUtils.clamp(
+        Math.floor((localHitX + radius + localHalfX) / blockState.voxelSizeX),
+        0,
+        blockState.voxelCountX - 1
+      );
+      const minGY = THREE.MathUtils.clamp(
+        Math.floor((localHitY - radius + localHalfY) / blockState.voxelSizeY),
+        0,
+        blockState.voxelCountY - 1
+      );
+      const maxGY = THREE.MathUtils.clamp(
+        Math.floor((localHitY + radius + localHalfY) / blockState.voxelSizeY),
+        0,
+        blockState.voxelCountY - 1
+      );
+      const minGZ = THREE.MathUtils.clamp(
+        Math.floor((localHitZ - radius + localHalfZ) / blockState.voxelSizeZ),
+        0,
+        blockState.voxelCountZ - 1
+      );
+      const maxGZ = THREE.MathUtils.clamp(
+        Math.floor((localHitZ + radius + localHalfZ) / blockState.voxelSizeZ),
+        0,
+        blockState.voxelCountZ - 1
+      );
+
+      const removedIndices = [];
+      let closestIndex = -1;
+      let closestDistSq = Infinity;
+      for (let gz = minGZ; gz <= maxGZ; gz++) {
+        for (let gy = minGY; gy <= maxGY; gy++) {
+          for (let gx = minGX; gx <= maxGX; gx++) {
+            const voxelIndex = getVoxelIndex(blockState, gx, gy, gz);
+            if (!blockState.voxelAlive[voxelIndex]) continue;
+            const arrIndex = voxelIndex * 3;
+            const cx = blockState.voxelLocalCenters[arrIndex + 0];
+            const cy = blockState.voxelLocalCenters[arrIndex + 1];
+            const cz = blockState.voxelLocalCenters[arrIndex + 2];
+            const dx = cx - localHitX;
+            const dy = cy - localHitY;
+            const dz = cz - localHitZ;
+            const distSq = dx * dx + dy * dy + dz * dz;
+            if (distSq < closestDistSq) {
+              closestDistSq = distSq;
+              closestIndex = voxelIndex;
+            }
+            if (distSq > radiusSq) continue;
+            const noise = voxelFractureNoise(voxelIndex + blockState.id * 17, damage * 0.11 + energy * 2.7);
+            const breakRadiusSq = radiusSq * (0.58 + noise * 0.62);
+            if (distSq > breakRadiusSq) continue;
+            blockState.voxelAlive[voxelIndex] = 0;
+            removedIndices.push(voxelIndex);
+          }
+        }
+      }
+
+      if (removedIndices.length === 0 && closestIndex >= 0 && closestDistSq <= radiusSq * 1.55) {
+        blockState.voxelAlive[closestIndex] = 0;
+        removedIndices.push(closestIndex);
+      }
+      if (removedIndices.length === 0) return 0;
+
+      spawnBlockDebris(blockState, hitPoint, hitNormal, impactDir, energy, removedIndices.length);
+
+      const floatingComponents = collectFloatingVoxelIslands(blockState);
+      let detachedCount = 0;
+      for (const component of floatingComponents) {
+        if (!component || component.length === 0) continue;
+        detachedCount += component.length;
+        for (const voxelIndex of component) {
+          blockState.voxelAlive[voxelIndex] = 0;
+        }
+        spawnDetachedVoxelChunk(
+          blockState,
+          component,
+          hitPoint,
+          impactDir,
+          energy * (0.88 + Math.min(1.8, component.length * 0.02))
+        );
+      }
+
+      rebuildBlockVoxelMesh(blockState);
+      updateBlockBoundsFromVoxels(blockState);
       syncBlockCollider(blockState);
-
-      blockState.health = blockState.maxHealth * remainingRatio;
-      spawnBlockDebris(blockState, hitPoint, hitNormal, impactDir, Math.max(0.45, energy * 0.55));
-      return true;
+      const aliveRatio = blockState.totalVoxels > 0 ? (blockState.aliveCount / blockState.totalVoxels) : 0;
+      blockState.health = blockState.maxHealth * aliveRatio;
+      return removedIndices.length + detachedCount;
     };
 
-    const destroyBlockState = (blockState, hitPoint, hitNormal, impactDir, energy = 1) => {
+    const destroyBlockState = (blockState, hitPoint, hitNormal, impactDir, energy = 1, skipFinalBurst = false) => {
       if (!blockState || blockState.destroyed) return false;
+
+      if (!skipFinalBurst && blockState.aliveCount > 0 && hitPoint && hitNormal && impactDir) {
+        const remaining = [];
+        for (let i = 0; i < blockState.voxelAlive.length; i++) {
+          if (blockState.voxelAlive[i]) remaining.push(i);
+        }
+        if (remaining.length > 0) {
+          for (const voxelIndex of remaining) blockState.voxelAlive[voxelIndex] = 0;
+          spawnDetachedVoxelChunk(blockState, remaining, hitPoint, impactDir, energy * 1.15);
+          spawnBlockDebris(blockState, hitPoint, hitNormal, impactDir, energy * 1.2, remaining.length);
+        }
+      }
 
       blockState.destroyed = true;
       blockState.health = 0;
+      blockState.pendingDamage = 0;
+      blockState.aliveCount = 0;
 
       if (blockState.dynamicTile) {
         const tileIndex = dynamicTerrainTiles.indexOf(blockState.dynamicTile);
@@ -1354,11 +1831,11 @@
       }
 
       removeColliderFromWorld(blockState.collider);
-      spawnBlockDebris(blockState, hitPoint, hitNormal, impactDir, energy);
-
       boxes.remove(blockState.mesh);
       blockState.mesh.visible = false;
-      if (blockState.mesh.geometry) blockState.mesh.geometry.dispose();
+      blockState.voxelMesh.count = 0;
+      blockState.voxelMesh.instanceMatrix.needsUpdate = true;
+      if (blockState.material) blockState.material.dispose();
       return true;
     };
 
@@ -1367,24 +1844,23 @@
       if (!Number.isFinite(damage) || damage <= 0) return false;
 
       blockState.pendingDamage += damage;
-      const maxLayersPerHit = 4;
-      let layersBrokenThisHit = 0;
-      while (
-        blockState.pendingDamage >= blockState.layerHealth &&
-        !blockState.destroyed &&
-        layersBrokenThisHit < maxLayersPerHit
-      ) {
-        blockState.pendingDamage -= blockState.layerHealth;
-        chipBlockLayer(blockState, hitPoint, hitNormal, impactDir, energy * (0.95 + layersBrokenThisHit * 0.08));
-        layersBrokenThisHit += 1;
+      const committedDamage = Math.max(damage * 0.55, blockState.pendingDamage);
+      if (committedDamage < blockState.damagePerVoxel * 0.45) {
+        flashShootableMesh(blockState.voxelMesh);
+        return false;
       }
 
-      if (layersBrokenThisHit === 0) {
-        const healthLoss = Math.min(blockState.health, damage * 0.18);
-        blockState.health = Math.max(0, blockState.health - healthLoss);
-        flashShootableMesh(blockState.mesh);
+      const removed = carveBlockVoxels(blockState, hitPoint, hitNormal, impactDir, committedDamage, energy);
+      if (removed <= 0) {
+        blockState.pendingDamage = Math.min(blockState.pendingDamage, blockState.damagePerVoxel * 3.2);
+        flashShootableMesh(blockState.voxelMesh);
+        return false;
       }
 
+      blockState.pendingDamage = Math.max(0, blockState.pendingDamage - removed * blockState.damagePerVoxel * 0.85);
+      if (blockState.aliveCount <= 0) {
+        destroyBlockState(blockState, hitPoint, hitNormal, impactDir, energy, true);
+      }
       return blockState.destroyed;
     };
 
@@ -1577,6 +2053,109 @@
       projectile.mesh.material.dispose();
     };
 
+    const sampleVoxelImpactNormal = (blockState, worldPoint, radius, outNormal) => {
+      if (!blockState || blockState.destroyed || blockState.aliveCount <= 0) return false;
+      const localX = worldPoint.x - blockState.mesh.position.x;
+      const localY = worldPoint.y - blockState.mesh.position.y;
+      const localZ = worldPoint.z - blockState.mesh.position.z;
+      if (
+        localX < blockState.localBoundsMin.x - radius || localX > blockState.localBoundsMax.x + radius ||
+        localY < blockState.localBoundsMin.y - radius || localY > blockState.localBoundsMax.y + radius ||
+        localZ < blockState.localBoundsMin.z - radius || localZ > blockState.localBoundsMax.z + radius
+      ) return false;
+
+      const localHalfX = blockState.sizeX * 0.5;
+      const localHalfY = blockState.sizeY * 0.5;
+      const localHalfZ = blockState.sizeZ * 0.5;
+      const radiusSq = radius * radius;
+      const halfVX = blockState.voxelSizeX * 0.5;
+      const halfVY = blockState.voxelSizeY * 0.5;
+      const halfVZ = blockState.voxelSizeZ * 0.5;
+      const minGX = THREE.MathUtils.clamp(
+        Math.floor((localX - radius + localHalfX) / blockState.voxelSizeX),
+        0,
+        blockState.voxelCountX - 1
+      );
+      const maxGX = THREE.MathUtils.clamp(
+        Math.floor((localX + radius + localHalfX) / blockState.voxelSizeX),
+        0,
+        blockState.voxelCountX - 1
+      );
+      const minGY = THREE.MathUtils.clamp(
+        Math.floor((localY - radius + localHalfY) / blockState.voxelSizeY),
+        0,
+        blockState.voxelCountY - 1
+      );
+      const maxGY = THREE.MathUtils.clamp(
+        Math.floor((localY + radius + localHalfY) / blockState.voxelSizeY),
+        0,
+        blockState.voxelCountY - 1
+      );
+      const minGZ = THREE.MathUtils.clamp(
+        Math.floor((localZ - radius + localHalfZ) / blockState.voxelSizeZ),
+        0,
+        blockState.voxelCountZ - 1
+      );
+      const maxGZ = THREE.MathUtils.clamp(
+        Math.floor((localZ + radius + localHalfZ) / blockState.voxelSizeZ),
+        0,
+        blockState.voxelCountZ - 1
+      );
+
+      let bestDistSq = Infinity;
+      let found = false;
+      for (let gz = minGZ; gz <= maxGZ; gz++) {
+        for (let gy = minGY; gy <= maxGY; gy++) {
+          for (let gx = minGX; gx <= maxGX; gx++) {
+            const voxelIndex = getVoxelIndex(blockState, gx, gy, gz);
+            if (!blockState.voxelAlive[voxelIndex]) continue;
+            const arrIndex = voxelIndex * 3;
+            const cx = blockState.voxelLocalCenters[arrIndex + 0];
+            const cy = blockState.voxelLocalCenters[arrIndex + 1];
+            const cz = blockState.voxelLocalCenters[arrIndex + 2];
+            const minX = cx - halfVX;
+            const maxX = cx + halfVX;
+            const minY = cy - halfVY;
+            const maxY = cy + halfVY;
+            const minZ = cz - halfVZ;
+            const maxZ = cz + halfVZ;
+            const closestX = THREE.MathUtils.clamp(localX, minX, maxX);
+            const closestY = THREE.MathUtils.clamp(localY, minY, maxY);
+            const closestZ = THREE.MathUtils.clamp(localZ, minZ, maxZ);
+            const dx = localX - closestX;
+            const dy = localY - closestY;
+            const dz = localZ - closestZ;
+            const distSq = dx * dx + dy * dy + dz * dz;
+            if (distSq > radiusSq || distSq >= bestDistSq) continue;
+            bestDistSq = distSq;
+            found = true;
+
+            if (distSq > 0.0000001) {
+              outNormal.set(dx, dy, dz).normalize();
+            } else {
+              const toMinX = Math.abs(localX - minX);
+              const toMaxX = Math.abs(maxX - localX);
+              const toMinY = Math.abs(localY - minY);
+              const toMaxY = Math.abs(maxY - localY);
+              const toMinZ = Math.abs(localZ - minZ);
+              const toMaxZ = Math.abs(maxZ - localZ);
+              const minPen = Math.min(toMinX, toMaxX, toMinY, toMaxY, toMinZ, toMaxZ);
+              if (minPen === toMinX) outNormal.set(-1, 0, 0);
+              else if (minPen === toMaxX) outNormal.set(1, 0, 0);
+              else if (minPen === toMinY) outNormal.set(0, -1, 0);
+              else if (minPen === toMaxY) outNormal.set(0, 1, 0);
+              else if (minPen === toMinZ) outNormal.set(0, 0, -1);
+              else outNormal.set(0, 0, 1);
+            }
+          }
+        }
+      }
+
+      if (!found) return false;
+      outNormal.applyQuaternion(blockState.mesh.quaternion).normalize();
+      return true;
+    };
+
     const traceProjectileImpact = (start, end, radius) => {
       const distance = start.distanceTo(end);
       const stepSize = Math.max(0.08, radius * 0.7);
@@ -1603,7 +2182,11 @@
           const distSq = tempClosest.distanceToSquared(tempTracePos);
           if (distSq > radius * radius) continue;
 
-          if (distSq > 0.0001) {
+          const blockState = colliderToBlockState.get(box);
+          if (blockState) {
+            const hasVoxelHit = sampleVoxelImpactNormal(blockState, tempTracePos, radius, tempNormal);
+            if (!hasVoxelHit) continue;
+          } else if (distSq > 0.0001) {
             tempNormal.copy(tempTracePos).sub(tempClosest).normalize();
           } else {
             const toMinX = Math.abs(tempTracePos.x - box.min.x);
@@ -2370,8 +2953,11 @@
 
         const toTarget = tile.targetY - tile.lastY;
         if (Math.abs(toTarget) <= 0.01) {
+          tile.mesh.position.y = tile.targetY;
+          tile.mesh.updateMatrixWorld(true);
           tile.lastY = tile.targetY;
           tile.deltaY = 0;
+          syncBlockCollider(tile.blockState);
           pickNextTileTarget(tile);
           continue;
         }
@@ -2384,17 +2970,7 @@
         tile.mesh.updateMatrixWorld(true);
         tile.deltaY = nextY - tile.lastY;
         tile.lastY = nextY;
-
-        tile.collider.min.set(
-          tile.mesh.position.x - tile.halfX,
-          nextY - tile.halfY,
-          tile.mesh.position.z - tile.halfZ
-        );
-        tile.collider.max.set(
-          tile.mesh.position.x + tile.halfX,
-          nextY + tile.halfY,
-          tile.mesh.position.z + tile.halfZ
-        );
+        syncBlockCollider(tile.blockState);
       }
     };
 
@@ -2501,6 +3077,60 @@
           projectile.mesh.position.copy(impact.point);
           explodeProjectile(projectile, impact.normal);
           projectiles.splice(i, 1);
+        }
+      }
+
+      for (let i = detachedVoxelChunks.length - 1; i >= 0; i--) {
+        const chunk = detachedVoxelChunks[i];
+        chunk.life -= dt;
+
+        chunk.velocity.y -= 18.5 * dt;
+        const drag = Math.max(0, 1 - chunk.drag * dt);
+        chunk.velocity.multiplyScalar(drag);
+        chunk.root.position.addScaledVector(chunk.velocity, dt);
+
+        const spinSpeed = chunk.spin.length();
+        if (spinSpeed > 0.00001) {
+          tempChunkAxis.copy(chunk.spin).normalize();
+          tempChunkRotation.setFromAxisAngle(tempChunkAxis, spinSpeed * dt);
+          chunk.root.quaternion.multiply(tempChunkRotation);
+        }
+
+        const minY = chunk.root.position.y + chunk.localMin.y;
+        if (minY <= 0.02) {
+          chunk.root.position.y += 0.02 - minY;
+          if (chunk.velocity.y < 0) {
+            chunk.velocity.y *= -chunk.bounce;
+            chunk.velocity.x *= 0.76;
+            chunk.velocity.z *= 0.76;
+            if (Math.abs(chunk.velocity.y) < 0.16) chunk.velocity.y = 0;
+          }
+        }
+
+        const minX = chunk.root.position.x + chunk.localMin.x;
+        const maxX = chunk.root.position.x + chunk.localMax.x;
+        const minZ = chunk.root.position.z + chunk.localMin.z;
+        const maxZ = chunk.root.position.z + chunk.localMax.z;
+        if (minX < -mapHalfSize) {
+          chunk.root.position.x += -mapHalfSize - minX;
+          if (chunk.velocity.x < 0) chunk.velocity.x *= -chunk.bounce;
+        } else if (maxX > mapHalfSize) {
+          chunk.root.position.x -= maxX - mapHalfSize;
+          if (chunk.velocity.x > 0) chunk.velocity.x *= -chunk.bounce;
+        }
+        if (minZ < -mapHalfSize) {
+          chunk.root.position.z += -mapHalfSize - minZ;
+          if (chunk.velocity.z < 0) chunk.velocity.z *= -chunk.bounce;
+        } else if (maxZ > mapHalfSize) {
+          chunk.root.position.z -= maxZ - mapHalfSize;
+          if (chunk.velocity.z > 0) chunk.velocity.z *= -chunk.bounce;
+        }
+
+        chunk.mesh.material.opacity = THREE.MathUtils.clamp(chunk.life / chunk.maxLife, 0, 1);
+        if (chunk.life <= 0) {
+          scene.remove(chunk.root);
+          chunk.mesh.material.dispose();
+          detachedVoxelChunks.splice(i, 1);
         }
       }
 
