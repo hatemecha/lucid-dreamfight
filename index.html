@@ -688,17 +688,20 @@
 
     const skyMat = new THREE.ShaderMaterial({
       uniforms: {
-        topColor: { value: new THREE.Color(0xcfc0ff) },
-        midColor: { value: new THREE.Color(0xb39fdf) },
-        bottomColor: { value: new THREE.Color(0x7f79b0) },
+        topColor: { value: new THREE.Color(0x1a0b2e) },
+        midColor: { value: new THREE.Color(0x4a154b) },
+        bottomColor: { value: new THREE.Color(0x07090d) },
         offset: { value: 22.0 },
-        exponent: { value: 0.92 }
+        exponent: { value: 0.92 },
+        time: { value: 0.0 }
       },
       vertexShader: `
         varying vec3 vWorldPos;
+        varying vec3 vPos;
         void main() {
           vec4 worldPosition = modelMatrix * vec4(position, 1.0);
           vWorldPos = worldPosition.xyz;
+          vPos = position;
           gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
         }
       `,
@@ -708,13 +711,41 @@
         uniform vec3 bottomColor;
         uniform float offset;
         uniform float exponent;
+        uniform float time;
         varying vec3 vWorldPos;
+        varying vec3 vPos;
         void main() {
           float h = normalize(vWorldPos + vec3(0.0, offset, 0.0)).y * 0.5 + 0.5;
           h = pow(clamp(h, 0.0, 1.0), exponent);
-          vec3 base = mix(bottomColor, midColor, smoothstep(0.0, 0.58, h));
-          vec3 col = mix(base, topColor, smoothstep(0.58, 1.0, h));
-          gl_FragColor = vec4(col, 1.0);
+          vec3 baseCol = mix(bottomColor, midColor, smoothstep(0.0, 0.6, h));
+          baseCol = mix(baseCol, topColor, smoothstep(0.6, 1.0, h));
+          // Matemáticas orgánicas (Proporciones irracionales para evitar repetición)
+          vec2 p = vPos.xz * 0.015; // Escala más grande
+          float t = time * 0.3;
+
+          float wave1 = sin(p.x * 2.13 + t) + sin(p.y * 3.22 - t * 0.8);
+          float wave2 = sin(p.x * 3.71 - t * 1.5 + wave1) + sin(p.y * 2.84 + t * 1.1);
+          float wave3 = sin(p.x * 1.33 + t * 0.5 + wave2) + sin(p.y * 1.95 - t * 0.6);
+
+          // Suavizar y combinar las bandas
+          float bands = clamp((wave1 + wave2 + wave3) * 0.15 + 0.4, 0.0, 1.0);
+          float auroraMask = smoothstep(0.4, 0.85, h); // Solo en la parte alta del cielo
+
+          vec3 colorCyan = vec3(0.2, 0.9, 1.0);   // Celeste de ensueño
+          vec3 colorPink = vec3(1.0, 0.25, 0.65); // Rosa vibrante
+          // Transición suave entre Rosa y Celeste
+          vec3 auroraColor = mix(colorPink, colorCyan, smoothstep(0.25, 0.75, bands));
+          // Intensidad sin quemar a blanco
+          float auroraIntensity = smoothstep(0.4, 0.9, bands) * auroraMask;
+
+          // Sumar la aurora al fondo, multiplicando por sí misma para saturar el núcleo
+          vec3 glow = auroraColor * auroraIntensity * 1.5;
+          vec3 finalColor = baseCol + glow;
+
+          // Rematar con un ligero tinte general en el cielo alto
+          finalColor = mix(finalColor, auroraColor, auroraIntensity * 0.3);
+
+          gl_FragColor = vec4(finalColor, 1.0);
         }
       `,
       side: THREE.BackSide,
@@ -5412,6 +5443,7 @@
       requestAnimationFrame(animate);
 
       const frameDt = Math.min(clock.getDelta(), 0.1);
+      skyMat.uniforms.time.value += frameDt * 0.45;
       fireflyAccumulator = Math.min(fireflyAccumulator + frameDt, 0.2);
       if (fireflyAccumulator >= fireflyStep) {
         updateFireflies(fireflyAccumulator);
