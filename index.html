@@ -391,12 +391,38 @@
         0 0 10px rgba(202, 228, 255, 0.5),
         0 0 2px rgba(0, 0, 0, 0.75);
     }
+
+    #reloadHud {
+      position: fixed;
+      right: 20px;
+      bottom: 52px;
+      width: 132px;
+      height: 8px;
+      border: 1px solid rgba(233, 240, 255, 0.42);
+      background: rgba(5, 10, 18, 0.45);
+      box-shadow:
+        -1px 0 rgba(255, 108, 126, 0.28),
+        1px 0 rgba(109, 196, 255, 0.32),
+        0 0 8px rgba(202, 228, 255, 0.26);
+      z-index: 12;
+      pointer-events: none;
+      overflow: hidden;
+    }
+
+    #reloadBarFill {
+      width: 0%;
+      height: 100%;
+      background: linear-gradient(90deg, rgba(87, 165, 255, 0.82), rgba(194, 230, 255, 0.92));
+      box-shadow: 0 0 8px rgba(126, 194, 255, 0.45);
+      transition: width 0.03s linear;
+    }
   </style>
 </head>
 <body>
   <div id="app"></div>
   <div id="crosshair"></div>
   <div id="sniperScope" class="hidden"></div>
+  <div id="reloadHud" class="hidden"><div id="reloadBarFill"></div></div>
   <div id="ammoHud"></div>
   <div id="menuScreen">
     <div class="menuRoot">
@@ -670,6 +696,8 @@
     const autoJumpToggleBtn = document.getElementById("autoJumpToggleBtn");
     const bindWarnings = document.getElementById("bindWarnings");
     const ammoHud = document.getElementById("ammoHud");
+    const reloadHud = document.getElementById("reloadHud");
+    const reloadBarFill = document.getElementById("reloadBarFill");
 
     const renderer = new THREE.WebGLRenderer({
       antialias: false,
@@ -3078,9 +3106,23 @@
         : `${activeWeapon.currentAmmo}/${activeWeapon.reserveAmmo}`;
       const stateText = isReloading ? "RECARGA" : (switchPhase !== "idle" ? "CAMBIO" : "");
       const nextHudText = `${activeWeapon.name}\n${ammoText}${stateText ? `  ${stateText}` : ""}`;
-      if (nextHudText === lastAmmoHudText) return;
-      lastAmmoHudText = nextHudText;
-      ammoHud.textContent = nextHudText;
+      if (nextHudText !== lastAmmoHudText) {
+        lastAmmoHudText = nextHudText;
+        ammoHud.textContent = nextHudText;
+      }
+
+      if (isReloading && activeWeapon.clipSize > 0 && activeWeapon.reloadTime > 0) {
+        const reloadProgress = THREE.MathUtils.clamp(
+          1 - (reloadTimer / activeWeapon.reloadTime),
+          0,
+          1
+        );
+        reloadHud.classList.remove("hidden");
+        reloadBarFill.style.width = `${(reloadProgress * 100).toFixed(1)}%`;
+      } else {
+        reloadHud.classList.add("hidden");
+        reloadBarFill.style.width = "0%";
+      }
     };
 
     const normalizeInputCode = (code) => {
