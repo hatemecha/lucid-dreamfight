@@ -270,6 +270,201 @@
     import { PointerLockControls } from "three/addons/controls/PointerLockControls.js";
     import RAPIER from "@dimforge/rapier3d-compat";
 
+    const GameConfig = {
+      colors: {
+        clearColor: 0x8f84b8,
+        dreamFog: 0xb7b0d8,
+        hemiSky: 0xd8c8ff,
+        hemiGround: 0x6a638f,
+        directional: 0xfff2fd,
+        ambientFill: 0xc7d4ff,
+        fireflyCore: 0xfbffca,
+        fireflyHalo: 0xe7ffb8,
+        fireflyAura: 0xdaf1ab,
+        fireflyLight: 0xf0ffc4,
+        ambientParticle: 0xd6d0c6
+      },
+      map: {
+        halfSize: 52,
+        wallThickness: 2.2,
+        wallHeight: 24.0
+      },
+      perf: {
+        fireflyCount: 320,
+        fireflyPointLights: 24,
+        ambientParticleCount: 260,
+        maxProjectiles: 14,
+        maxImpactMarks: 80,
+        maxDebrisChunks: 120,
+        maxDetachedChunks: 22,
+        maxDetachedRenderVoxels: 140
+      },
+      lighting: {
+        fireflyLightCullRadius: 15,
+        maxActiveFireflyLights: 8
+      },
+      physicsFlags: {
+        useRapierWorld: true,
+        useRapierPlayerKCC: false,
+        useRapierProjectiles: false,
+        useRapierDebris: false,
+        useRapierDestruction: false
+      },
+      physics: {
+        fixedStep: 1 / 60,
+        maxSubsteps: 3,
+        gravityY: -17.5,
+        playerOffset: 0.02
+      },
+      renderer: {
+        pixelWidth: 320,
+        pixelHeight: 240,
+        maxSimDt: 1 / 30,
+        fireflyStep: 1 / 45
+      },
+      input: {
+        jumpBufferMax: 0.12,
+        doubleTapWindowMs: 250,
+        autoJumpCooldown: 0.18,
+        switchDownDuration: 0.08,
+        switchUpDuration: 0.1,
+        fistPunchDuration: 0.22,
+        defaultBinds: [
+          { id: "forward", label: "Adelante", defaultCode: "KeyW" },
+          { id: "backward", label: "Atras", defaultCode: "KeyS" },
+          { id: "left", label: "Izquierda", defaultCode: "KeyA" },
+          { id: "right", label: "Derecha", defaultCode: "KeyD" },
+          { id: "jump", label: "Saltar", defaultCode: "Space" },
+          { id: "dash", label: "Dash", defaultCode: "ShiftLeft" },
+          { id: "reload", label: "Recargar", defaultCode: "KeyR" },
+          { id: "weapon1", label: "Arma 1", defaultCode: "Digit1" },
+          { id: "weapon2", label: "Arma 2", defaultCode: "Digit2" },
+          { id: "weapon3", label: "Arma 3", defaultCode: "Digit3" },
+          { id: "weapon4", label: "Arma 4", defaultCode: "Digit4" },
+          { id: "weapon5", label: "Arma 5", defaultCode: "Digit5" }
+        ]
+      },
+      player: {
+        standEyeHeight: 1.8,
+        playerRadius: 0.42,
+        playerHeadClearance: 0.35,
+        stepHeight: 0.6,
+        groundSnap: 0.18,
+        groundFriction: 18.0,
+        stopSpeed: 6.0,
+        groundAccel: 80.0,
+        airAccel: 10.0,
+        jumpVelocity: 9.0,
+        bhopBoost: 1.01,
+        maxGroundSpeed: 10.5,
+        sprintGroundSpeed: 16.0,
+        maxAirWishSpeed: 10.5,
+        hardMaxHorizontalSpeed: 22.0,
+        gravity: 27.0,
+        baseFov: 75.0,
+        sprintFovBoost: 6.0,
+        dashFovBoost: 5.0,
+        maxTilt: 0.024,
+        breathAmplitude: 0.03,
+        breathFrequency: 1.8,
+        bobSideAmplitude: 0.014,
+        bobUpAmplitude: 0.028,
+        dashDuration: 0.12,
+        dashCooldown: 0.4,
+        dashSpeed: 28.0,
+        wallJumpMaxCharges: Number.POSITIVE_INFINITY,
+        wallJumpVerticalVelocity: 9.8,
+        wallJumpPushSpeed: 9.8,
+        wallJumpTangentCarry: 0.92,
+        wallJumpContactGrace: 0.12,
+        dynamicTerrainActiveRadius: 18
+      },
+      weapons: [
+        {
+          id: "fists",
+          name: "PUNOS",
+          fireType: "melee",
+          damage: 52,
+          structureDamage: 20,
+          range: 2.2,
+          clipSize: 0,
+          reserveAmmo: 0,
+          reloadTime: 0,
+          fireInterval: 0.28,
+          adsFov: 75,
+          recoilBack: 0.02,
+          recoilCam: 0.01
+        },
+        {
+          id: "revolver",
+          name: "REVOLVER",
+          fireType: "hitscan",
+          damage: 34,
+          structureDamage: 34,
+          range: 170,
+          clipSize: 6,
+          reserveAmmo: 36,
+          reloadTime: 1.35,
+          fireInterval: 0.3,
+          spread: 0.0014,
+          pellets: 1,
+          adsFov: 65,
+          recoilBack: 0.07,
+          recoilCam: 0.02
+        },
+        {
+          id: "shotgun",
+          name: "ESCOPETA",
+          fireType: "hitscan",
+          damage: 16,
+          structureDamage: 12,
+          range: 58,
+          clipSize: 2,
+          reserveAmmo: 24,
+          reloadTime: 1.95,
+          fireInterval: 0.82,
+          spread: 0.048,
+          pellets: 9,
+          adsFov: 62,
+          recoilBack: 0.11,
+          recoilCam: 0.03
+        },
+        {
+          id: "sniper",
+          name: "SNIPER",
+          fireType: "hitscan",
+          damage: 125,
+          structureDamage: 120,
+          range: 260,
+          clipSize: 1,
+          reserveAmmo: 16,
+          reloadTime: 2.35,
+          fireInterval: 1.1,
+          spread: 0,
+          pellets: 1,
+          adsFov: 30,
+          recoilBack: 0.13,
+          recoilCam: 0.035
+        },
+        {
+          id: "bazooka",
+          name: "BAZOOKA",
+          fireType: "projectile",
+          damage: 120,
+          structureDamage: 260,
+          explosionRadius: 5.4,
+          clipSize: 1,
+          reserveAmmo: 8,
+          reloadTime: 2.6,
+          fireInterval: 1.25,
+          projectileSpeed: 36,
+          adsFov: 68,
+          recoilBack: 0.14,
+          recoilCam: 0.038
+        }
+      ]
+    };
+
     // Setup
     const app = document.getElementById("app");
     const crosshair = document.getElementById("crosshair");
@@ -289,13 +484,13 @@
     });
     renderer.setPixelRatio(1);
     renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.setClearColor(0x8f84b8, 1);
+    renderer.setClearColor(GameConfig.colors.clearColor, 1);
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.domElement.style.imageRendering = "pixelated";
     app.appendChild(renderer.domElement);
 
     const scene = new THREE.Scene();
-    const dreamFogColor = new THREE.Color(0xb7b0d8);
+    const dreamFogColor = new THREE.Color(GameConfig.colors.dreamFog);
     scene.background = dreamFogColor.clone();
     scene.fog = new THREE.Fog(dreamFogColor.getHex(), 24, 126);
 
@@ -312,43 +507,23 @@
     viewRoll.add(viewKick);
     viewKick.add(camera);
 
-    const hemiLight = new THREE.HemisphereLight(0xd8c8ff, 0x6a638f, 1.36);
+    const hemiLight = new THREE.HemisphereLight(GameConfig.colors.hemiSky, GameConfig.colors.hemiGround, 1.36);
     scene.add(hemiLight);
 
-    const dirLight = new THREE.DirectionalLight(0xfff2fd, 0.96);
+    const dirLight = new THREE.DirectionalLight(GameConfig.colors.directional, 0.96);
     dirLight.position.set(18, 26, 6);
     scene.add(dirLight);
 
-    const ambientFill = new THREE.AmbientLight(0xc7d4ff, 0.28);
+    const ambientFill = new THREE.AmbientLight(GameConfig.colors.ambientFill, 0.28);
     scene.add(ambientFill);
 
-    const mapHalfSize = 52;
+    const mapHalfSize = GameConfig.map.halfSize;
     const mapFloorSize = mapHalfSize * 2;
-    const mapWallThickness = 2.2;
-    const mapWallHeight = 24.0;
-    const perfConfig = {
-      fireflyCount: 168,
-      fireflyPointLights: 72,
-      ambientParticleCount: 260,
-      maxProjectiles: 14,
-      maxImpactMarks: 80,
-      maxDebrisChunks: 120,
-      maxDetachedChunks: 22,
-      maxDetachedRenderVoxels: 140
-    };
-    const physicsFlags = {
-      useRapierWorld: true,
-      useRapierPlayerKCC: false,
-      useRapierProjectiles: false,
-      useRapierDebris: false,
-      useRapierDestruction: false
-    };
-    const physicsConfig = {
-      fixedStep: 1 / 60,
-      maxSubsteps: 3,
-      gravityY: -17.5,
-      playerOffset: 0.02
-    };
+    const mapWallThickness = GameConfig.map.wallThickness;
+    const mapWallHeight = GameConfig.map.wallHeight;
+    const perfConfig = GameConfig.perf;
+    const physicsFlags = GameConfig.physicsFlags;
+    const physicsConfig = GameConfig.physics;
     let rapierReady = false;
     try {
       await RAPIER.init();
@@ -453,64 +628,102 @@
       tex.generateMipmaps = true;
       return tex;
     })();
-    const fireflyGlowMat = new THREE.SpriteMaterial({
+    const fireflyBillboardGeometry = new THREE.PlaneGeometry(1, 1);
+    const fireflyGlowMat = new THREE.MeshBasicMaterial({
       map: fireflyGlowTexture,
-      color: 0xfbffca,
+      color: GameConfig.colors.fireflyCore,
       transparent: true,
       opacity: 0.5,
       blending: THREE.AdditiveBlending,
-      depthWrite: false
+      depthWrite: false,
+      side: THREE.DoubleSide,
+      vertexColors: true
     });
-    const fireflyHaloMat = new THREE.SpriteMaterial({
+    const fireflyHaloMat = new THREE.MeshBasicMaterial({
       map: fireflyGlowTexture,
-      color: 0xe7ffb8,
+      color: GameConfig.colors.fireflyHalo,
       transparent: true,
       opacity: 0.11,
       blending: THREE.AdditiveBlending,
-      depthWrite: false
+      depthWrite: false,
+      side: THREE.DoubleSide,
+      vertexColors: true
     });
-    const fireflyAuraMat = new THREE.SpriteMaterial({
+    const fireflyAuraMat = new THREE.MeshBasicMaterial({
       map: fireflyGlowTexture,
-      color: 0xdaf1ab,
+      color: GameConfig.colors.fireflyAura,
       transparent: true,
       opacity: 0.045,
       blending: THREE.AdditiveBlending,
-      depthWrite: false
+      depthWrite: false,
+      side: THREE.DoubleSide,
+      vertexColors: true
     });
+    const fireflyCoreInstanced = new THREE.InstancedMesh(fireflyBillboardGeometry, fireflyGlowMat, fireflyCount);
+    const fireflyHaloInstanced = new THREE.InstancedMesh(fireflyBillboardGeometry, fireflyHaloMat, fireflyCount);
+    const fireflyAuraInstanced = new THREE.InstancedMesh(fireflyBillboardGeometry, fireflyAuraMat, fireflyCount);
+    fireflyCoreInstanced.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    fireflyHaloInstanced.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    fireflyAuraInstanced.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    fireflyCoreInstanced.frustumCulled = false;
+    fireflyHaloInstanced.frustumCulled = false;
+    fireflyAuraInstanced.frustumCulled = false;
+    fireflyGroup.add(fireflyCoreInstanced);
+    fireflyGroup.add(fireflyHaloInstanced);
+    fireflyGroup.add(fireflyAuraInstanced);
+
+    const fireflyCoreBaseColor = new THREE.Color(GameConfig.colors.fireflyCore);
+    const fireflyHaloBaseColor = new THREE.Color(GameConfig.colors.fireflyHalo);
+    const fireflyAuraBaseColor = new THREE.Color(GameConfig.colors.fireflyAura);
+    const fireflyInstanceMatrix = new THREE.Matrix4();
+    const fireflyInstanceQuat = new THREE.Quaternion();
+    const fireflyInstanceScale = new THREE.Vector3();
+    const fireflyInstanceColor = new THREE.Color();
+    const fireflySpawnPos = new THREE.Vector3();
+    const tempFireflyStart = new THREE.Vector3();
+    const tempFireflyTarget = new THREE.Vector3();
+    const tempFireflyPerch = new THREE.Vector3();
+    const fireflyLightCullRadiusSq = GameConfig.lighting.fireflyLightCullRadius * GameConfig.lighting.fireflyLightCullRadius;
 
     for (let i = 0; i < fireflyCount; i++) {
-      const sprite = new THREE.Sprite(fireflyGlowMat.clone());
-      const halo = new THREE.Sprite(fireflyHaloMat.clone());
-      const aura = new THREE.Sprite(fireflyAuraMat.clone());
       const point = fireflyPlacement[i];
       const x = point.x;
       const z = point.z;
       const y = point.y;
-      sprite.position.set(x, y, z);
-      halo.position.copy(sprite.position);
-      aura.position.copy(sprite.position);
+      fireflySpawnPos.set(x, y, z);
       const s = 0.17 + Math.random() * 0.1;
-      sprite.scale.set(s, s, s);
-      halo.scale.set(s * 6.4, s * 6.4, s * 6.4);
-      aura.scale.set(s * 12.5, s * 12.5, s * 12.5);
-      fireflyGroup.add(sprite);
-      fireflyGroup.add(halo);
-      fireflyGroup.add(aura);
+      fireflyInstanceScale.set(s, s, s);
+      fireflyInstanceQuat.identity();
+      fireflyInstanceMatrix.compose(fireflySpawnPos, fireflyInstanceQuat, fireflyInstanceScale);
+      fireflyCoreInstanced.setMatrixAt(i, fireflyInstanceMatrix);
+      fireflyInstanceScale.set(s * 6.4, s * 6.4, s * 6.4);
+      fireflyInstanceMatrix.compose(fireflySpawnPos, fireflyInstanceQuat, fireflyInstanceScale);
+      fireflyHaloInstanced.setMatrixAt(i, fireflyInstanceMatrix);
+      fireflyInstanceScale.set(s * 12.5, s * 12.5, s * 12.5);
+      fireflyInstanceMatrix.compose(fireflySpawnPos, fireflyInstanceQuat, fireflyInstanceScale);
+      fireflyAuraInstanced.setMatrixAt(i, fireflyInstanceMatrix);
+      fireflyCoreInstanced.setColorAt(i, fireflyCoreBaseColor);
+      fireflyHaloInstanced.setColorAt(i, fireflyHaloBaseColor);
+      fireflyAuraInstanced.setColorAt(i, fireflyAuraBaseColor);
 
       let light = null;
       let lightBaseDistance = 0;
       if (i < perfConfig.fireflyPointLights) {
         lightBaseDistance = 24 + Math.random() * 12;
-        light = new THREE.PointLight(0xf0ffc4, 2.2 + Math.random() * 0.9, lightBaseDistance, 1.05);
-        light.position.copy(sprite.position);
+        light = new THREE.PointLight(GameConfig.colors.fireflyLight, 2.2 + Math.random() * 0.9, lightBaseDistance, 1.05);
+        light.position.set(x, y, z);
         scene.add(light);
       }
 
       fireflies.push({
-        sprite,
-        halo,
-        aura,
+        index: i,
         light,
+        currentPos: new THREE.Vector3(x, y, z),
+        perchPos: new THREE.Vector3(x, y, z),
+        isPerched: false,
+        perchTimer: 0,
+        perchCooldown: Math.random() * 2.2,
+        perchWobblePhase: Math.random() * Math.PI * 2,
         baseScale: s,
         lightBaseDistance,
         baseX: x,
@@ -529,9 +742,20 @@
         flickerPhaseB: Math.random() * Math.PI * 2,
         flickerSpeedB: 0.18 + Math.random() * 0.54,
         flickerAmount: 0.72 + Math.random() * 0.44,
-        pulseBias: Math.random() * Math.PI * 2
+        pulseBias: Math.random() * Math.PI * 2,
+        perchChance: 0.22 + Math.random() * 0.28,
+        perchDurationMin: 0.9,
+        perchDurationMax: 3.1,
+        perchCooldownMin: 0.45,
+        perchCooldownMax: 2.6
       });
     }
+    fireflyCoreInstanced.instanceMatrix.needsUpdate = true;
+    fireflyHaloInstanced.instanceMatrix.needsUpdate = true;
+    fireflyAuraInstanced.instanceMatrix.needsUpdate = true;
+    if (fireflyCoreInstanced.instanceColor) fireflyCoreInstanced.instanceColor.needsUpdate = true;
+    if (fireflyHaloInstanced.instanceColor) fireflyHaloInstanced.instanceColor.needsUpdate = true;
+    if (fireflyAuraInstanced.instanceColor) fireflyAuraInstanced.instanceColor.needsUpdate = true;
 
     const ambientParticleCount = perfConfig.ambientParticleCount;
     const ambientParticleArea = mapHalfSize - 1.4;
@@ -544,13 +768,29 @@
       ambientParticleMaxY,
       0.96
     );
-    const ambientParticleGeometry = new THREE.BufferGeometry();
     const ambientParticlePositions = new Float32Array(ambientParticleCount * 3);
     const ambientParticleVelocities = new Float32Array(ambientParticleCount * 3);
     const ambientParticlePhases = new Float32Array(ambientParticleCount);
     const ambientParticleSpeeds = new Float32Array(ambientParticleCount);
     const ambientParticleDrifts = new Float32Array(ambientParticleCount);
     const ambientParticleBobs = new Float32Array(ambientParticleCount);
+    const ambientParticleScales = new Float32Array(ambientParticleCount);
+    const ambientParticleGeometry = new THREE.PlaneGeometry(1, 1);
+    const ambientParticleMat = new THREE.MeshBasicMaterial({
+      color: GameConfig.colors.ambientParticle,
+      transparent: true,
+      opacity: 0.44,
+      blending: THREE.NormalBlending,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+      vertexColors: true
+    });
+    const ambientParticles = new THREE.InstancedMesh(ambientParticleGeometry, ambientParticleMat, ambientParticleCount);
+    ambientParticles.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    ambientParticles.frustumCulled = false;
+    const ambientBaseColor = new THREE.Color(GameConfig.colors.ambientParticle);
+    const ambientInstancePos = new THREE.Vector3();
+    scene.add(ambientParticles);
 
     for (let i = 0; i < ambientParticleCount; i++) {
       const idx = i * 3;
@@ -565,23 +805,19 @@
       ambientParticleSpeeds[i] = 0.48 + Math.random() * 0.92;
       ambientParticleDrifts[i] = 0.012 + Math.random() * 0.03;
       ambientParticleBobs[i] = 0.006 + Math.random() * 0.016;
+      ambientParticleScales[i] = 0.03 + Math.random() * 0.016;
+      fireflyInstanceScale.set(ambientParticleScales[i], ambientParticleScales[i], ambientParticleScales[i]);
+      fireflyInstanceQuat.identity();
+      ambientInstancePos.set(point.x, point.y, point.z);
+      fireflyInstanceMatrix.compose(ambientInstancePos, fireflyInstanceQuat, fireflyInstanceScale);
+      ambientParticles.setMatrixAt(i, fireflyInstanceMatrix);
+      ambientParticles.setColorAt(i, ambientBaseColor);
     }
+    ambientParticles.instanceMatrix.needsUpdate = true;
+    if (ambientParticles.instanceColor) ambientParticles.instanceColor.needsUpdate = true;
 
-    ambientParticleGeometry.setAttribute("position", new THREE.BufferAttribute(ambientParticlePositions, 3));
-    const ambientParticleMat = new THREE.PointsMaterial({
-      color: 0xd6d0c6,
-      size: 0.038,
-      transparent: true,
-      opacity: 0.44,
-      blending: THREE.NormalBlending,
-      depthWrite: false,
-      sizeAttenuation: true
-    });
-    const ambientParticles = new THREE.Points(ambientParticleGeometry, ambientParticleMat);
-    scene.add(ambientParticles);
-
-    const pixelWidth = 320;
-    const pixelHeight = 240;
+    const pixelWidth = GameConfig.renderer.pixelWidth;
+    const pixelHeight = GameConfig.renderer.pixelHeight;
 
     const renderTarget = new THREE.WebGLRenderTarget(pixelWidth, pixelHeight, {
       magFilter: THREE.NearestFilter,
@@ -709,6 +945,63 @@
 
     const boxes = new THREE.Group();
     const boxColliders = [];
+    const colliderSpatialCellSize = 6;
+    const colliderSpatialGrid = new Map();
+    const colliderSpatialKeys = new Map();
+    let colliderSpatialDirty = true;
+    const nearbyColliders = [];
+    const nearbyCollidersSeen = new Set();
+    const toSpatialKey = (cx, cz) => `${cx},${cz}`;
+    const markColliderSpatialDirty = () => {
+      colliderSpatialDirty = true;
+    };
+    const rebuildColliderSpatial = () => {
+      colliderSpatialGrid.clear();
+      colliderSpatialKeys.clear();
+      for (const box of boxColliders) {
+        const minCellX = Math.floor(box.min.x / colliderSpatialCellSize);
+        const maxCellX = Math.floor(box.max.x / colliderSpatialCellSize);
+        const minCellZ = Math.floor(box.min.z / colliderSpatialCellSize);
+        const maxCellZ = Math.floor(box.max.z / colliderSpatialCellSize);
+        const keys = [];
+        for (let cx = minCellX; cx <= maxCellX; cx++) {
+          for (let cz = minCellZ; cz <= maxCellZ; cz++) {
+            const key = toSpatialKey(cx, cz);
+            keys.push(key);
+            let list = colliderSpatialGrid.get(key);
+            if (!list) {
+              list = [];
+              colliderSpatialGrid.set(key, list);
+            }
+            list.push(box);
+          }
+        }
+        colliderSpatialKeys.set(box, keys);
+      }
+      colliderSpatialDirty = false;
+    };
+    const getNearbyColliders = (x, z, radius) => {
+      if (colliderSpatialDirty) rebuildColliderSpatial();
+      nearbyColliders.length = 0;
+      nearbyCollidersSeen.clear();
+      const minCellX = Math.floor((x - radius) / colliderSpatialCellSize);
+      const maxCellX = Math.floor((x + radius) / colliderSpatialCellSize);
+      const minCellZ = Math.floor((z - radius) / colliderSpatialCellSize);
+      const maxCellZ = Math.floor((z + radius) / colliderSpatialCellSize);
+      for (let cx = minCellX; cx <= maxCellX; cx++) {
+        for (let cz = minCellZ; cz <= maxCellZ; cz++) {
+          const key = toSpatialKey(cx, cz);
+          const list = colliderSpatialGrid.get(key);
+          if (!list) continue;
+          for (const box of list) {
+            if (nearbyCollidersSeen.has(box)) continue;
+            nearbyCollidersSeen.add(box);
+            nearbyColliders.push(box);
+          }
+        }
+      }
+      return nearbyColliders;
+    };
     const boundaryWalls = new THREE.Group();
     const wallMat = new THREE.MeshLambertMaterial({ color: 0x3a455c });
     const wallOffset = mapHalfSize + mapWallThickness * 0.5;
@@ -718,6 +1011,7 @@
       boundaryWalls.add(wall);
       wall.updateMatrixWorld(true);
       boxColliders.push(new THREE.Box3().setFromObject(wall));
+      markColliderSpatialDirty();
     };
     addBoundaryWall(mapFloorSize + mapWallThickness * 2, mapWallHeight, mapWallThickness, 0, mapWallHeight * 0.5, -wallOffset);
     addBoundaryWall(mapFloorSize + mapWallThickness * 2, mapWallHeight, mapWallThickness, 0, mapWallHeight * 0.5, wallOffset);
@@ -1384,6 +1678,7 @@
         py + blockState.localBoundsMax.y,
         pz + blockState.localBoundsMax.z
       );
+      markColliderSpatialDirty();
     };
 
     const updateBlockBoundsFromVoxels = (blockState) => {
@@ -1498,6 +1793,7 @@
       updateBlockBoundsFromVoxels(blockState);
       syncBlockCollider(blockState);
       boxColliders.push(collider);
+      markColliderSpatialDirty();
 
       mesh.userData.blockState = blockState;
       voxelGrid.voxelMesh.userData.blockState = blockState;
@@ -1807,90 +2103,7 @@
       return root;
     };
 
-    const weapons = [
-      {
-        id: "fists",
-        name: "PUNOS",
-        fireType: "melee",
-        damage: 52,
-        structureDamage: 20,
-        range: 2.2,
-        clipSize: 0,
-        reserveAmmo: 0,
-        reloadTime: 0,
-        fireInterval: 0.28,
-        adsFov: 75,
-        recoilBack: 0.02,
-        recoilCam: 0.01
-      },
-      {
-        id: "revolver",
-        name: "REVOLVER",
-        fireType: "hitscan",
-        damage: 34,
-        structureDamage: 34,
-        range: 170,
-        clipSize: 6,
-        reserveAmmo: 36,
-        reloadTime: 1.35,
-        fireInterval: 0.3,
-        spread: 0.0014,
-        pellets: 1,
-        adsFov: 65,
-        recoilBack: 0.07,
-        recoilCam: 0.02
-      },
-      {
-        id: "shotgun",
-        name: "ESCOPETA",
-        fireType: "hitscan",
-        damage: 16,
-        structureDamage: 12,
-        range: 58,
-        clipSize: 2,
-        reserveAmmo: 24,
-        reloadTime: 1.95,
-        fireInterval: 0.82,
-        spread: 0.048,
-        pellets: 9,
-        adsFov: 62,
-        recoilBack: 0.11,
-        recoilCam: 0.03
-      },
-      {
-        id: "sniper",
-        name: "SNIPER",
-        fireType: "hitscan",
-        damage: 125,
-        structureDamage: 120,
-        range: 260,
-        clipSize: 1,
-        reserveAmmo: 16,
-        reloadTime: 2.35,
-        fireInterval: 1.1,
-        spread: 0,
-        pellets: 1,
-        adsFov: 30,
-        recoilBack: 0.13,
-        recoilCam: 0.035
-      },
-      {
-        id: "bazooka",
-        name: "BAZOOKA",
-        fireType: "projectile",
-        damage: 120,
-        structureDamage: 260,
-        explosionRadius: 5.4,
-        clipSize: 1,
-        reserveAmmo: 8,
-        reloadTime: 2.6,
-        fireInterval: 1.25,
-        projectileSpeed: 36,
-        adsFov: 68,
-        recoilBack: 0.14,
-        recoilCam: 0.038
-      }
-    ].map((weaponDef) => ({
+    const weapons = GameConfig.weapons.map((weaponDef) => ({
       ...weaponDef,
       currentAmmo: weaponDef.clipSize > 0 ? weaponDef.clipSize : 0
     }));
@@ -1908,10 +2121,8 @@
     let switchPhase = "idle";
     let switchTimer = 0;
     let switchOffsetY = 0;
-    const switchDownDuration = 0.08;
-    const switchUpDuration = 0.1;
-    let triggerHeld = false;
-    let aimHeld = false;
+    const switchDownDuration = GameConfig.input.switchDownDuration;
+    const switchUpDuration = GameConfig.input.switchUpDuration;
     let adsWeight = 0;
     let isReloading = false;
     let reloadTimer = 0;
@@ -1924,15 +2135,62 @@
     let fistPunchTimer = 0;
     let fistPunchSide = 0;
     let fistPendingHit = false;
-    const fistPunchDuration = 0.22;
+    const fistPunchDuration = GameConfig.input.fistPunchDuration;
     const projectiles = [];
     const impactMarks = [];
     const hitFlashStates = [];
     const debrisChunks = [];
+    const projectilePool = [];
+    const impactMarkPool = [];
+    const debrisChunkPool = [];
     const raycaster = new THREE.Raycaster();
     const bulletTargets = [boxes, boundaryWalls, ground];
     const impactUp = new THREE.Vector3(0, 0, 1);
     const worldUp = new THREE.Vector3(0, 1, 0);
+
+    const disposeObject = (obj) => {
+      if (!obj) return;
+
+      const disposedMaterials = new Set();
+      const disposedGeometries = new Set();
+      const disposedTextures = new Set();
+
+      const disposeTexture = (value) => {
+        if (!value || typeof value !== "object" || !value.isTexture) return;
+        if (disposedTextures.has(value)) return;
+        disposedTextures.add(value);
+        value.dispose();
+      };
+
+      const disposeMaterial = (material) => {
+        if (!material || disposedMaterials.has(material)) return;
+        disposedMaterials.add(material);
+
+        for (const value of Object.values(material)) {
+          if (Array.isArray(value)) {
+            for (const nested of value) disposeTexture(nested);
+          } else {
+            disposeTexture(value);
+          }
+        }
+        material.dispose();
+      };
+
+      obj.traverse((child) => {
+        if (child.geometry && !disposedGeometries.has(child.geometry)) {
+          disposedGeometries.add(child.geometry);
+          child.geometry.dispose();
+        }
+
+        if (Array.isArray(child.material)) {
+          for (const material of child.material) disposeMaterial(material);
+        } else if (child.material) {
+          disposeMaterial(child.material);
+        }
+      });
+
+      if (obj.parent) obj.parent.remove(obj);
+    };
 
     const disposeProjectile = (projectile) => {
       if (!projectile) return;
@@ -1940,16 +2198,23 @@
         physicsBridge.unregisterHandle(projectile.rapierHandle);
         projectile.rapierHandle = null;
       }
-      scene.remove(projectile.mesh);
-      projectile.mesh.geometry.dispose();
-      projectile.mesh.material.dispose();
+      if (projectile.inPool) return;
+      projectile.active = false;
+      projectile.life = 0;
+      projectile.mesh.visible = false;
+      projectile.inPool = true;
+      projectilePool.push(projectile);
     };
 
     const disposeImpactMark = (mark) => {
       if (!mark) return;
-      scene.remove(mark.mesh);
-      mark.mesh.geometry.dispose();
-      mark.mesh.material.dispose();
+      if (mark.inPool) return;
+      mark.active = false;
+      mark.life = 0;
+      mark.mesh.visible = false;
+      mark.mesh.material.opacity = 0;
+      mark.inPool = true;
+      impactMarkPool.push(mark);
     };
 
     const disposeDebrisChunk = (chunk) => {
@@ -1958,9 +2223,13 @@
         physicsBridge.unregisterHandle(chunk.rapierHandle);
         chunk.rapierHandle = null;
       }
-      scene.remove(chunk.mesh);
-      chunk.mesh.geometry.dispose();
-      chunk.mesh.material.dispose();
+      if (chunk.inPool) return;
+      chunk.active = false;
+      chunk.life = 0;
+      chunk.mesh.visible = false;
+      chunk.mesh.material.opacity = 0;
+      chunk.inPool = true;
+      debrisChunkPool.push(chunk);
     };
 
     const disposeDetachedVoxelChunk = (chunk) => {
@@ -1969,13 +2238,60 @@
         physicsBridge.unregisterHandle(chunk.rapierHandle);
         chunk.rapierHandle = null;
       }
-      scene.remove(chunk.root);
-      chunk.mesh.material.dispose();
+      disposeObject(chunk.root);
     };
 
     const velocity = new THREE.Vector3();
 
     // Input
+    class InputManager {
+      constructor(bindings) {
+        this.bindings = bindings;
+        this.actionState = new Map();
+        this.mouseState = new Map([
+          ["shoot", false],
+          ["aim", false]
+        ]);
+      }
+
+      getActionForCode(code) {
+        for (const [action, boundCode] of Object.entries(this.bindings)) {
+          if (boundCode === code) return action;
+        }
+        return null;
+      }
+
+      setActionState(action, pressed) {
+        if (!action) return;
+        this.actionState.set(action, !!pressed);
+      }
+
+      handleKey(code, pressed) {
+        const action = this.getActionForCode(code);
+        if (action) this.setActionState(action, pressed);
+        return action;
+      }
+
+      setMouseButtonState(button, pressed) {
+        if (button === 0) {
+          this.mouseState.set("shoot", !!pressed);
+        } else if (button === 2) {
+          this.mouseState.set("aim", !!pressed);
+        }
+      }
+
+      isPressed(action) {
+        if (this.mouseState.has(action)) return this.mouseState.get(action) === true;
+        return this.actionState.get(action) === true;
+      }
+
+      reset() {
+        this.actionState.clear();
+        this.mouseState.set("shoot", false);
+        this.mouseState.set("aim", false);
+      }
+    }
+
     const keyState = {
       forward: false,
       backward: false,
@@ -1984,21 +2300,9 @@
       jump: false,
       dash: false
     };
-    const bindableActions = [
-      { id: "forward", label: "Adelante", defaultCode: "KeyW" },
-      { id: "backward", label: "Atras", defaultCode: "KeyS" },
-      { id: "left", label: "Izquierda", defaultCode: "KeyA" },
-      { id: "right", label: "Derecha", defaultCode: "KeyD" },
-      { id: "jump", label: "Saltar", defaultCode: "Space" },
-      { id: "dash", label: "Dash", defaultCode: "ShiftLeft" },
-      { id: "reload", label: "Recargar", defaultCode: "KeyR" },
-      { id: "weapon1", label: "Arma 1", defaultCode: "Digit1" },
-      { id: "weapon2", label: "Arma 2", defaultCode: "Digit2" },
-      { id: "weapon3", label: "Arma 3", defaultCode: "Digit3" },
-      { id: "weapon4", label: "Arma 4", defaultCode: "Digit4" },
-      { id: "weapon5", label: "Arma 5", defaultCode: "Digit5" }
-    ];
+    const bindableActions = GameConfig.input.defaultBinds;
     const actionBindings = Object.fromEntries(bindableActions.map((entry) => [entry.id, entry.defaultCode]));
+    const inputManager = new InputManager(actionBindings);
     const bindButtons = new Map();
     const weaponBindToIndex = {
       weapon1: 0,
@@ -2024,11 +2328,11 @@
     let autoJumpEnabled = true;
     let autoJumpCooldown = 0;
     let jumpBufferTime = 0;
-    const jumpBufferMax = 0.12;
+    const jumpBufferMax = GameConfig.input.jumpBufferMax;
     let lockRequestPending = false;
     let sprintFromDoubleTap = false;
     let lastForwardTapTime = -Infinity;
-    const doubleTapWindowMs = 250;
+    const doubleTapWindowMs = GameConfig.input.doubleTapWindowMs;
     let dashQueued = false;
     let dashTimer = 0;
     let dashCooldownTimer = 0;
@@ -2201,7 +2505,7 @@
       pendingWeaponIndex = nextIndex;
       switchPhase = "down";
       switchTimer = 0;
-      aimHeld = false;
+      inputManager.setMouseButtonState(2, false);
       isReloading = false;
       reloadTimer = 0;
       updateAmmoHud();
@@ -2238,20 +2542,114 @@
     const impactMarkGeometry = new THREE.BoxGeometry(1, 1, 0.18);
     const debrisPieceGeometry = new THREE.BoxGeometry(1, 1, 1);
     const bazookaProjectileGeometry = new THREE.IcosahedronGeometry(0.11, 0);
+    const pooledImpactMaterial = () => new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0 });
+    const pooledDebrisMaterial = () => new THREE.MeshLambertMaterial({ color: 0xffffff, transparent: true, opacity: 0 });
+    const pooledProjectileMaterial = () => new THREE.MeshLambertMaterial({ color: 0xb8d15e });
+
+    const acquirePooledImpactMark = () => {
+      let mark = impactMarkPool.pop();
+      if (!mark) {
+        mark = impactMarks.shift() || null;
+      }
+      if (!mark) return null;
+      mark.inPool = false;
+      mark.active = true;
+      return mark;
+    };
+
+    const acquirePooledProjectile = () => {
+      let projectile = projectilePool.pop();
+      if (!projectile) {
+        projectile = projectiles.shift() || null;
+      }
+      if (!projectile) return null;
+      if (projectile.rapierHandle != null) {
+        physicsBridge.unregisterHandle(projectile.rapierHandle);
+        projectile.rapierHandle = null;
+      }
+      projectile.inPool = false;
+      projectile.active = true;
+      return projectile;
+    };
+
+    const acquirePooledDebrisChunk = () => {
+      let chunk = debrisChunkPool.pop();
+      if (!chunk) {
+        chunk = debrisChunks.shift() || null;
+      }
+      if (!chunk) return null;
+      if (chunk.rapierHandle != null) {
+        physicsBridge.unregisterHandle(chunk.rapierHandle);
+        chunk.rapierHandle = null;
+      }
+      chunk.inPool = false;
+      chunk.active = true;
+      return chunk;
+    };
+
+    for (let i = 0; i < perfConfig.maxImpactMarks; i++) {
+      const mesh = new THREE.Mesh(impactMarkGeometry, pooledImpactMaterial());
+      mesh.visible = false;
+      scene.add(mesh);
+      impactMarkPool.push({
+        mesh,
+        life: 0,
+        maxLife: 0,
+        active: false,
+        inPool: true
+      });
+    }
+
+    for (let i = 0; i < perfConfig.maxProjectiles; i++) {
+      const mesh = new THREE.Mesh(bazookaProjectileGeometry, pooledProjectileMaterial());
+      mesh.visible = false;
+      scene.add(mesh);
+      projectilePool.push({
+        mesh,
+        velocity: new THREE.Vector3(),
+        radius: 0.12,
+        life: 0,
+        explosionRadius: 0,
+        structureDamage: 0,
+        damage: 0,
+        active: false,
+        inPool: true,
+        rapierHandle: null,
+        prevPhysicsPos: new THREE.Vector3()
+      });
+    }
+
+    for (let i = 0; i < perfConfig.maxDebrisChunks; i++) {
+      const mesh = new THREE.Mesh(debrisPieceGeometry, pooledDebrisMaterial());
+      mesh.visible = false;
+      scene.add(mesh);
+      debrisChunkPool.push({
+        mesh,
+        velocity: new THREE.Vector3(),
+        spin: new THREE.Vector3(),
+        life: 0,
+        maxLife: 0,
+        bounce: 0.2,
+        drag: 1.0,
+        active: false,
+        inPool: true,
+        rapierHandle: null
+      });
+    }
 
     const createImpactMark = (point, normal, size = 0.08, life = 0.32, color = 0xf2c988) => {
-      const decal = new THREE.Mesh(
-        impactMarkGeometry,
-        new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.95 })
-      );
+      const mark = acquirePooledImpactMark();
+      if (!mark) return;
+      const decal = mark.mesh;
+      decal.visible = true;
       decal.position.copy(point).addScaledVector(normal, 0.02);
       decal.scale.set(size, size, size);
       decal.quaternion.setFromUnitVectors(impactUp, normal.clone().normalize());
-      scene.add(decal);
-      if (impactMarks.length >= perfConfig.maxImpactMarks) {
-        disposeImpactMark(impactMarks.shift());
-      }
-      impactMarks.push({ mesh: decal, life, maxLife: life });
+      decal.material.color.setHex(color);
+      decal.material.opacity = 0.95;
+      mark.life = life;
+      mark.maxLife = life;
+      impactMarks.push(mark);
     };
 
     const flashShootableMesh = (mesh) => {
@@ -2280,6 +2678,7 @@
       if (colliderIndex >= 0) boxColliders.splice(colliderIndex, 1);
       dynamicColliderSet.delete(collider);
       colliderToBlockState.delete(collider);
+      markColliderSpatialDirty();
     };
 
     const spawnBlockDebris = (blockState, hitPoint, hitNormal, impactDir, energy = 1, removedCount = 0) => {
@@ -2294,22 +2693,19 @@
       const avgVoxelSize = (blockState.voxelSizeX + blockState.voxelSizeY + blockState.voxelSizeZ) / 3;
 
       for (let i = 0; i < pieceCount; i++) {
+        const debrisChunkState = acquirePooledDebrisChunk();
+        if (!debrisChunkState) continue;
+        const piece = debrisChunkState.mesh;
         const size = avgVoxelSize * (0.25 + Math.random() * 0.38);
-        const piece = new THREE.Mesh(
-          debrisPieceGeometry,
-          new THREE.MeshLambertMaterial({
-            color: baseColor.clone().offsetHSL((Math.random() - 0.5) * 0.05, 0, (Math.random() - 0.5) * 0.1),
-            transparent: true,
-            opacity: 0.96
-          })
-        );
+        piece.material.color.copy(baseColor).offsetHSL((Math.random() - 0.5) * 0.05, 0, (Math.random() - 0.5) * 0.1);
+        piece.material.opacity = 0.96;
+        piece.visible = true;
         piece.scale.set(size, size, size);
 
         piece.position.copy(hitPoint)
           .addScaledVector(normal, 0.05 + Math.random() * 0.12)
           .add(new THREE.Vector3((Math.random() - 0.5) * 0.42, Math.random() * 0.28, (Math.random() - 0.5) * 0.42));
         piece.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
-        scene.add(piece);
 
         const velocity = new THREE.Vector3()
           .copy(normal)
@@ -2317,21 +2713,15 @@
           .addScaledVector(push, (1.5 + Math.random() * 2.6) * energy)
           .add(new THREE.Vector3((Math.random() - 0.5) * 2.2, 2.2 + Math.random() * 2.8, (Math.random() - 0.5) * 2.2));
 
-        const debrisChunkState = {
-          mesh: piece,
-          velocity,
-          spin: new THREE.Vector3((Math.random() - 0.5) * 9, (Math.random() - 0.5) * 9, (Math.random() - 0.5) * 9),
-          life: 0.52 + Math.random() * 0.48,
-          maxLife: 0.98,
-          bounce: 0.22 + Math.random() * 0.16,
-          drag: 2.1 + Math.random() * 1.4
-        };
+        debrisChunkState.velocity.copy(velocity);
+        debrisChunkState.spin.set((Math.random() - 0.5) * 9, (Math.random() - 0.5) * 9, (Math.random() - 0.5) * 9);
+        debrisChunkState.life = 0.52 + Math.random() * 0.48;
+        debrisChunkState.maxLife = 0.98;
+        debrisChunkState.bounce = 0.22 + Math.random() * 0.16;
+        debrisChunkState.drag = 2.1 + Math.random() * 1.4;
         debrisChunks.push(debrisChunkState);
         if (physicsFlags.useRapierDebris && physicsBridge.enabled) {
           physicsBridge.registerDebris(debrisChunkState);
-        }
-        if (debrisChunks.length > perfConfig.maxDebrisChunks) {
-          disposeDebrisChunk(debrisChunks.shift());
         }
       }
     };
@@ -2854,29 +3244,23 @@
     };
 
     const spawnBazookaProjectile = (weaponDef) => {
-      const projectileMesh = new THREE.Mesh(
-        bazookaProjectileGeometry,
-        new THREE.MeshLambertMaterial({ color: 0xb8d15e })
-      );
+      const projectileState = acquirePooledProjectile();
+      if (!projectileState) return;
+      const projectileMesh = projectileState.mesh;
 
       camera.getWorldPosition(tempOrigin);
       camera.getWorldDirection(tempDir).normalize();
       tempOrigin.addScaledVector(tempDir, 0.45);
 
       projectileMesh.position.copy(tempOrigin);
-      scene.add(projectileMesh);
-      if (projectiles.length >= perfConfig.maxProjectiles) {
-        disposeProjectile(projectiles.shift());
-      }
-      const projectileState = {
-        mesh: projectileMesh,
-        velocity: tempDir.clone().multiplyScalar(weaponDef.projectileSpeed || 34),
-        radius: 0.12,
-        life: 4.2,
-        explosionRadius: weaponDef.explosionRadius || 4.8,
-        structureDamage: weaponDef.structureDamage || 210,
-        damage: weaponDef.damage || 120
-      };
+      projectileMesh.visible = true;
+      projectileState.velocity.copy(tempDir).multiplyScalar(weaponDef.projectileSpeed || 34);
+      projectileState.radius = 0.12;
+      projectileState.life = 4.2;
+      projectileState.explosionRadius = weaponDef.explosionRadius || 4.8;
+      projectileState.structureDamage = weaponDef.structureDamage || 210;
+      projectileState.damage = weaponDef.damage || 120;
+      projectileState.prevPhysicsPos.copy(projectileMesh.position);
       projectiles.push(projectileState);
       if (physicsFlags.useRapierProjectiles && physicsBridge.enabled) {
         physicsBridge.registerProjectile(projectileState);
@@ -3015,7 +3399,8 @@
           };
         }
 
-        for (const box of boxColliders) {
+        const candidateBoxes = getNearbyColliders(tempTracePos.x, tempTracePos.z, radius + 0.45);
+        for (const box of candidateBoxes) {
           tempClosest.set(
             THREE.MathUtils.clamp(tempTracePos.x, box.min.x, box.max.x),
             THREE.MathUtils.clamp(tempTracePos.y, box.min.y, box.max.y),
@@ -3201,8 +3586,7 @@
       sprintFromDoubleTap = false;
       lastForwardTapTime = -Infinity;
       dashQueued = false;
-      triggerHeld = false;
-      aimHeld = false;
+      inputManager.reset();
       isReloading = false;
       reloadTimer = 0;
       reloadWeight = 0;
@@ -3259,6 +3643,7 @@
         if (down && !keyState.dash) dashQueued = true;
         keyState.dash = down;
       }
+      inputManager.handleKey(code, down);
     };
 
     setActiveWeapon(0);
@@ -3343,30 +3728,24 @@
     document.addEventListener("mousedown", (e) => {
       if (!controls.isLocked || isPaused) return;
       const activeWeapon = getActiveWeapon();
+      inputManager.setMouseButtonState(e.button, true);
       if (e.button === 0) {
         if (activeWeapon.fireType === "melee") {
           attemptMeleePunch(-1);
         } else {
-          triggerHeld = true;
           attemptFire();
         }
         e.preventDefault();
       } else if (e.button === 2) {
         if (activeWeapon.fireType === "melee") {
           attemptMeleePunch(1);
-        } else {
-          aimHeld = true;
         }
         e.preventDefault();
       }
     });
 
     document.addEventListener("mouseup", (e) => {
-      if (e.button === 0) {
-        triggerHeld = false;
-      } else if (e.button === 2) {
-        aimHeld = false;
-      }
+      inputManager.setMouseButtonState(e.button, false);
     });
 
     renderer.domElement.addEventListener("contextmenu", (e) => {
@@ -3430,45 +3809,45 @@
     const clock = new THREE.Clock();
     const direction = new THREE.Vector3();
 
-    const standEyeHeight = 1.8;
+    const standEyeHeight = GameConfig.player.standEyeHeight;
     let currentEyeHeight = standEyeHeight;
-    const playerRadius = 0.42;
-    const playerHeadClearance = 0.35;
-    const stepHeight = 0.6;
-    const groundSnap = 0.18;
+    const playerRadius = GameConfig.player.playerRadius;
+    const playerHeadClearance = GameConfig.player.playerHeadClearance;
+    const stepHeight = GameConfig.player.stepHeight;
+    const groundSnap = GameConfig.player.groundSnap;
 
     // Player body tracks feet position; camera is a local eye offset.
     const player = playerBody;
     camera.position.set(0, standEyeHeight, 0);
 
-    const groundFriction = 18.0;
-    const stopSpeed = 6.0;
-    const groundAccel = 80.0;
-    const airAccel = 10.0;
-    const jumpVelocity = 9.0;
-    const bhopBoost = 1.01;
-    const maxGroundSpeed = 10.5;
-    const sprintGroundSpeed = 16.0;
-    const maxAirWishSpeed = 10.5;
-    const hardMaxHorizontalSpeed = 22.0;
-    const gravity = 27.0;
-    const baseFov = 75.0;
-    const sprintFovBoost = 6.0;
-    const dashFovBoost = 5.0;
-    const maxTilt = 0.024;
-    const breathAmplitude = 0.03;
-    const breathFrequency = 1.8;
-    const bobSideAmplitude = 0.014;
-    const bobUpAmplitude = 0.028;
-    const dashDuration = 0.12;
-    const dashCooldown = 0.4;
-    const dashSpeed = 28.0;
-    const wallJumpMaxCharges = Number.POSITIVE_INFINITY;
-    const wallJumpVerticalVelocity = 9.8;
-    const wallJumpPushSpeed = 9.8;
-    const wallJumpTangentCarry = 0.92;
-    const wallJumpContactGrace = 0.12;
-    const dynamicTerrainActiveRadius = 18;
+    const groundFriction = GameConfig.player.groundFriction;
+    const stopSpeed = GameConfig.player.stopSpeed;
+    const groundAccel = GameConfig.player.groundAccel;
+    const airAccel = GameConfig.player.airAccel;
+    const jumpVelocity = GameConfig.player.jumpVelocity;
+    const bhopBoost = GameConfig.player.bhopBoost;
+    const maxGroundSpeed = GameConfig.player.maxGroundSpeed;
+    const sprintGroundSpeed = GameConfig.player.sprintGroundSpeed;
+    const maxAirWishSpeed = GameConfig.player.maxAirWishSpeed;
+    const hardMaxHorizontalSpeed = GameConfig.player.hardMaxHorizontalSpeed;
+    const gravity = GameConfig.player.gravity;
+    const baseFov = GameConfig.player.baseFov;
+    const sprintFovBoost = GameConfig.player.sprintFovBoost;
+    const dashFovBoost = GameConfig.player.dashFovBoost;
+    const maxTilt = GameConfig.player.maxTilt;
+    const breathAmplitude = GameConfig.player.breathAmplitude;
+    const breathFrequency = GameConfig.player.breathFrequency;
+    const bobSideAmplitude = GameConfig.player.bobSideAmplitude;
+    const bobUpAmplitude = GameConfig.player.bobUpAmplitude;
+    const dashDuration = GameConfig.player.dashDuration;
+    const dashCooldown = GameConfig.player.dashCooldown;
+    const dashSpeed = GameConfig.player.dashSpeed;
+    const wallJumpMaxCharges = GameConfig.player.wallJumpMaxCharges;
+    const wallJumpVerticalVelocity = GameConfig.player.wallJumpVerticalVelocity;
+    const wallJumpPushSpeed = GameConfig.player.wallJumpPushSpeed;
+    const wallJumpTangentCarry = GameConfig.player.wallJumpTangentCarry;
+    const wallJumpContactGrace = GameConfig.player.wallJumpContactGrace;
+    const dynamicTerrainActiveRadius = GameConfig.player.dynamicTerrainActiveRadius;
     const dynamicTerrainActiveRadiusSq = dynamicTerrainActiveRadius * dynamicTerrainActiveRadius;
     
     let isGrounded = true;
@@ -3480,9 +3859,9 @@
     const right = new THREE.Vector3();
     const moveWish = new THREE.Vector3();
     const dashDirection = new THREE.Vector3();
-    const maxSimDt = 1 / 30;
+    const maxSimDt = GameConfig.renderer.maxSimDt;
     let fireflyAccumulator = 0;
-    const fireflyStep = 1 / 45;
+    const fireflyStep = GameConfig.renderer.fireflyStep;
     let wallJumpCharges = wallJumpMaxCharges;
     let wallContactTimer = 0;
     const lastWallContactNormal = new THREE.Vector3();
@@ -3530,8 +3909,8 @@
 
       for (let iter = 0; iter < maxIterations; iter++) {
         let hitAny = false;
-
-        for (const box of boxColliders) {
+        const candidateBoxes = getNearbyColliders(player.position.x, player.position.z, probeRadius + 0.25);
+        for (const box of candidateBoxes) {
           if (!overlapsCircleXZ(box, player.position.x, player.position.z, probeRadius)) continue;
           // Ignore ceilings above the head and floors already under the feet.
           if (headY <= box.min.y + collisionEpsilon) continue;
@@ -3597,7 +3976,8 @@
       let bestPenetration = 0;
       outNormal.set(0, 0, 0);
 
-      for (const box of boxColliders) {
+      const candidateBoxes = getNearbyColliders(player.position.x, player.position.z, playerRadius + 0.25);
+      for (const box of candidateBoxes) {
         if (!overlapsCircleXZ(box, player.position.x, player.position.z, probeRadius + 0.05)) continue;
         if (headY <= box.min.y + collisionEpsilon) continue;
         if (feetY >= box.max.y - floorTolerance) continue;
@@ -3648,8 +4028,8 @@
 
     const findGroundY = (feetY) => {
       let bestGroundY = 0;
-
-      for (const box of boxColliders) {
+      const candidateBoxes = getNearbyColliders(player.position.x, player.position.z, playerRadius + 0.25);
+      for (const box of candidateBoxes) {
         const overlapsXZ =
           player.position.x + playerRadius > box.min.x &&
           player.position.x - playerRadius < box.max.x &&
@@ -3674,8 +4054,8 @@
       const feetY = player.position.y;
       const headY = feetY + currentEyeHeight + playerHeadClearance;
       let bestCeilingFeetY = Infinity;
-
-      for (const box of boxColliders) {
+      const candidateBoxes = getNearbyColliders(player.position.x, player.position.z, playerRadius + 0.25);
+      for (const box of candidateBoxes) {
         const overlapsXZ =
           player.position.x + playerRadius > box.min.x &&
           player.position.x - playerRadius < box.max.x &&
@@ -3725,7 +4105,7 @@
 
     const shouldTriggerAutoJump = (wishDir) => {
       if (!autoJumpEnabled || autoJumpCooldown > 0) return false;
-      if (!isGrounded || keyState.jump) return false;
+      if (!isGrounded || inputManager.isPressed("jump")) return false;
       if (wishDir.lengthSq() < 0.0001) return false;
       const horizontalSpeed = Math.hypot(velocity.x, velocity.z);
       if (horizontalSpeed < 1.2) return false;
@@ -3739,7 +4119,8 @@
       const probeZ = player.position.z + wishDir.z * probeDist;
       let targetTopY = -Infinity;
 
-      for (const box of boxColliders) {
+      const candidateBoxes = getNearbyColliders(probeX, probeZ, playerRadius + 0.55);
+      for (const box of candidateBoxes) {
         if (!overlapsCircleXZ(box, probeX, probeZ, playerRadius + 0.05)) continue;
         if (headY <= box.min.y + 0.001) continue;
         if (feetY >= box.max.y - 0.001) continue;
@@ -3763,7 +4144,8 @@
       const landingX = player.position.x + wishDir.x * landingDist;
       const landingZ = player.position.z + wishDir.z * landingDist;
 
-      for (const box of boxColliders) {
+      const landingCandidateBoxes = getNearbyColliders(landingX, landingZ, playerRadius + 0.55);
+      for (const box of landingCandidateBoxes) {
         if (!overlapsCircleXZ(box, landingX, landingZ, playerRadius + 0.05)) continue;
         if (landingHeadY <= box.min.y + 0.001) continue;
         if (landingFeetY >= box.max.y - 0.001) continue;
@@ -3841,17 +4223,18 @@
       }
     };
 
-    const keepFireflyOutsideBlocks = (pos, clearance = 0.22) => {
+    const keepFireflyOutsideBlocks = (pos, clearanceXZ = 0.22, clearanceY = 0.04) => {
       let collided = false;
       for (let iteration = 0; iteration < 2; iteration++) {
         let touched = false;
-        for (const box of boxColliders) {
-          const minX = box.min.x - clearance;
-          const maxX = box.max.x + clearance;
-          const minY = box.min.y - clearance;
-          const maxY = box.max.y + clearance;
-          const minZ = box.min.z - clearance;
-          const maxZ = box.max.z + clearance;
+        const candidateBoxes = getNearbyColliders(pos.x, pos.z, clearanceXZ + 0.65);
+        for (const box of candidateBoxes) {
+          const minX = box.min.x - clearanceXZ;
+          const maxX = box.max.x + clearanceXZ;
+          const minY = box.min.y - clearanceY;
+          const maxY = box.max.y + clearanceY;
+          const minZ = box.min.z - clearanceXZ;
+          const maxZ = box.max.z + clearanceXZ;
           if (
             pos.x <= minX || pos.x >= maxX ||
             pos.y <= minY || pos.y >= maxY ||
@@ -3860,11 +4243,15 @@
 
           const toMinX = Math.abs(pos.x - minX);
           const toMaxX = Math.abs(maxX - pos.x);
+          const toMinY = Math.abs(pos.y - minY);
+          const toMaxY = Math.abs(maxY - pos.y);
           const toMinZ = Math.abs(pos.z - minZ);
           const toMaxZ = Math.abs(maxZ - pos.z);
-          const minPen = Math.min(toMinX, toMaxX, toMinZ, toMaxZ);
+          const minPen = Math.min(toMinX, toMaxX, toMinY, toMaxY, toMinZ, toMaxZ);
           if (minPen === toMinX) pos.x = minX;
           else if (minPen === toMaxX) pos.x = maxX;
+          else if (minPen === toMinY) pos.y = minY;
+          else if (minPen === toMaxY) pos.y = maxY;
           else if (minPen === toMinZ) pos.z = minZ;
           else pos.z = maxZ;
           touched = true;
@@ -3873,32 +4260,101 @@
         if (!touched) break;
       }
 
-      pos.x = THREE.MathUtils.clamp(pos.x, -mapHalfSize + clearance, mapHalfSize - clearance);
-      pos.z = THREE.MathUtils.clamp(pos.z, -mapHalfSize + clearance, mapHalfSize - clearance);
+      pos.x = THREE.MathUtils.clamp(pos.x, -mapHalfSize + clearanceXZ, mapHalfSize - clearanceXZ);
+      pos.z = THREE.MathUtils.clamp(pos.z, -mapHalfSize + clearanceXZ, mapHalfSize - clearanceXZ);
       pos.y = THREE.MathUtils.clamp(pos.y, 0.66, mapWallHeight * 0.4);
       return collided;
     };
 
+    const findFireflyPerchSpot = (fromPos, outPos) => {
+      const maxPerchDistSq = 3.4 * 3.4;
+      let bestScore = Infinity;
+      let found = false;
+
+      const perchCandidateBoxes = getNearbyColliders(fromPos.x, fromPos.z, 3.2);
+      for (const box of perchCandidateBoxes) {
+        const topY = box.max.y;
+        if (fromPos.y < topY - 0.25 || fromPos.y > topY + 2.6) continue;
+
+        const perchX = THREE.MathUtils.clamp(fromPos.x, box.min.x + 0.12, box.max.x - 0.12);
+        const perchZ = THREE.MathUtils.clamp(fromPos.z, box.min.z + 0.12, box.max.z - 0.12);
+        const dx = fromPos.x - perchX;
+        const dz = fromPos.z - perchZ;
+        const distSq = dx * dx + dz * dz;
+        if (distSq > maxPerchDistSq) continue;
+
+        const candidateY = topY + 0.08 + Math.random() * 0.06;
+        const dy = fromPos.y - candidateY;
+        const score = distSq + dy * dy * 0.25;
+        if (score >= bestScore) continue;
+        bestScore = score;
+        outPos.set(perchX, candidateY, perchZ);
+        found = true;
+      }
+
+      if (!found && fromPos.y < 2.8) {
+        outPos.set(
+          fromPos.x + (Math.random() * 2 - 1) * 0.35,
+          0.1 + Math.random() * 0.03,
+          fromPos.z + (Math.random() * 2 - 1) * 0.35
+        );
+        found = true;
+      }
+
+      if (found) keepFireflyOutsideBlocks(outPos, 0.18, 0.015);
+      return found;
+    };
+
+    const traceFireflyMotion = (startPos, targetPos, outPos) => {
+      tempFireflyStart.copy(startPos);
+      const distance = tempFireflyStart.distanceTo(targetPos);
+      const steps = Math.max(1, Math.min(10, Math.ceil(distance / 0.2)));
+      for (let step = 1; step <= steps; step++) {
+        outPos.lerpVectors(tempFireflyStart, targetPos, 1 / (steps - step + 1));
+        keepFireflyOutsideBlocks(outPos, 0.24, 0.03);
+        tempFireflyStart.copy(outPos);
+      }
+    };
+
     const updateFireflies = (dt) => {
+      fireflyInstanceQuat.copy(camera.quaternion);
+      let activeLightCount = 0;
       for (const bug of fireflies) {
         bug.phase += dt * bug.speed;
         bug.bobPhase += dt * bug.bobSpeed;
         bug.flickerPhase += dt * bug.flickerSpeed;
         bug.flickerPhaseB += dt * bug.flickerSpeedB;
 
-        const px = bug.baseX + Math.cos(bug.phase * bug.driftFreqX) * bug.driftRadius;
-        const pz = bug.baseZ + Math.sin(bug.phase * bug.driftFreqZ + bug.pulseBias) * bug.driftRadius;
-        const py = bug.baseY + Math.sin(bug.bobPhase) * bug.bobAmp;
-        tempFireflyPos.set(px, py, pz);
-        const collided = keepFireflyOutsideBlocks(tempFireflyPos, 0.24);
-        if (collided) {
-          bug.baseX = THREE.MathUtils.lerp(bug.baseX, tempFireflyPos.x, 0.14);
-          bug.baseZ = THREE.MathUtils.lerp(bug.baseZ, tempFireflyPos.z, 0.14);
+        bug.perchCooldown = Math.max(0, bug.perchCooldown - dt);
+        bug.perchWobblePhase += dt * 1.25;
+
+        if (bug.isPerched) {
+          bug.perchTimer -= dt;
+          tempFireflyTarget.copy(bug.perchPos);
+          tempFireflyTarget.y += Math.sin(bug.perchWobblePhase) * 0.018;
+          if (bug.perchTimer <= 0) {
+            bug.isPerched = false;
+            bug.perchCooldown = bug.perchCooldownMin + Math.random() * (bug.perchCooldownMax - bug.perchCooldownMin);
+          }
+        } else {
+          const px = bug.baseX + Math.cos(bug.phase * bug.driftFreqX) * bug.driftRadius;
+          const pz = bug.baseZ + Math.sin(bug.phase * bug.driftFreqZ + bug.pulseBias) * bug.driftRadius;
+          const py = bug.baseY + Math.sin(bug.bobPhase) * bug.bobAmp;
+          tempFireflyTarget.set(px, py, pz);
+          if (bug.perchCooldown <= 0 && Math.random() < dt * bug.perchChance) {
+            if (findFireflyPerchSpot(bug.currentPos, tempFireflyPerch)) {
+              bug.isPerched = true;
+              bug.perchPos.copy(tempFireflyPerch);
+              bug.perchTimer = bug.perchDurationMin + Math.random() * (bug.perchDurationMax - bug.perchDurationMin);
+              tempFireflyTarget.copy(bug.perchPos);
+            }
+          }
         }
 
-        bug.sprite.position.copy(tempFireflyPos);
-        bug.halo.position.copy(bug.sprite.position);
-        bug.aura.position.copy(bug.sprite.position);
+        traceFireflyMotion(bug.currentPos, tempFireflyTarget, tempFireflyPos);
+        bug.currentPos.copy(tempFireflyPos);
+        bug.baseX = THREE.MathUtils.lerp(bug.baseX, tempFireflyPos.x, 0.035);
+        bug.baseZ = THREE.MathUtils.lerp(bug.baseZ, tempFireflyPos.z, 0.035);
 
         const slowFlicker = 0.5 + 0.5 * Math.sin(bug.flickerPhase + Math.sin(bug.phase * 0.27 + bug.pulseBias) * 0.35);
         const sideFlicker = 0.5 + 0.5 * Math.sin(bug.flickerPhaseB);
@@ -3906,23 +4362,50 @@
         const coreScale = bug.baseScale * (0.7 + pulse * 1.05);
         const haloScale = coreScale * (7.2 + pulse * 2.4);
         const auraScale = coreScale * (13.5 + pulse * 4.2);
-        bug.sprite.scale.set(coreScale, coreScale, coreScale);
-        bug.halo.scale.set(haloScale, haloScale, haloScale);
-        bug.aura.scale.set(auraScale, auraScale, auraScale);
-        bug.sprite.material.opacity = 0.5 + pulse * 0.24;
-        bug.halo.material.opacity = 0.09 + pulse * 0.17;
-        bug.aura.material.opacity = 0.02 + pulse * 0.1;
+
+        fireflyInstanceScale.set(coreScale, coreScale, coreScale);
+        fireflyInstanceMatrix.compose(tempFireflyPos, fireflyInstanceQuat, fireflyInstanceScale);
+        fireflyCoreInstanced.setMatrixAt(bug.index, fireflyInstanceMatrix);
+        fireflyInstanceScale.set(haloScale, haloScale, haloScale);
+        fireflyInstanceMatrix.compose(tempFireflyPos, fireflyInstanceQuat, fireflyInstanceScale);
+        fireflyHaloInstanced.setMatrixAt(bug.index, fireflyInstanceMatrix);
+        fireflyInstanceScale.set(auraScale, auraScale, auraScale);
+        fireflyInstanceMatrix.compose(tempFireflyPos, fireflyInstanceQuat, fireflyInstanceScale);
+        fireflyAuraInstanced.setMatrixAt(bug.index, fireflyInstanceMatrix);
+
+        fireflyInstanceColor.copy(fireflyCoreBaseColor).multiplyScalar(0.65 + pulse * 0.95);
+        fireflyCoreInstanced.setColorAt(bug.index, fireflyInstanceColor);
+        fireflyInstanceColor.copy(fireflyHaloBaseColor).multiplyScalar(0.42 + pulse * 0.78);
+        fireflyHaloInstanced.setColorAt(bug.index, fireflyInstanceColor);
+        fireflyInstanceColor.copy(fireflyAuraBaseColor).multiplyScalar(0.28 + pulse * 0.64);
+        fireflyAuraInstanced.setColorAt(bug.index, fireflyInstanceColor);
 
         if (bug.light) {
-          bug.light.position.copy(bug.sprite.position);
-          bug.light.distance = bug.lightBaseDistance + pulse * 12.5;
-          bug.light.intensity = 1.8 + pulse * 2.55;
+          const dx = tempFireflyPos.x - player.position.x;
+          const dy = tempFireflyPos.y - (player.position.y + standEyeHeight);
+          const dz = tempFireflyPos.z - player.position.z;
+          const nearPlayer = (dx * dx + dy * dy + dz * dz) <= fireflyLightCullRadiusSq;
+          const canEnable = nearPlayer && activeLightCount < GameConfig.lighting.maxActiveFireflyLights;
+          bug.light.visible = canEnable;
+          if (canEnable) {
+            activeLightCount += 1;
+            bug.light.position.copy(tempFireflyPos);
+            bug.light.distance = bug.lightBaseDistance + pulse * 12.5;
+            bug.light.intensity = 1.8 + pulse * 2.55;
+          }
         }
       }
+      fireflyCoreInstanced.instanceMatrix.needsUpdate = true;
+      fireflyHaloInstanced.instanceMatrix.needsUpdate = true;
+      fireflyAuraInstanced.instanceMatrix.needsUpdate = true;
+      if (fireflyCoreInstanced.instanceColor) fireflyCoreInstanced.instanceColor.needsUpdate = true;
+      if (fireflyHaloInstanced.instanceColor) fireflyHaloInstanced.instanceColor.needsUpdate = true;
+      if (fireflyAuraInstanced.instanceColor) fireflyAuraInstanced.instanceColor.needsUpdate = true;
     };
 
     const updateAmbientParticles = (dt) => {
-      const positions = ambientParticleGeometry.attributes.position.array;
+      fireflyInstanceQuat.copy(camera.quaternion);
+      const positions = ambientParticlePositions;
       for (let i = 0; i < ambientParticleCount; i++) {
         const idx = i * 3;
         ambientParticlePhases[i] += dt * ambientParticleSpeeds[i];
@@ -3957,30 +4440,21 @@
         } else if (positions[idx + 1] > ambientParticleMaxY) {
           positions[idx + 1] = ambientParticleMinY + Math.random() * 0.2;
         }
+
+        const flicker = 0.82 + 0.18 * Math.sin(phase * 1.35 + i * 0.11);
+        const scale = ambientParticleScales[i] * (0.9 + 0.12 * Math.sin(phase * 1.8 + i * 0.23));
+        ambientInstancePos.set(positions[idx], positions[idx + 1], positions[idx + 2]);
+        fireflyInstanceScale.set(scale, scale, scale);
+        fireflyInstanceMatrix.compose(ambientInstancePos, fireflyInstanceQuat, fireflyInstanceScale);
+        ambientParticles.setMatrixAt(i, fireflyInstanceMatrix);
+        fireflyInstanceColor.copy(ambientBaseColor).multiplyScalar(flicker);
+        ambientParticles.setColorAt(i, fireflyInstanceColor);
       }
-      ambientParticleGeometry.attributes.position.needsUpdate = true;
+      ambientParticles.instanceMatrix.needsUpdate = true;
+      if (ambientParticles.instanceColor) ambientParticles.instanceColor.needsUpdate = true;
     };
 
-    const updatePlayerPhysics = (dt) => {
-      jumpBufferTime = Math.max(0, jumpBufferTime - dt);
-      autoJumpCooldown = Math.max(0, autoJumpCooldown - dt);
-      dashCooldownTimer = Math.max(0, dashCooldownTimer - dt);
-      dashTimer = Math.max(0, dashTimer - dt);
-      fireCooldown = Math.max(0, fireCooldown - dt);
-      updateDynamicTerrain(dt);
-      if (physicsBridge.enabled) {
-        physicsBridge.step(dt);
-      }
-      if (isGrounded) {
-        wallJumpCharges = wallJumpMaxCharges;
-        wallContactTimer = 0;
-        lastWallContactNormal.set(0, 0, 0);
-        const movingGroundDelta = getMovingGroundDelta(player.position.y);
-        if (Math.abs(movingGroundDelta) > 0.00001) {
-          player.position.y += movingGroundDelta;
-        }
-      }
-
+    const updateWeaponStateTimers = (dt) => {
       if (isReloading) {
         reloadTimer = Math.max(0, reloadTimer - dt);
         if (reloadTimer <= 0) {
@@ -4024,7 +4498,9 @@
           activeMuzzleFlash.visible = false;
         }
       }
+    };
 
+    const updateProjectileSystems = (dt) => {
       for (let i = projectiles.length - 1; i >= 0; i--) {
         const projectile = projectiles[i];
         projectile.life -= dt;
@@ -4155,7 +4631,9 @@
           debrisChunks.splice(i, 1);
         }
       }
+    };
 
+    const updateTransientVisuals = (dt) => {
       for (let i = impactMarks.length - 1; i >= 0; i--) {
         const mark = impactMarks[i];
         mark.life -= dt;
@@ -4177,80 +4655,9 @@
           hitFlashStates.splice(i, 1);
         }
       }
+    };
 
-      direction.set(
-        Number(keyState.right) - Number(keyState.left),
-        0,
-        Number(keyState.forward) - Number(keyState.backward)
-      );
-
-      const eyeLerp = 1 - Math.exp(-12 * dt);
-      currentEyeHeight = THREE.MathUtils.lerp(currentEyeHeight, standEyeHeight, eyeLerp);
-
-      camera.getWorldDirection(forward);
-      forward.y = 0;
-      if (forward.lengthSq() < 0.0001) forward.set(0, 0, -1);
-      forward.normalize();
-      right.crossVectors(forward, camera.up).normalize();
-
-      moveWish.set(0, 0, 0);
-      moveWish.addScaledVector(forward, direction.z);
-      moveWish.addScaledVector(right, direction.x);
-      const hasMoveInput = moveWish.lengthSq() > 0;
-      if (hasMoveInput) moveWish.normalize();
-      if (hasMoveInput && jumpBufferTime <= 0 && shouldTriggerAutoJump(moveWish)) {
-        jumpBufferTime = jumpBufferMax;
-        autoJumpCooldown = 0.18;
-      }
-
-      const hasWallContact = !isGrounded && getWallContactNormal(tempWallNormal);
-      if (hasWallContact) {
-        wallContactTimer = wallJumpContactGrace;
-        lastWallContactNormal.copy(tempWallNormal);
-      } else {
-        wallContactTimer = Math.max(0, wallContactTimer - dt);
-      }
-
-      if (!keyState.forward || keyState.backward) {
-        sprintFromDoubleTap = false;
-      }
-
-      if (dashQueued) {
-        dashQueued = false;
-        if (dashCooldownTimer <= 0) {
-          if (hasMoveInput) {
-            dashDirection.copy(moveWish);
-          } else {
-            dashDirection.copy(forward);
-          }
-          dashDirection.y = 0;
-          if (dashDirection.lengthSq() < 0.0001) dashDirection.set(0, 0, -1);
-          dashDirection.normalize();
-          dashTimer = dashDuration;
-          dashCooldownTimer = dashCooldown;
-          sprintFromDoubleTap = false;
-        }
-      }
-
-      const isDashing = dashTimer > 0;
-      const isSprinting = sprintFromDoubleTap && keyState.forward && !keyState.backward && !isDashing;
-      const targetSpeed = isSprinting ? sprintGroundSpeed : maxGroundSpeed;
-
-      if (isGrounded && !isDashing) {
-        applyGroundFriction(dt);
-      }
-
-      if (isDashing) {
-        velocity.x = dashDirection.x * dashSpeed;
-        velocity.z = dashDirection.z * dashSpeed;
-      } else if (hasMoveInput) {
-        if (isGrounded) {
-          applyAcceleration(moveWish, targetSpeed, groundAccel, dt);
-        } else {
-          applyAcceleration(moveWish, Math.min(targetSpeed, maxAirWishSpeed), airAccel, dt);
-        }
-      }
-
+    const handleWallJump = (isDashing, hasMoveInput, hasWallContact) => {
       if (!isDashing && isGrounded && jumpBufferTime > 0) {
         velocity.x *= bhopBoost;
         velocity.z *= bhopBoost;
@@ -4273,11 +4680,15 @@
           sprintFromDoubleTap = false;
         }
       }
+    };
 
+    const applyGravity = (dt, isDashing) => {
       if (!isGrounded) {
         velocity.y -= gravity * (isDashing ? 0.35 : 1.0) * dt;
       }
+    };
 
+    const resolveHorizontalMovement = (dt) => {
       const mapClamp = mapHalfSize - playerRadius - 0.2;
       const horizontalMove = Math.hypot(velocity.x, velocity.z) * dt;
       const maxMovePerSlice = playerRadius * 0.55;
@@ -4304,7 +4715,9 @@
           velocity.z = Math.min(velocity.z, 0);
         }
       }
+    };
 
+    const checkGroundCollisions = (dt) => {
       const previousFeetY = player.position.y;
       player.position.y += velocity.y * dt;
       if (velocity.y > 0) {
@@ -4327,6 +4740,109 @@
       if (physicsBridge.enabled && physicsFlags.useRapierPlayerKCC) {
         physicsBridge.applyPlayerKCCCorrection();
       }
+    };
+
+    const updatePlayerPhysics = (dt) => {
+      jumpBufferTime = Math.max(0, jumpBufferTime - dt);
+      autoJumpCooldown = Math.max(0, autoJumpCooldown - dt);
+      dashCooldownTimer = Math.max(0, dashCooldownTimer - dt);
+      dashTimer = Math.max(0, dashTimer - dt);
+      fireCooldown = Math.max(0, fireCooldown - dt);
+      updateDynamicTerrain(dt);
+      if (physicsBridge.enabled) {
+        physicsBridge.step(dt);
+      }
+      if (isGrounded) {
+        wallJumpCharges = wallJumpMaxCharges;
+        wallContactTimer = 0;
+        lastWallContactNormal.set(0, 0, 0);
+        const movingGroundDelta = getMovingGroundDelta(player.position.y);
+        if (Math.abs(movingGroundDelta) > 0.00001) {
+          player.position.y += movingGroundDelta;
+        }
+      }
+
+      updateWeaponStateTimers(dt);
+      updateProjectileSystems(dt);
+      updateTransientVisuals(dt);
+
+      direction.set(
+        Number(inputManager.isPressed("right")) - Number(inputManager.isPressed("left")),
+        0,
+        Number(inputManager.isPressed("forward")) - Number(inputManager.isPressed("backward"))
+      );
+
+      const eyeLerp = 1 - Math.exp(-12 * dt);
+      currentEyeHeight = THREE.MathUtils.lerp(currentEyeHeight, standEyeHeight, eyeLerp);
+
+      camera.getWorldDirection(forward);
+      forward.y = 0;
+      if (forward.lengthSq() < 0.0001) forward.set(0, 0, -1);
+      forward.normalize();
+      right.crossVectors(forward, camera.up).normalize();
+
+      moveWish.set(0, 0, 0);
+      moveWish.addScaledVector(forward, direction.z);
+      moveWish.addScaledVector(right, direction.x);
+      const hasMoveInput = moveWish.lengthSq() > 0;
+      if (hasMoveInput) moveWish.normalize();
+      if (hasMoveInput && jumpBufferTime <= 0 && shouldTriggerAutoJump(moveWish)) {
+        jumpBufferTime = jumpBufferMax;
+        autoJumpCooldown = GameConfig.input.autoJumpCooldown;
+      }
+
+      const hasWallContact = !isGrounded && getWallContactNormal(tempWallNormal);
+      if (hasWallContact) {
+        wallContactTimer = wallJumpContactGrace;
+        lastWallContactNormal.copy(tempWallNormal);
+      } else {
+        wallContactTimer = Math.max(0, wallContactTimer - dt);
+      }
+
+      if (!inputManager.isPressed("forward") || inputManager.isPressed("backward")) {
+        sprintFromDoubleTap = false;
+      }
+
+      if (dashQueued) {
+        dashQueued = false;
+        if (dashCooldownTimer <= 0) {
+          if (hasMoveInput) {
+            dashDirection.copy(moveWish);
+          } else {
+            dashDirection.copy(forward);
+          }
+          dashDirection.y = 0;
+          if (dashDirection.lengthSq() < 0.0001) dashDirection.set(0, 0, -1);
+          dashDirection.normalize();
+          dashTimer = dashDuration;
+          dashCooldownTimer = dashCooldown;
+          sprintFromDoubleTap = false;
+        }
+      }
+
+      const isDashing = dashTimer > 0;
+      const isSprinting = sprintFromDoubleTap && inputManager.isPressed("forward") && !inputManager.isPressed("backward") && !isDashing;
+      const targetSpeed = isSprinting ? sprintGroundSpeed : maxGroundSpeed;
+
+      if (isGrounded && !isDashing) {
+        applyGroundFriction(dt);
+      }
+
+      if (isDashing) {
+        velocity.x = dashDirection.x * dashSpeed;
+        velocity.z = dashDirection.z * dashSpeed;
+      } else if (hasMoveInput) {
+        if (isGrounded) {
+          applyAcceleration(moveWish, targetSpeed, groundAccel, dt);
+        } else {
+          applyAcceleration(moveWish, Math.min(targetSpeed, maxAirWishSpeed), airAccel, dt);
+        }
+      }
+
+      handleWallJump(isDashing, hasMoveInput, hasWallContact);
+      applyGravity(dt, isDashing);
+      resolveHorizontalMovement(dt);
+      checkGroundCollisions(dt);
 
       const horizontalSpeed = Math.hypot(velocity.x, velocity.z);
       if (!isDashing && horizontalSpeed > hardMaxHorizontalSpeed) {
@@ -4335,12 +4851,12 @@
         velocity.z *= scale;
       }
 
-      if (triggerHeld && getActiveWeapon().autoFire) {
+      if (inputManager.isPressed("shoot") && getActiveWeapon().autoFire) {
         attemptFire();
       }
 
       const activeWeapon = getActiveWeapon();
-      const canAim = aimHeld && !isReloading && switchPhase === "idle" && activeWeapon.fireType !== "melee";
+      const canAim = inputManager.isPressed("aim") && !isReloading && switchPhase === "idle" && activeWeapon.fireType !== "melee";
       const adsTarget = canAim ? 1 : 0;
       const adsLerp = 1 - Math.exp(-14 * dt);
       adsWeight = THREE.MathUtils.lerp(adsWeight, adsTarget, adsLerp);
