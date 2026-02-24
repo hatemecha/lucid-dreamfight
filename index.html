@@ -70,6 +70,29 @@
       gap: 14px;
     }
 
+    #menuScreen.controls-open {
+      place-items: start center;
+      padding-top: 12px;
+    }
+
+    #menuScreen.controls-open .menuRoot {
+      width: min(900px, calc(100vw - 24px));
+      align-items: stretch;
+      gap: 8px;
+    }
+
+    #menuScreen.controls-open #menuTitle,
+    #menuScreen.controls-open #newGameBtn,
+    #menuScreen.controls-open #resumeBtn,
+    #menuScreen.controls-open #controlsToggle {
+      display: none;
+    }
+
+    #menuScreen.controls-open #controlsSection {
+      margin-top: 0;
+      width: min(860px, 100%);
+    }
+
     #crosshair {
       position: fixed;
       left: 50%;
@@ -261,6 +284,27 @@
         0 0 2px rgba(0, 0, 0, 0.75);
     }
 
+    #controlsBackBtn {
+      appearance: none;
+      border: 0;
+      background: transparent;
+      color: rgba(233, 240, 255, 0.92);
+      padding: 2px 6px 8px 2px;
+      cursor: pointer;
+      font: inherit;
+      font-size: 1.5rem;
+      line-height: 1;
+      text-shadow:
+        -1px 0 rgba(255, 108, 126, 0.32),
+        1px 0 rgba(109, 196, 255, 0.4),
+        0 0 8px rgba(202, 228, 255, 0.4),
+        0 0 2px rgba(0, 0, 0, 0.75);
+    }
+
+    #controlsBackBtn:hover {
+      color: #cfe4ff;
+    }
+
     .controlRow {
       display: flex;
       align-items: center;
@@ -361,6 +405,7 @@
       <button id="resumeBtn" class="pauseBtn" type="button">Reanudar</button>
       <button id="controlsToggle" class="pauseBtn" type="button">Controles</button>
       <div id="controlsSection" class="hidden">
+        <button id="controlsBackBtn" type="button" aria-label="Volver">←</button>
         <p id="fixedControlsText">Controles configurables (click en la tecla para reasignar):</p>
         <div id="bindRows"></div>
         <div class="controlRow"><span>Auto Jump (obstaculos)</span><button id="autoJumpToggleBtn" class="bindBtn" type="button">ON</button></div>
@@ -595,6 +640,7 @@
     const resumeBtn = document.getElementById("resumeBtn");
     const controlsToggle = document.getElementById("controlsToggle");
     const controlsSection = document.getElementById("controlsSection");
+    const controlsBackBtn = document.getElementById("controlsBackBtn");
     const bindRows = document.getElementById("bindRows");
     const autoJumpToggleBtn = document.getElementById("autoJumpToggleBtn");
     const bindWarnings = document.getElementById("bindWarnings");
@@ -1210,6 +1256,7 @@
     }
     const voxelCubeGeometry = new THREE.BoxGeometry(1, 1, 1);
     const voxelBuildMatrix = new THREE.Matrix4();
+    const voxelSwapMatrix = new THREE.Matrix4();
     const voxelIdentityQuaternion = new THREE.Quaternion();
     const voxelTempScale = new THREE.Vector3();
     const voxelTempPos = new THREE.Vector3();
@@ -1511,7 +1558,7 @@
         colliderDesc.setFriction(0.2);
         const collider = this.world.createCollider(colliderDesc, body);
         projectile.rapierHandle = this._registerDynamicBody("projectile", projectile, body, collider);
-        projectile.prevPhysicsPos = projectile.mesh.position.clone();
+        projectile.prevPhysicsPos.copy(projectile.mesh.position);
         return projectile.rapierHandle;
       },
 
@@ -1750,7 +1797,10 @@
       const voxelToInstance = new Int32Array(totalVoxels);
       voxelToInstance.fill(-1);
       const instanceToVoxel = new Int32Array(totalVoxels);
+      instanceToVoxel.fill(-1);
       const voxelLocalCenters = new Float32Array(totalVoxels * 3);
+      let instanceCount = 0;
+      voxelTempScale.set(voxelSizeX, voxelSizeY, voxelSizeZ);
 
       for (let gz = 0; gz < voxelCountZ; gz++) {
         for (let gy = 0; gy < voxelCountY; gy++) {
@@ -1764,14 +1814,29 @@
             voxelLocalCenters[arrIndex + 1] = centerY;
             voxelLocalCenters[arrIndex + 2] = centerZ;
             voxelAlive[voxelIndex] = 1;
+            if (
+              gx === 0 || gx === voxelCountX - 1 ||
+              gy === 0 || gy === voxelCountY - 1 ||
+              gz === 0 || gz === voxelCountZ - 1
+            ) {
+              voxelTempPos.set(centerX, centerY, centerZ);
+              voxelBuildMatrix.compose(voxelTempPos, voxelIdentityQuaternion, voxelTempScale);
+              voxelMesh.setMatrixAt(instanceCount, voxelBuildMatrix);
+              voxelToInstance[voxelIndex] = instanceCount;
+              instanceToVoxel[instanceCount] = voxelIndex;
+              instanceCount += 1;
+            }
           }
         }
       }
+      voxelMesh.count = instanceCount;
+      voxelMesh.instanceMatrix.needsUpdate = true;
 
       return {
         root,
         voxelMesh,
         totalVoxels,
+        visibleCount: instanceCount,
         voxelCountX,
         voxelCountY,
         voxelCountZ,
@@ -1809,11 +1874,95 @@
       return false;
     };
 
+    const writeVoxelInstanceMatrix = (blockState, voxelIndex, instanceIndex) => {
+      const arrIndex = voxelIndex * 3;
+      voxelTempPos.set(
+        blockState.voxelLocalCenters[arrIndex + 0],
+        blockState.voxelLocalCenters[arrIndex + 1],
+        blockState.voxelLocalCenters[arrIndex + 2]
+      );
+      voxelTempScale.copy(blockState.voxelScale);
+      voxelBuildMatrix.compose(voxelTempPos, voxelIdentityQuaternion, voxelTempScale);
+      blockState.voxelMesh.setMatrixAt(instanceIndex, voxelBuildMatrix);
+    };
+
+    const addSurfaceVoxelInstance = (blockState, voxelIndex) => {
+      if (!blockState.voxelAlive[voxelIndex]) return false;
+      if (blockState.voxelToInstance[voxelIndex] >= 0) return false;
+      const instanceIndex = blockState.visibleCount;
+      if (instanceIndex >= blockState.instanceToVoxel.length) return false;
+      writeVoxelInstanceMatrix(blockState, voxelIndex, instanceIndex);
+      blockState.voxelToInstance[voxelIndex] = instanceIndex;
+      blockState.instanceToVoxel[instanceIndex] = voxelIndex;
+      blockState.visibleCount = instanceIndex + 1;
+      blockState.voxelMesh.count = blockState.visibleCount;
+      return true;
+    };
+
+    const removeSurfaceVoxelInstance = (blockState, voxelIndex) => {
+      const instanceIndex = blockState.voxelToInstance[voxelIndex];
+      if (instanceIndex < 0) return false;
+      const lastIndex = blockState.visibleCount - 1;
+      if (lastIndex < 0) return false;
+
+      if (instanceIndex !== lastIndex) {
+        blockState.voxelMesh.getMatrixAt(lastIndex, voxelSwapMatrix);
+        blockState.voxelMesh.setMatrixAt(instanceIndex, voxelSwapMatrix);
+        const movedVoxelIndex = blockState.instanceToVoxel[lastIndex];
+        if (movedVoxelIndex >= 0) {
+          blockState.instanceToVoxel[instanceIndex] = movedVoxelIndex;
+          blockState.voxelToInstance[movedVoxelIndex] = instanceIndex;
+        } else {
+          blockState.instanceToVoxel[instanceIndex] = -1;
+        }
+      }
+
+      blockState.voxelToInstance[voxelIndex] = -1;
+      blockState.instanceToVoxel[lastIndex] = -1;
+      blockState.visibleCount = lastIndex;
+      blockState.voxelMesh.count = lastIndex;
+      return true;
+    };
+
+    const revealSurfaceNeighbor = (blockState, gx, gy, gz) => {
+      if (
+        gx < 0 || gy < 0 || gz < 0 ||
+        gx >= blockState.voxelCountX ||
+        gy >= blockState.voxelCountY ||
+        gz >= blockState.voxelCountZ
+      ) return false;
+      const voxelIndex = getVoxelIndex(blockState, gx, gy, gz);
+      if (!blockState.voxelAlive[voxelIndex]) return false;
+      if (blockState.voxelToInstance[voxelIndex] >= 0) return false;
+      if (!isSurfaceVoxel(blockState, voxelIndex)) return false;
+      return addSurfaceVoxelInstance(blockState, voxelIndex);
+    };
+
+    const revealVoxelNeighbors = (blockState, voxelIndex) => {
+      const countX = blockState.voxelCountX;
+      const countY = blockState.voxelCountY;
+      const layerStride = countX * countY;
+      const gz = Math.floor(voxelIndex / layerStride);
+      const rem = voxelIndex - gz * layerStride;
+      const gy = Math.floor(rem / countX);
+      const gx = rem - gy * countX;
+
+      let changed = false;
+      if (revealSurfaceNeighbor(blockState, gx + 1, gy, gz)) changed = true;
+      if (revealSurfaceNeighbor(blockState, gx - 1, gy, gz)) changed = true;
+      if (revealSurfaceNeighbor(blockState, gx, gy + 1, gz)) changed = true;
+      if (revealSurfaceNeighbor(blockState, gx, gy - 1, gz)) changed = true;
+      if (revealSurfaceNeighbor(blockState, gx, gy, gz + 1)) changed = true;
+      if (revealSurfaceNeighbor(blockState, gx, gy, gz - 1)) changed = true;
+      return changed;
+    };
+
     const rebuildBlockVoxelMesh = (blockState) => {
       const { voxelMesh, voxelAlive, voxelLocalCenters, voxelToInstance, instanceToVoxel, voxelScale } = blockState;
       let instanceCount = 0;
       let aliveCount = 0;
       voxelTempScale.copy(voxelScale);
+      instanceToVoxel.fill(-1);
 
       for (let i = 0; i < voxelAlive.length; i++) {
         if (!voxelAlive[i]) {
@@ -1971,7 +2120,7 @@
         voxelLocalCenters: voxelGrid.voxelLocalCenters,
         totalVoxels: voxelGrid.totalVoxels,
         aliveCount: voxelGrid.totalVoxels,
-        visibleCount: voxelGrid.totalVoxels,
+        visibleCount: voxelGrid.visibleCount,
         localBoundsMin: new THREE.Vector3(-sx * 0.5, -sy * 0.5, -sz * 0.5),
         localBoundsMax: new THREE.Vector3(sx * 0.5, sy * 0.5, sz * 0.5),
         halfX: sx * 0.5,
@@ -1985,7 +2134,6 @@
         dynamicTile: null
       };
 
-      rebuildBlockVoxelMesh(blockState);
       updateBlockBoundsFromVoxels(blockState);
       syncBlockCollider(blockState);
       boxColliders.push(collider);
@@ -2616,6 +2764,8 @@
     const tempTraceStart = new THREE.Vector3();
     const tempTraceEnd = new THREE.Vector3();
     const tempTracePos = new THREE.Vector3();
+    const tempProjectileImpactPoint = new THREE.Vector3();
+    const tempProjectileImpactNormal = new THREE.Vector3();
     const tempImpactDir = new THREE.Vector3();
     const tempChunkAxis = new THREE.Vector3();
     const tempChunkRotation = new THREE.Quaternion();
@@ -3328,12 +3478,11 @@
       spawnBlockDebris(blockState, hitPoint, hitNormal, impactDir, energy, removedIndices.length);
 
       const floatingComponents = collectFloatingVoxelIslands(blockState);
-      let detachedCount = 0;
       for (const component of floatingComponents) {
         if (!component || component.length === 0) continue;
-        detachedCount += component.length;
         for (const voxelIndex of component) {
           blockState.voxelAlive[voxelIndex] = 0;
+          removedIndices.push(voxelIndex);
         }
         spawnDetachedVoxelChunk(
           blockState,
@@ -3344,13 +3493,21 @@
         );
       }
 
-      rebuildBlockVoxelMesh(blockState);
+      let meshChanged = false;
+      for (const voxelIndex of removedIndices) {
+        if (removeSurfaceVoxelInstance(blockState, voxelIndex)) meshChanged = true;
+      }
+      for (const voxelIndex of removedIndices) {
+        if (revealVoxelNeighbors(blockState, voxelIndex)) meshChanged = true;
+      }
+      if (meshChanged) blockState.voxelMesh.instanceMatrix.needsUpdate = true;
+      blockState.aliveCount = Math.max(0, blockState.aliveCount - removedIndices.length);
       updateBlockBoundsFromVoxels(blockState);
       syncBlockCollider(blockState);
       physicsBridge.rebuildBlockCollider(blockState);
       const aliveRatio = blockState.totalVoxels > 0 ? (blockState.aliveCount / blockState.totalVoxels) : 0;
       blockState.health = blockState.maxHealth * aliveRatio;
-      return removedIndices.length + detachedCount;
+      return removedIndices.length;
     };
 
     const destroyBlockState = (blockState, hitPoint, hitNormal, impactDir, energy = 1, skipFinalBurst = false) => {
@@ -3701,7 +3858,7 @@
       return true;
     };
 
-    const traceProjectileImpact = (start, end, radius) => {
+    const traceProjectileImpact = (start, end, radius, outPoint, outNormal) => {
       const distance = start.distanceTo(end);
       const stepSize = Math.max(0.08, radius * 0.7);
       const steps = Math.max(1, Math.min(28, Math.ceil(distance / stepSize)));
@@ -3711,10 +3868,10 @@
         tempTracePos.lerpVectors(start, end, t);
 
         if (tempTracePos.y <= 0) {
-          return {
-            point: tempTracePos.clone().setY(0.001),
-            normal: new THREE.Vector3(0, 1, 0)
-          };
+          outPoint.copy(tempTracePos);
+          outPoint.y = 0.001;
+          outNormal.set(0, 1, 0);
+          return true;
         }
 
         const candidateBoxes = getNearbyColliders(tempTracePos.x, tempTracePos.z, radius + 0.45);
@@ -3751,14 +3908,13 @@
             else tempNormal.set(0, 0, 1);
           }
 
-          return {
-            point: tempTracePos.clone(),
-            normal: tempNormal.clone()
-          };
+          outPoint.copy(tempTracePos);
+          outNormal.copy(tempNormal);
+          return true;
         }
       }
 
-      return null;
+      return false;
     };
 
     const updateFistAnimation = (fistModel, dt) => {
@@ -3928,6 +4084,7 @@
       resumeBtn.textContent = "REANUDAR";
       sniperScopeActive = false;
       sniperScope.classList.add("hidden");
+      closeControlsMenu();
       menuScreen.classList.remove("hidden");
       crosshair.classList.add("hidden");
     };
@@ -3935,6 +4092,16 @@
     const hideMenu = () => {
       menuScreen.classList.add("hidden");
       if (!sniperScopeActive) crosshair.classList.remove("hidden");
+    };
+
+    const openControlsMenu = () => {
+      menuScreen.classList.add("controls-open");
+      controlsSection.classList.remove("hidden");
+    };
+
+    const closeControlsMenu = () => {
+      menuScreen.classList.remove("controls-open");
+      controlsSection.classList.add("hidden");
     };
 
     const setSniperScopeActive = (active) => {
@@ -4111,7 +4278,11 @@
     });
 
     controlsToggle.addEventListener("click", () => {
-      controlsSection.classList.toggle("hidden");
+      openControlsMenu();
+    });
+
+    controlsBackBtn.addEventListener("click", () => {
+      closeControlsMenu();
     });
 
     autoJumpToggleBtn.addEventListener("click", () => {
@@ -4195,7 +4366,8 @@
     const right = new THREE.Vector3();
     const moveWish = new THREE.Vector3();
     const dashDirection = new THREE.Vector3();
-    const maxSimDt = GameConfig.renderer.maxSimDt;
+    const fixedDt = 1 / 60;
+    let physicsAccumulator = 0;
     let fireflyAccumulator = 0;
     const fireflyStep = GameConfig.renderer.fireflyStep;
     let wallJumpCharges = wallJumpMaxCharges;
@@ -4995,9 +5167,6 @@
           physicsFlags.useRapierProjectiles &&
           projectile.rapierHandle != null
         ) {
-          if (!projectile.prevPhysicsPos) {
-            projectile.prevPhysicsPos = projectile.mesh.position.clone();
-          }
           tempTraceStart.copy(projectile.prevPhysicsPos);
           tempTraceEnd.copy(projectile.mesh.position);
           projectile.prevPhysicsPos.copy(projectile.mesh.position);
@@ -5008,10 +5177,16 @@
           tempTraceEnd.copy(projectile.mesh.position);
         }
 
-        const impact = traceProjectileImpact(tempTraceStart, tempTraceEnd, projectile.radius);
-        if (impact) {
-          projectile.mesh.position.copy(impact.point);
-          explodeProjectile(projectile, impact.normal);
+        const hasImpact = traceProjectileImpact(
+          tempTraceStart,
+          tempTraceEnd,
+          projectile.radius,
+          tempProjectileImpactPoint,
+          tempProjectileImpactNormal
+        );
+        if (hasImpact) {
+          projectile.mesh.position.copy(tempProjectileImpactPoint);
+          explodeProjectile(projectile, tempProjectileImpactNormal);
           projectiles.splice(i, 1);
         }
       }
@@ -5452,8 +5627,13 @@
       updateAmbientParticles(frameDt);
 
       if (controls.isLocked && !isPaused) {
-        const simDt = Math.min(frameDt, maxSimDt);
-        updatePlayerPhysics(simDt);
+        physicsAccumulator += frameDt;
+        while (physicsAccumulator >= fixedDt) {
+          updatePlayerPhysics(fixedDt);
+          physicsAccumulator -= fixedDt;
+        }
+      } else {
+        physicsAccumulator = 0;
       }
       updateNeonLights(player.position);
 
