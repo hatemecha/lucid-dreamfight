@@ -259,7 +259,8 @@
     {
       "imports": {
         "three": "https://cdn.jsdelivr.net/npm/three@0.161.0/build/three.module.js",
-        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.161.0/examples/jsm/"
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.161.0/examples/jsm/",
+        "@dimforge/rapier3d-compat": "https://cdn.jsdelivr.net/npm/@dimforge/rapier3d-compat@0.19.3/rapier.mjs"
       }
     }
   </script>
@@ -267,6 +268,7 @@
   <script type="module">
     import * as THREE from "three";
     import { PointerLockControls } from "three/addons/controls/PointerLockControls.js";
+    import RAPIER from "@dimforge/rapier3d-compat";
 
     // Setup
     const app = document.getElementById("app");
@@ -334,6 +336,27 @@
       maxDetachedChunks: 22,
       maxDetachedRenderVoxels: 140
     };
+    const physicsFlags = {
+      useRapierWorld: true,
+      useRapierPlayerKCC: false,
+      useRapierProjectiles: false,
+      useRapierDebris: false,
+      useRapierDestruction: false
+    };
+    const physicsConfig = {
+      fixedStep: 1 / 60,
+      maxSubsteps: 3,
+      gravityY: -17.5,
+      playerOffset: 0.02
+    };
+    let rapierReady = false;
+    try {
+      await RAPIER.init();
+      rapierReady = true;
+      console.info("[Rapier] Initialized @dimforge/rapier3d-compat@0.19.3");
+    } catch (error) {
+      console.warn("[Rapier] Init failed, legacy physics fallback remains active.", error);
+    }
 
     const buildStratifiedScatter = (count, halfExtent, minY, maxY, jitter = 0.35) => {
       const positions = new Array(count);
@@ -721,6 +744,498 @@
     const colliderToBlockState = new Map();
     const detachedVoxelChunks = [];
     let nextBlockId = 1;
+    const physicsBridge = {
+      enabled: false,
+      world: null,
+      characterController: null,
+      playerRigidBody: null,
+      playerCollider: null,
+      playerBodyOffsetY: 0,
+      lastPlayerFeetPos: new THREE.Vector3(),
+      accumulator: 0,
+      fixedStep: physicsConfig.fixedStep,
+      maxSubsteps: physicsConfig.maxSubsteps,
+      staticWorldRegistered: false,
+      threeToRapierHandle: new Map(),
+      rapierHandleToGameplayState: new Map(),
+      blockBodyById: new Map(),
+      staticColliderHandles: new Set(),
+      dynamicBodyHandles: new Set(),
+
+      init() {
+        if (!physicsFlags.useRapierWorld || !rapierReady) return false;
+        if (this.enabled && this.world) return true;
+
+        this.world = new RAPIER.World({ x: 0, y: physicsConfig.gravityY, z: 0 });
+        this.fixedStep = physicsConfig.fixedStep;
+        this.maxSubsteps = physicsConfig.maxSubsteps;
+        this.accumulator = 0;
+        this.staticWorldRegistered = false;
+        this.registerStaticWorld();
+        this._ensurePlayerController();
+        this.enabled = true;
+        return true;
+      },
+
+      dispose() {
+        this.enabled = false;
+        this.accumulator = 0;
+        this.staticWorldRegistered = false;
+        this.characterController?.free?.();
+        this.characterController = null;
+        this.playerRigidBody = null;
+        this.playerCollider = null;
+        this.world = null;
+        this.threeToRapierHandle.clear();
+        this.rapierHandleToGameplayState.clear();
+        this.blockBodyById.clear();
+        this.staticColliderHandles.clear();
+        this.dynamicBodyHandles.clear();
+      },
+
+      registerStaticWorld() {
+        if (!this.world || this.staticWorldRegistered) return;
+        this._registerStaticBounds();
+        for (const blockState of destructibleBlockStates) {
+          this._registerBlockBody(blockState);
+        }
+        this.staticWorldRegistered = true;
+      },
+
+      _registerStaticBounds() {
+        if (!this.world) return;
+        const addStaticCollider = (halfX, halfY, halfZ, x, y, z) => {
+          const desc = RAPIER.ColliderDesc.cuboid(halfX, halfY, halfZ);
+          desc.setTranslation(x, y, z);
+          const collider = this.world.createCollider(desc);
+          this.staticColliderHandles.add(collider.handle);
+          this.rapierHandleToGameplayState.set(collider.handle, { kind: "staticCollider" });
+        };
+
+        const worldHalf = mapHalfSize + mapWallThickness;
+        const floorHalfY = 0.05;
+        addStaticCollider(worldHalf, floorHalfY, worldHalf, 0, -floorHalfY, 0);
+        addStaticCollider(worldHalf, floorHalfY, worldHalf, 0, mapWallHeight + floorHalfY, 0);
+
+        const wallHalfY = mapWallHeight * 0.5;
+        const wallHalfSpan = mapHalfSize + mapWallThickness;
+        const wallHalfThickness = mapWallThickness * 0.5;
+        addStaticCollider(wallHalfSpan, wallHalfY, wallHalfThickness, 0, wallHalfY, -wallOffset);
+        addStaticCollider(wallHalfSpan, wallHalfY, wallHalfThickness, 0, wallHalfY, wallOffset);
+        addStaticCollider(wallHalfThickness, wallHalfY, wallHalfSpan, -wallOffset, wallHalfY, 0);
+        addStaticCollider(wallHalfThickness, wallHalfY, wallHalfSpan, wallOffset, wallHalfY, 0);
+      },
+
+      _buildBlockCuboids(blockState) {
+        if (!blockState || blockState.aliveCount <= 0) return [];
+        if (!physicsFlags.useRapierDestruction) {
+          const min = blockState.localBoundsMin;
+          const max = blockState.localBoundsMax;
+          return [{
+            centerX: (min.x + max.x) * 0.5,
+            centerY: (min.y + max.y) * 0.5,
+            centerZ: (min.z + max.z) * 0.5,
+            halfX: (max.x - min.x) * 0.5,
+            halfY: (max.y - min.y) * 0.5,
+            halfZ: (max.z - min.z) * 0.5
+          }];
+        }
+
+        const cuboids = [];
+        const visited = new Uint8Array(blockState.totalVoxels);
+        const countX = blockState.voxelCountX;
+        const countY = blockState.voxelCountY;
+        const countZ = blockState.voxelCountZ;
+        const halfSizeX = blockState.sizeX * 0.5;
+        const halfSizeY = blockState.sizeY * 0.5;
+        const halfSizeZ = blockState.sizeZ * 0.5;
+
+        const isFillable = (gx, gy, gz) => {
+          if (
+            gx < 0 || gy < 0 || gz < 0 ||
+            gx >= countX || gy >= countY || gz >= countZ
+          ) return false;
+          const voxelIndex = getVoxelIndex(blockState, gx, gy, gz);
+          return blockState.voxelAlive[voxelIndex] === 1 && visited[voxelIndex] === 0;
+        };
+
+        for (let gz = 0; gz < countZ; gz++) {
+          for (let gy = 0; gy < countY; gy++) {
+            for (let gx = 0; gx < countX; gx++) {
+              const seedIndex = getVoxelIndex(blockState, gx, gy, gz);
+              if (!blockState.voxelAlive[seedIndex] || visited[seedIndex]) continue;
+
+              let maxGX = gx;
+              while (isFillable(maxGX + 1, gy, gz)) maxGX += 1;
+
+              let maxGY = gy;
+              while (true) {
+                const nextGY = maxGY + 1;
+                if (nextGY >= countY) break;
+                let rowFull = true;
+                for (let testGX = gx; testGX <= maxGX; testGX++) {
+                  if (!isFillable(testGX, nextGY, gz)) {
+                    rowFull = false;
+                    break;
+                  }
+                }
+                if (!rowFull) break;
+                maxGY = nextGY;
+              }
+
+              let maxGZ = gz;
+              while (true) {
+                const nextGZ = maxGZ + 1;
+                if (nextGZ >= countZ) break;
+                let slabFull = true;
+                for (let testGY = gy; testGY <= maxGY; testGY++) {
+                  for (let testGX = gx; testGX <= maxGX; testGX++) {
+                    if (!isFillable(testGX, testGY, nextGZ)) {
+                      slabFull = false;
+                      break;
+                    }
+                  }
+                  if (!slabFull) break;
+                }
+                if (!slabFull) break;
+                maxGZ = nextGZ;
+              }
+
+              for (let markGZ = gz; markGZ <= maxGZ; markGZ++) {
+                for (let markGY = gy; markGY <= maxGY; markGY++) {
+                  for (let markGX = gx; markGX <= maxGX; markGX++) {
+                    const index = getVoxelIndex(blockState, markGX, markGY, markGZ);
+                    visited[index] = 1;
+                  }
+                }
+              }
+
+              const minX = -halfSizeX + gx * blockState.voxelSizeX;
+              const maxX = -halfSizeX + (maxGX + 1) * blockState.voxelSizeX;
+              const minY = -halfSizeY + gy * blockState.voxelSizeY;
+              const maxY = -halfSizeY + (maxGY + 1) * blockState.voxelSizeY;
+              const minZ = -halfSizeZ + gz * blockState.voxelSizeZ;
+              const maxZ = -halfSizeZ + (maxGZ + 1) * blockState.voxelSizeZ;
+              cuboids.push({
+                centerX: (minX + maxX) * 0.5,
+                centerY: (minY + maxY) * 0.5,
+                centerZ: (minZ + maxZ) * 0.5,
+                halfX: (maxX - minX) * 0.5,
+                halfY: (maxY - minY) * 0.5,
+                halfZ: (maxZ - minZ) * 0.5
+              });
+            }
+          }
+        }
+
+        return cuboids;
+      },
+
+      _removeBlockBody(blockState) {
+        if (!this.world || !blockState) return;
+        const entry = this.blockBodyById.get(blockState.id);
+        if (!entry) return;
+        const body = this.world.getRigidBody(entry.bodyHandle);
+        if (body) this.world.removeRigidBody(body);
+        this.blockBodyById.delete(blockState.id);
+        this.dynamicBodyHandles.delete(entry.bodyHandle);
+        this.threeToRapierHandle.delete(blockState.mesh.id);
+        this.rapierHandleToGameplayState.delete(entry.bodyHandle);
+        for (const colliderHandle of entry.colliderHandles) {
+          this.rapierHandleToGameplayState.delete(colliderHandle);
+        }
+      },
+
+      _registerBlockBody(blockState) {
+        if (!this.world || !blockState || blockState.destroyed || blockState.aliveCount <= 0) return;
+        this._removeBlockBody(blockState);
+
+        const isKinematic = !!blockState.dynamicTile;
+        const rbDesc = isKinematic
+          ? RAPIER.RigidBodyDesc.kinematicPositionBased()
+          : RAPIER.RigidBodyDesc.fixed();
+        rbDesc.setTranslation(
+          blockState.mesh.position.x,
+          blockState.mesh.position.y,
+          blockState.mesh.position.z
+        );
+        const body = this.world.createRigidBody(rbDesc);
+        const cuboids = this._buildBlockCuboids(blockState);
+        const colliderHandles = [];
+        for (const cuboid of cuboids) {
+          const colliderDesc = RAPIER.ColliderDesc.cuboid(
+            Math.max(0.0001, cuboid.halfX),
+            Math.max(0.0001, cuboid.halfY),
+            Math.max(0.0001, cuboid.halfZ)
+          );
+          colliderDesc.setTranslation(cuboid.centerX, cuboid.centerY, cuboid.centerZ);
+          colliderDesc.setFriction(0.9);
+          const collider = this.world.createCollider(colliderDesc, body);
+          colliderHandles.push(collider.handle);
+          this.rapierHandleToGameplayState.set(collider.handle, {
+            kind: "blockCollider",
+            blockId: blockState.id
+          });
+        }
+        this.blockBodyById.set(blockState.id, {
+          bodyHandle: body.handle,
+          colliderHandles,
+          isKinematic
+        });
+        this.threeToRapierHandle.set(blockState.mesh.id, body.handle);
+        this.rapierHandleToGameplayState.set(body.handle, {
+          kind: "blockBody",
+          blockId: blockState.id
+        });
+      },
+
+      rebuildBlockCollider(blockState) {
+        if (!this.enabled || !this.world || !physicsFlags.useRapierWorld) return;
+        this._removeBlockBody(blockState);
+        if (!blockState || blockState.destroyed || blockState.aliveCount <= 0) return;
+        this._registerBlockBody(blockState);
+      },
+
+      _registerDynamicBody(kind, target, body, collider) {
+        if (!body || !target) return null;
+        const primaryObject = target.root || target.mesh;
+        const threeId = primaryObject ? primaryObject.id : null;
+        const state = {
+          kind,
+          target,
+          bodyHandle: body.handle,
+          colliderHandle: collider ? collider.handle : null,
+          threeId
+        };
+        this.dynamicBodyHandles.add(body.handle);
+        this.rapierHandleToGameplayState.set(body.handle, state);
+        if (collider) this.rapierHandleToGameplayState.set(collider.handle, state);
+        if (threeId != null) this.threeToRapierHandle.set(threeId, body.handle);
+        return body.handle;
+      },
+
+      registerProjectile(projectile) {
+        if (!this.enabled || !this.world || !physicsFlags.useRapierProjectiles || !projectile) return null;
+        if (projectile.rapierHandle != null) return projectile.rapierHandle;
+        const rbDesc = RAPIER.RigidBodyDesc.dynamic();
+        rbDesc.setTranslation(
+          projectile.mesh.position.x,
+          projectile.mesh.position.y,
+          projectile.mesh.position.z
+        );
+        rbDesc.setLinearDamping(0.03);
+        rbDesc.setAngularDamping(0.12);
+        const body = this.world.createRigidBody(rbDesc);
+        body.setLinvel(
+          { x: projectile.velocity.x, y: projectile.velocity.y, z: projectile.velocity.z },
+          true
+        );
+        body.setCcdEnabled(true);
+        const colliderDesc = RAPIER.ColliderDesc.ball(Math.max(0.02, projectile.radius || 0.1));
+        colliderDesc.setRestitution(0.18);
+        colliderDesc.setFriction(0.2);
+        const collider = this.world.createCollider(colliderDesc, body);
+        projectile.rapierHandle = this._registerDynamicBody("projectile", projectile, body, collider);
+        projectile.prevPhysicsPos = projectile.mesh.position.clone();
+        return projectile.rapierHandle;
+      },
+
+      registerDebris(chunk) {
+        if (!this.enabled || !this.world || !physicsFlags.useRapierDebris || !chunk) return null;
+        if (chunk.rapierHandle != null) return chunk.rapierHandle;
+        const sizeX = Math.max(0.05, chunk.mesh.scale.x);
+        const sizeY = Math.max(0.05, chunk.mesh.scale.y);
+        const sizeZ = Math.max(0.05, chunk.mesh.scale.z);
+        const rbDesc = RAPIER.RigidBodyDesc.dynamic();
+        rbDesc.setTranslation(chunk.mesh.position.x, chunk.mesh.position.y, chunk.mesh.position.z);
+        rbDesc.setLinearDamping(Math.max(0.1, chunk.drag * 0.22));
+        rbDesc.setAngularDamping(Math.max(0.1, chunk.drag * 0.18));
+        const body = this.world.createRigidBody(rbDesc);
+        body.setLinvel({ x: chunk.velocity.x, y: chunk.velocity.y, z: chunk.velocity.z }, true);
+        body.setAngvel({ x: chunk.spin.x, y: chunk.spin.y, z: chunk.spin.z }, true);
+        const colliderDesc = RAPIER.ColliderDesc.cuboid(sizeX * 0.5, sizeY * 0.5, sizeZ * 0.5);
+        colliderDesc.setRestitution(Math.max(0.02, Math.min(0.9, chunk.bounce || 0.2)));
+        colliderDesc.setFriction(0.65);
+        const collider = this.world.createCollider(colliderDesc, body);
+        chunk.rapierHandle = this._registerDynamicBody("debris", chunk, body, collider);
+        return chunk.rapierHandle;
+      },
+
+      registerDetachedChunk(chunk) {
+        if (!this.enabled || !this.world || !physicsFlags.useRapierDebris || !chunk) return null;
+        if (chunk.rapierHandle != null) return chunk.rapierHandle;
+        const halfX = Math.max(0.05, (chunk.localMax.x - chunk.localMin.x) * 0.5);
+        const halfY = Math.max(0.05, (chunk.localMax.y - chunk.localMin.y) * 0.5);
+        const halfZ = Math.max(0.05, (chunk.localMax.z - chunk.localMin.z) * 0.5);
+        const centerX = (chunk.localMin.x + chunk.localMax.x) * 0.5;
+        const centerY = (chunk.localMin.y + chunk.localMax.y) * 0.5;
+        const centerZ = (chunk.localMin.z + chunk.localMax.z) * 0.5;
+
+        const rbDesc = RAPIER.RigidBodyDesc.dynamic();
+        rbDesc.setTranslation(chunk.root.position.x, chunk.root.position.y, chunk.root.position.z);
+        rbDesc.setLinearDamping(Math.max(0.08, chunk.drag * 0.15));
+        rbDesc.setAngularDamping(Math.max(0.08, chunk.drag * 0.12));
+        const body = this.world.createRigidBody(rbDesc);
+        body.setLinvel({ x: chunk.velocity.x, y: chunk.velocity.y, z: chunk.velocity.z }, true);
+        body.setAngvel({ x: chunk.spin.x, y: chunk.spin.y, z: chunk.spin.z }, true);
+        const colliderDesc = RAPIER.ColliderDesc.cuboid(halfX, halfY, halfZ);
+        colliderDesc.setTranslation(centerX, centerY, centerZ);
+        colliderDesc.setRestitution(Math.max(0.03, Math.min(0.9, chunk.bounce || 0.15)));
+        colliderDesc.setFriction(0.72);
+        const collider = this.world.createCollider(colliderDesc, body);
+        chunk.rapierHandle = this._registerDynamicBody("detachedChunk", chunk, body, collider);
+        return chunk.rapierHandle;
+      },
+
+      getRigidBody(handle) {
+        if (!this.world || handle == null) return null;
+        return this.world.getRigidBody(handle);
+      },
+
+      unregisterHandle(handle) {
+        if (!this.world || handle == null) return;
+        const state = this.rapierHandleToGameplayState.get(handle);
+        const body = this.world.getRigidBody(handle);
+        if (body) {
+          this.world.removeRigidBody(body);
+        } else if (state?.bodyHandle != null) {
+          const parentBody = this.world.getRigidBody(state.bodyHandle);
+          if (parentBody) this.world.removeRigidBody(parentBody);
+        }
+
+        const bodyHandle = body ? body.handle : state?.bodyHandle;
+        if (bodyHandle != null) {
+          this.dynamicBodyHandles.delete(bodyHandle);
+          this.rapierHandleToGameplayState.delete(bodyHandle);
+        }
+        if (state?.colliderHandle != null) {
+          this.rapierHandleToGameplayState.delete(state.colliderHandle);
+        }
+        if (state?.threeId != null) {
+          this.threeToRapierHandle.delete(state.threeId);
+        }
+      },
+
+      unregisterByThreeObject(object3d) {
+        if (!object3d) return;
+        const handle = this.threeToRapierHandle.get(object3d.id);
+        if (handle == null) return;
+        this.unregisterHandle(handle);
+      },
+
+      syncDynamicMeshes() {
+        if (!this.world || this.dynamicBodyHandles.size === 0) return;
+        for (const handle of this.dynamicBodyHandles) {
+          const body = this.world.getRigidBody(handle);
+          const state = this.rapierHandleToGameplayState.get(handle);
+          if (!body || !state || !state.target) continue;
+          const translation = body.translation();
+          const rotation = body.rotation();
+          const linearVelocity = body.linvel();
+
+          if (state.kind === "projectile") {
+            state.target.mesh.position.set(translation.x, translation.y, translation.z);
+            state.target.mesh.quaternion.set(rotation.x, rotation.y, rotation.z, rotation.w);
+            state.target.velocity.set(linearVelocity.x, linearVelocity.y, linearVelocity.z);
+          } else if (state.kind === "debris") {
+            state.target.mesh.position.set(translation.x, translation.y, translation.z);
+            state.target.mesh.quaternion.set(rotation.x, rotation.y, rotation.z, rotation.w);
+            state.target.velocity.set(linearVelocity.x, linearVelocity.y, linearVelocity.z);
+          } else if (state.kind === "detachedChunk") {
+            state.target.root.position.set(translation.x, translation.y, translation.z);
+            state.target.root.quaternion.set(rotation.x, rotation.y, rotation.z, rotation.w);
+            state.target.velocity.set(linearVelocity.x, linearVelocity.y, linearVelocity.z);
+          }
+        }
+      },
+
+      _syncKinematicBlocks() {
+        if (!this.world) return;
+        for (const tile of dynamicTerrainTiles) {
+          if (!tile?.blockState) continue;
+          const entry = this.blockBodyById.get(tile.blockState.id);
+          if (!entry || !entry.isKinematic) continue;
+          const body = this.world.getRigidBody(entry.bodyHandle);
+          if (!body) continue;
+          body.setNextKinematicTranslation({
+            x: tile.mesh.position.x,
+            y: tile.mesh.position.y,
+            z: tile.mesh.position.z
+          });
+        }
+      },
+
+      _ensurePlayerController() {
+        if (!this.world || !physicsFlags.useRapierPlayerKCC) return;
+        if (!this.characterController) {
+          this.characterController = this.world.createCharacterController(physicsConfig.playerOffset);
+          this.characterController.enableAutostep(stepHeight, playerRadius * 0.25, true);
+          this.characterController.enableSnapToGround(groundSnap);
+          this.characterController.setMaxSlopeClimbAngle(Math.PI * 0.45);
+          this.characterController.setMinSlopeSlideAngle(Math.PI * 0.55);
+        }
+        if (this.playerRigidBody && this.playerCollider) return;
+
+        const totalHeight = standEyeHeight + playerHeadClearance;
+        const capsuleHalfHeight = Math.max(0.05, totalHeight * 0.5 - playerRadius);
+        this.playerBodyOffsetY = capsuleHalfHeight + playerRadius;
+        const rbDesc = RAPIER.RigidBodyDesc.kinematicPositionBased();
+        rbDesc.setTranslation(
+          player.position.x,
+          player.position.y + this.playerBodyOffsetY,
+          player.position.z
+        );
+        const body = this.world.createRigidBody(rbDesc);
+        const colliderDesc = RAPIER.ColliderDesc.capsule(capsuleHalfHeight, playerRadius);
+        colliderDesc.setFriction(0.05);
+        colliderDesc.setRestitution(0);
+        const collider = this.world.createCollider(colliderDesc, body);
+        this.playerRigidBody = body;
+        this.playerCollider = collider;
+        this.lastPlayerFeetPos.copy(player.position);
+        this.rapierHandleToGameplayState.set(body.handle, { kind: "playerBody" });
+        this.rapierHandleToGameplayState.set(collider.handle, { kind: "playerCollider" });
+      },
+
+      applyPlayerKCCCorrection() {
+        if (!this.enabled || !physicsFlags.useRapierPlayerKCC) return;
+        this._ensurePlayerController();
+        if (!this.characterController || !this.playerCollider || !this.playerRigidBody) return;
+
+        const desiredMove = {
+          x: player.position.x - this.lastPlayerFeetPos.x,
+          y: player.position.y - this.lastPlayerFeetPos.y,
+          z: player.position.z - this.lastPlayerFeetPos.z
+        };
+        this.characterController.computeColliderMovement(this.playerCollider, desiredMove);
+        const corrected = this.characterController.computedMovement();
+        const nextX = this.lastPlayerFeetPos.x + corrected.x;
+        const nextY = this.lastPlayerFeetPos.y + corrected.y;
+        const nextZ = this.lastPlayerFeetPos.z + corrected.z;
+
+        player.position.set(nextX, nextY, nextZ);
+        this.lastPlayerFeetPos.set(nextX, nextY, nextZ);
+        this.playerRigidBody.setNextKinematicTranslation({
+          x: nextX,
+          y: nextY + this.playerBodyOffsetY,
+          z: nextZ
+        });
+      },
+
+      step(dt) {
+        if (!this.enabled || !this.world) return;
+        this.accumulator = Math.min(this.accumulator + Math.max(0, dt), this.fixedStep * this.maxSubsteps);
+        let substeps = 0;
+        while (this.accumulator >= this.fixedStep && substeps < this.maxSubsteps) {
+          this._syncKinematicBlocks();
+          this.world.integrationParameters.dt = this.fixedStep;
+          this.world.step();
+          this.accumulator -= this.fixedStep;
+          substeps += 1;
+        }
+        this.syncDynamicMeshes();
+      }
+    };
 
     const voxelFractureNoise = (seedA, seedB) => {
       const n = Math.sin(seedA * 12.9898 + seedB * 78.233) * 43758.5453;
@@ -1421,6 +1936,10 @@
 
     const disposeProjectile = (projectile) => {
       if (!projectile) return;
+      if (projectile.rapierHandle != null) {
+        physicsBridge.unregisterHandle(projectile.rapierHandle);
+        projectile.rapierHandle = null;
+      }
       scene.remove(projectile.mesh);
       projectile.mesh.geometry.dispose();
       projectile.mesh.material.dispose();
@@ -1435,6 +1954,10 @@
 
     const disposeDebrisChunk = (chunk) => {
       if (!chunk) return;
+      if (chunk.rapierHandle != null) {
+        physicsBridge.unregisterHandle(chunk.rapierHandle);
+        chunk.rapierHandle = null;
+      }
       scene.remove(chunk.mesh);
       chunk.mesh.geometry.dispose();
       chunk.mesh.material.dispose();
@@ -1442,6 +1965,10 @@
 
     const disposeDetachedVoxelChunk = (chunk) => {
       if (!chunk) return;
+      if (chunk.rapierHandle != null) {
+        physicsBridge.unregisterHandle(chunk.rapierHandle);
+        chunk.rapierHandle = null;
+      }
       scene.remove(chunk.root);
       chunk.mesh.material.dispose();
     };
@@ -1790,7 +2317,7 @@
           .addScaledVector(push, (1.5 + Math.random() * 2.6) * energy)
           .add(new THREE.Vector3((Math.random() - 0.5) * 2.2, 2.2 + Math.random() * 2.8, (Math.random() - 0.5) * 2.2));
 
-        debrisChunks.push({
+        const debrisChunkState = {
           mesh: piece,
           velocity,
           spin: new THREE.Vector3((Math.random() - 0.5) * 9, (Math.random() - 0.5) * 9, (Math.random() - 0.5) * 9),
@@ -1798,7 +2325,11 @@
           maxLife: 0.98,
           bounce: 0.22 + Math.random() * 0.16,
           drag: 2.1 + Math.random() * 1.4
-        });
+        };
+        debrisChunks.push(debrisChunkState);
+        if (physicsFlags.useRapierDebris && physicsBridge.enabled) {
+          physicsBridge.registerDebris(debrisChunkState);
+        }
         if (debrisChunks.length > perfConfig.maxDebrisChunks) {
           disposeDebrisChunk(debrisChunks.shift());
         }
@@ -1897,7 +2428,7 @@
       velocity.y += 1.0 + Math.random() * 1.8;
 
       const chunkLife = 1.8 + Math.random() * 1.4 + Math.min(1.2, voxelIndices.length * 0.008);
-      detachedVoxelChunks.push({
+      const detachedChunkState = {
         root: chunkRoot,
         mesh: chunkMesh,
         velocity,
@@ -1908,7 +2439,11 @@
         maxLife: chunkLife,
         bounce: 0.16 + Math.random() * 0.13,
         drag: 0.85 + Math.random() * 0.8
-      });
+      };
+      detachedVoxelChunks.push(detachedChunkState);
+      if (physicsFlags.useRapierDebris && physicsBridge.enabled) {
+        physicsBridge.registerDetachedChunk(detachedChunkState);
+      }
       if (detachedVoxelChunks.length > perfConfig.maxDetachedChunks) {
         disposeDetachedVoxelChunk(detachedVoxelChunks.shift());
       }
@@ -2101,6 +2636,7 @@
       rebuildBlockVoxelMesh(blockState);
       updateBlockBoundsFromVoxels(blockState);
       syncBlockCollider(blockState);
+      physicsBridge.rebuildBlockCollider(blockState);
       const aliveRatio = blockState.totalVoxels > 0 ? (blockState.aliveCount / blockState.totalVoxels) : 0;
       blockState.health = blockState.maxHealth * aliveRatio;
       return removedIndices.length + detachedCount;
@@ -2132,6 +2668,7 @@
       }
 
       removeColliderFromWorld(blockState.collider);
+      physicsBridge.rebuildBlockCollider(blockState);
       boxes.remove(blockState.mesh);
       blockState.mesh.visible = false;
       blockState.voxelMesh.count = 0;
@@ -2331,7 +2868,7 @@
       if (projectiles.length >= perfConfig.maxProjectiles) {
         disposeProjectile(projectiles.shift());
       }
-      projectiles.push({
+      const projectileState = {
         mesh: projectileMesh,
         velocity: tempDir.clone().multiplyScalar(weaponDef.projectileSpeed || 34),
         radius: 0.12,
@@ -2339,7 +2876,11 @@
         explosionRadius: weaponDef.explosionRadius || 4.8,
         structureDamage: weaponDef.structureDamage || 210,
         damage: weaponDef.damage || 120
-      });
+      };
+      projectiles.push(projectileState);
+      if (physicsFlags.useRapierProjectiles && physicsBridge.enabled) {
+        physicsBridge.registerProjectile(projectileState);
+      }
     };
 
     const explodeProjectile = (projectile, normal = worldUp) => {
@@ -2846,6 +3387,10 @@
       if (document.hidden) resetPausedMotion();
     });
 
+    window.addEventListener("beforeunload", () => {
+      physicsBridge.dispose();
+    });
+
     resumeBtn.addEventListener("click", () => {
       safeRequestLock();
     });
@@ -2941,6 +3486,7 @@
     let wallJumpCharges = wallJumpMaxCharges;
     let wallContactTimer = 0;
     const lastWallContactNormal = new THREE.Vector3();
+    physicsBridge.init();
 
     const overlapsCircleXZ = (box, cx, cz, radius) => (
       cx + radius > box.min.x &&
@@ -3422,6 +3968,9 @@
       dashTimer = Math.max(0, dashTimer - dt);
       fireCooldown = Math.max(0, fireCooldown - dt);
       updateDynamicTerrain(dt);
+      if (physicsBridge.enabled) {
+        physicsBridge.step(dt);
+      }
       if (isGrounded) {
         wallJumpCharges = wallJumpMaxCharges;
         wallContactTimer = 0;
@@ -3485,10 +4034,23 @@
           continue;
         }
 
-        tempTraceStart.copy(projectile.mesh.position);
-        projectile.velocity.y -= 4.2 * dt;
-        projectile.mesh.position.addScaledVector(projectile.velocity, dt);
-        tempTraceEnd.copy(projectile.mesh.position);
+        if (
+          physicsBridge.enabled &&
+          physicsFlags.useRapierProjectiles &&
+          projectile.rapierHandle != null
+        ) {
+          if (!projectile.prevPhysicsPos) {
+            projectile.prevPhysicsPos = projectile.mesh.position.clone();
+          }
+          tempTraceStart.copy(projectile.prevPhysicsPos);
+          tempTraceEnd.copy(projectile.mesh.position);
+          projectile.prevPhysicsPos.copy(projectile.mesh.position);
+        } else {
+          tempTraceStart.copy(projectile.mesh.position);
+          projectile.velocity.y -= 4.2 * dt;
+          projectile.mesh.position.addScaledVector(projectile.velocity, dt);
+          tempTraceEnd.copy(projectile.mesh.position);
+        }
 
         const impact = traceProjectileImpact(tempTraceStart, tempTraceEnd, projectile.radius);
         if (impact) {
@@ -3502,46 +4064,53 @@
         const chunk = detachedVoxelChunks[i];
         chunk.life -= dt;
 
-        chunk.velocity.y -= 18.5 * dt;
-        const drag = Math.max(0, 1 - chunk.drag * dt);
-        chunk.velocity.multiplyScalar(drag);
-        chunk.root.position.addScaledVector(chunk.velocity, dt);
+        const usesRapierBody =
+          physicsBridge.enabled &&
+          physicsFlags.useRapierDebris &&
+          chunk.rapierHandle != null;
 
-        const spinSpeed = chunk.spin.length();
-        if (spinSpeed > 0.00001) {
-          tempChunkAxis.copy(chunk.spin).normalize();
-          tempChunkRotation.setFromAxisAngle(tempChunkAxis, spinSpeed * dt);
-          chunk.root.quaternion.multiply(tempChunkRotation);
-        }
+        if (!usesRapierBody) {
+          chunk.velocity.y -= 18.5 * dt;
+          const drag = Math.max(0, 1 - chunk.drag * dt);
+          chunk.velocity.multiplyScalar(drag);
+          chunk.root.position.addScaledVector(chunk.velocity, dt);
 
-        const minY = chunk.root.position.y + chunk.localMin.y;
-        if (minY <= 0.02) {
-          chunk.root.position.y += 0.02 - minY;
-          if (chunk.velocity.y < 0) {
-            chunk.velocity.y *= -chunk.bounce;
-            chunk.velocity.x *= 0.76;
-            chunk.velocity.z *= 0.76;
-            if (Math.abs(chunk.velocity.y) < 0.16) chunk.velocity.y = 0;
+          const spinSpeed = chunk.spin.length();
+          if (spinSpeed > 0.00001) {
+            tempChunkAxis.copy(chunk.spin).normalize();
+            tempChunkRotation.setFromAxisAngle(tempChunkAxis, spinSpeed * dt);
+            chunk.root.quaternion.multiply(tempChunkRotation);
           }
-        }
 
-        const minX = chunk.root.position.x + chunk.localMin.x;
-        const maxX = chunk.root.position.x + chunk.localMax.x;
-        const minZ = chunk.root.position.z + chunk.localMin.z;
-        const maxZ = chunk.root.position.z + chunk.localMax.z;
-        if (minX < -mapHalfSize) {
-          chunk.root.position.x += -mapHalfSize - minX;
-          if (chunk.velocity.x < 0) chunk.velocity.x *= -chunk.bounce;
-        } else if (maxX > mapHalfSize) {
-          chunk.root.position.x -= maxX - mapHalfSize;
-          if (chunk.velocity.x > 0) chunk.velocity.x *= -chunk.bounce;
-        }
-        if (minZ < -mapHalfSize) {
-          chunk.root.position.z += -mapHalfSize - minZ;
-          if (chunk.velocity.z < 0) chunk.velocity.z *= -chunk.bounce;
-        } else if (maxZ > mapHalfSize) {
-          chunk.root.position.z -= maxZ - mapHalfSize;
-          if (chunk.velocity.z > 0) chunk.velocity.z *= -chunk.bounce;
+          const minY = chunk.root.position.y + chunk.localMin.y;
+          if (minY <= 0.02) {
+            chunk.root.position.y += 0.02 - minY;
+            if (chunk.velocity.y < 0) {
+              chunk.velocity.y *= -chunk.bounce;
+              chunk.velocity.x *= 0.76;
+              chunk.velocity.z *= 0.76;
+              if (Math.abs(chunk.velocity.y) < 0.16) chunk.velocity.y = 0;
+            }
+          }
+
+          const minX = chunk.root.position.x + chunk.localMin.x;
+          const maxX = chunk.root.position.x + chunk.localMax.x;
+          const minZ = chunk.root.position.z + chunk.localMin.z;
+          const maxZ = chunk.root.position.z + chunk.localMax.z;
+          if (minX < -mapHalfSize) {
+            chunk.root.position.x += -mapHalfSize - minX;
+            if (chunk.velocity.x < 0) chunk.velocity.x *= -chunk.bounce;
+          } else if (maxX > mapHalfSize) {
+            chunk.root.position.x -= maxX - mapHalfSize;
+            if (chunk.velocity.x > 0) chunk.velocity.x *= -chunk.bounce;
+          }
+          if (minZ < -mapHalfSize) {
+            chunk.root.position.z += -mapHalfSize - minZ;
+            if (chunk.velocity.z < 0) chunk.velocity.z *= -chunk.bounce;
+          } else if (maxZ > mapHalfSize) {
+            chunk.root.position.z -= maxZ - mapHalfSize;
+            if (chunk.velocity.z > 0) chunk.velocity.z *= -chunk.bounce;
+          }
         }
 
         chunk.mesh.material.opacity = THREE.MathUtils.clamp(chunk.life / chunk.maxLife, 0, 1);
@@ -3555,21 +4124,28 @@
         const chunk = debrisChunks[i];
         chunk.life -= dt;
 
-        chunk.velocity.y -= 17.5 * dt;
-        const drag = Math.max(0, 1 - chunk.drag * dt);
-        chunk.velocity.multiplyScalar(drag);
-        chunk.mesh.position.addScaledVector(chunk.velocity, dt);
-        chunk.mesh.rotation.x += chunk.spin.x * dt;
-        chunk.mesh.rotation.y += chunk.spin.y * dt;
-        chunk.mesh.rotation.z += chunk.spin.z * dt;
+        const usesRapierBody =
+          physicsBridge.enabled &&
+          physicsFlags.useRapierDebris &&
+          chunk.rapierHandle != null;
 
-        if (chunk.mesh.position.y <= 0.05) {
-          chunk.mesh.position.y = 0.05;
-          if (chunk.velocity.y < 0) {
-            chunk.velocity.y *= -chunk.bounce;
-            chunk.velocity.x *= 0.75;
-            chunk.velocity.z *= 0.75;
-            if (Math.abs(chunk.velocity.y) < 0.18) chunk.velocity.y = 0;
+        if (!usesRapierBody) {
+          chunk.velocity.y -= 17.5 * dt;
+          const drag = Math.max(0, 1 - chunk.drag * dt);
+          chunk.velocity.multiplyScalar(drag);
+          chunk.mesh.position.addScaledVector(chunk.velocity, dt);
+          chunk.mesh.rotation.x += chunk.spin.x * dt;
+          chunk.mesh.rotation.y += chunk.spin.y * dt;
+          chunk.mesh.rotation.z += chunk.spin.z * dt;
+
+          if (chunk.mesh.position.y <= 0.05) {
+            chunk.mesh.position.y = 0.05;
+            if (chunk.velocity.y < 0) {
+              chunk.velocity.y *= -chunk.bounce;
+              chunk.velocity.x *= 0.75;
+              chunk.velocity.z *= 0.75;
+              if (Math.abs(chunk.velocity.y) < 0.18) chunk.velocity.y = 0;
+            }
           }
         }
 
@@ -3748,6 +4324,9 @@
         isGrounded = false;
       }
       resolveHorizontalCollisions();
+      if (physicsBridge.enabled && physicsFlags.useRapierPlayerKCC) {
+        physicsBridge.applyPlayerKCCCorrection();
+      }
 
       const horizontalSpeed = Math.hypot(velocity.x, velocity.z);
       if (!isDashing && horizontalSpeed > hardMaxHorizontalSpeed) {
