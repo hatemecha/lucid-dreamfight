@@ -794,6 +794,11 @@
       <span class="statusLabel">Sprint</span>
       <span id="statusSprintValue" class="statusValue">OFF</span>
     </div>
+    <div class="statusRow">
+      <i class="fa-solid fa-vector-square" aria-hidden="true"></i>
+      <span class="statusLabel">Coords</span>
+      <span id="statusCoordsValue" class="statusValue">X:0.00 Y:0.00 Z:0.00</span>
+    </div>
   </div>
   <div id="sniperScope" class="hidden"></div>
   <div id="reloadHud" class="hidden"><div id="reloadBarFill"></div></div>
@@ -1217,6 +1222,7 @@
     const statusDashValue = document.getElementById("statusDashValue");
     const statusCrouchValue = document.getElementById("statusCrouchValue");
     const statusSprintValue = document.getElementById("statusSprintValue");
+    const statusCoordsValue = document.getElementById("statusCoordsValue");
 
     const optMasterVolume = document.getElementById("optMasterVolume");
     const optMasterVolumeValue = document.getElementById("optMasterVolumeValue");
@@ -1909,42 +1915,122 @@
     const screenQuad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), screenMat);
     postScene.add(screenQuad);
 
-    const grid = new THREE.GridHelper(mapFloorSize + mapWallThickness * 2, mapFloorSize / 2, 0x2f3d54, 0x1a1f2c);
-    scene.add(grid);
+    const dreamFloorUniforms = {
+      time: { value: 0 },
+      blend: { value: 1 },
+      radius: { value: mapHalfSize }
+    };
 
-    const checkerSize = 32;
-    const checkerData = new Uint8Array(checkerSize * checkerSize * 4);
-    for (let y = 0; y < checkerSize; y++) {
-      for (let x = 0; x < checkerSize; x++) {
-        const stride = (y * checkerSize + x) * 4;
-        const isDark = ((x >> 2) + (y >> 2)) % 2 === 0;
-        const value = isDark ? 38 : 62;
-        checkerData[stride] = value;
-        checkerData[stride + 1] = value;
-        checkerData[stride + 2] = value + 10;
-        checkerData[stride + 3] = 255;
+    const floorTextureSize = 128;
+    const floorColorData = new Uint8Array(floorTextureSize * floorTextureSize * 4);
+    const floorGlowData = new Uint8Array(floorTextureSize * floorTextureSize * 4);
+    for (let y = 0; y < floorTextureSize; y++) {
+      for (let x = 0; x < floorTextureSize; x++) {
+        const idx = (y * floorTextureSize + x) * 4;
+        const majorGrid = (x % 16 === 0) || (y % 16 === 0);
+        const minorGrid = (x % 8 === 0) || (y % 8 === 0);
+        const diagGrid = ((x + y) % 32 === 0) || ((x - y + floorTextureSize) % 32 === 0);
+        const noise = (((x * 13 + y * 7) & 7) - 3);
+
+        let r = 18 + noise;
+        let g = 22 + noise;
+        let b = 36 + noise;
+
+        if (minorGrid) {
+          r += 4;
+          g += 7;
+          b += 10;
+        }
+        if (majorGrid) {
+          r += 16;
+          g += 32;
+          b += 52;
+        }
+        if (diagGrid) {
+          r += 10;
+          g += 16;
+          b += 26;
+        }
+
+        floorColorData[idx] = THREE.MathUtils.clamp(r, 0, 255);
+        floorColorData[idx + 1] = THREE.MathUtils.clamp(g, 0, 255);
+        floorColorData[idx + 2] = THREE.MathUtils.clamp(b, 0, 255);
+        floorColorData[idx + 3] = 255;
+
+        const glowStrength = majorGrid ? 255 : (diagGrid ? 150 : (minorGrid ? 96 : 0));
+        floorGlowData[idx] = glowStrength;
+        floorGlowData[idx + 1] = glowStrength;
+        floorGlowData[idx + 2] = glowStrength;
+        floorGlowData[idx + 3] = 255;
       }
     }
 
-    const checkerTex = new THREE.DataTexture(checkerData, checkerSize, checkerSize, THREE.RGBAFormat);
-    checkerTex.wrapS = THREE.RepeatWrapping;
-    checkerTex.wrapT = THREE.RepeatWrapping;
-    checkerTex.repeat.set(24, 24);
-    checkerTex.magFilter = THREE.NearestFilter;
-    checkerTex.minFilter = THREE.NearestFilter;
-    checkerTex.generateMipmaps = false;
-    checkerTex.unpackAlignment = 1;
-    checkerTex.needsUpdate = true;
+    const floorColorTex = new THREE.DataTexture(floorColorData, floorTextureSize, floorTextureSize, THREE.RGBAFormat);
+    floorColorTex.wrapS = THREE.RepeatWrapping;
+    floorColorTex.wrapT = THREE.RepeatWrapping;
+    floorColorTex.repeat.set(14, 14);
+    floorColorTex.magFilter = THREE.NearestFilter;
+    floorColorTex.minFilter = THREE.NearestFilter;
+    floorColorTex.generateMipmaps = false;
+    floorColorTex.unpackAlignment = 1;
+    floorColorTex.colorSpace = THREE.SRGBColorSpace;
+    floorColorTex.needsUpdate = true;
 
-    const groundMat = new THREE.MeshLambertMaterial({
-      map: checkerTex,
-      color: 0x9ea8bc
+    const floorGlowTex = new THREE.DataTexture(floorGlowData, floorTextureSize, floorTextureSize, THREE.RGBAFormat);
+    floorGlowTex.wrapS = THREE.RepeatWrapping;
+    floorGlowTex.wrapT = THREE.RepeatWrapping;
+    floorGlowTex.repeat.copy(floorColorTex.repeat);
+    floorGlowTex.magFilter = THREE.NearestFilter;
+    floorGlowTex.minFilter = THREE.NearestFilter;
+    floorGlowTex.generateMipmaps = false;
+    floorGlowTex.unpackAlignment = 1;
+    floorGlowTex.needsUpdate = true;
+
+    const groundMat = new THREE.MeshStandardMaterial({
+      map: floorColorTex,
+      color: 0x2a3450,
+      emissive: 0x2b4e88,
+      emissiveMap: floorGlowTex,
+      emissiveIntensity: 0.24,
+      roughness: 0.82,
+      metalness: 0.08,
+      dithering: true
     });
+
+    const groundGlowMat = new THREE.MeshBasicMaterial({
+      color: 0x88deff,
+      alphaMap: floorGlowTex,
+      transparent: true,
+      opacity: 0.12,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending
+    });
+    let floorBaseEmissiveIntensity = 0.24;
+    let floorBaseGlowOpacity = 0.12;
+
+    const applyFloorStyleVisual = () => {
+      const dreamEnabled = optionState.floorStyle !== "flat";
+      dreamFloorUniforms.blend.value = dreamEnabled ? 1 : 0;
+      groundMat.color.setHex(dreamEnabled ? 0x2a3450 : 0x2a2f3a);
+      groundMat.emissive.setHex(dreamEnabled ? 0x2b4e88 : 0x121827);
+      floorBaseEmissiveIntensity = dreamEnabled ? 0.24 : 0.08;
+      floorBaseGlowOpacity = dreamEnabled ? 0.12 : 0;
+      groundMat.emissiveIntensity = floorBaseEmissiveIntensity;
+      groundMat.roughness = dreamEnabled ? 0.82 : 0.94;
+      groundMat.metalness = dreamEnabled ? 0.08 : 0.02;
+      groundGlowMat.opacity = floorBaseGlowOpacity;
+      groundGlow.visible = dreamEnabled;
+    };
 
     const ground = new THREE.Mesh(new THREE.PlaneGeometry(mapFloorSize, mapFloorSize), groundMat);
     ground.rotation.x = -Math.PI * 0.5;
     ground.position.y = -0.001;
     scene.add(ground);
+
+    const groundGlow = new THREE.Mesh(new THREE.PlaneGeometry(mapFloorSize, mapFloorSize), groundGlowMat);
+    groundGlow.rotation.x = -Math.PI * 0.5;
+    groundGlow.position.y = 0.004;
+    scene.add(groundGlow);
 
     const boxes = new THREE.Group();
     const boxColliders = [];
@@ -1952,11 +2038,13 @@
     const colliderSpatialGrid = new Map();
     const colliderSpatialKeys = new Map();
     let colliderSpatialDirty = true;
+    let colliderSpatialRevision = 0;
     const nearbyColliders = [];
     const nearbyCollidersSeen = new Set();
     const toSpatialKey = (cx, cz) => `${cx},${cz}`;
     const markColliderSpatialDirty = () => {
       colliderSpatialDirty = true;
+      colliderSpatialRevision += 1;
     };
     const rebuildColliderSpatial = () => {
       colliderSpatialGrid.clear();
@@ -2699,11 +2787,11 @@
     };
 
     const buildVoxelGrid = (sx, sy, sz, material, shootable = false) => {
-      const targetVoxelXZ = 2.15;
-      const targetVoxelY = 2.35;
-      const voxelCountX = THREE.MathUtils.clamp(Math.round(sx / targetVoxelXZ), 2, 6);
-      const voxelCountY = THREE.MathUtils.clamp(Math.round(sy / targetVoxelY), 8, 30);
-      const voxelCountZ = THREE.MathUtils.clamp(Math.round(sz / targetVoxelXZ), 2, 6);
+      const targetVoxelXZ = lowSpecProfile ? 2.25 : (midSpecProfile ? 1.85 : 1.55);
+      const targetVoxelY = lowSpecProfile ? 2.4 : (midSpecProfile ? 1.95 : 1.65);
+      const voxelCountX = THREE.MathUtils.clamp(Math.round(sx / targetVoxelXZ), 3, 8);
+      const voxelCountY = THREE.MathUtils.clamp(Math.round(sy / targetVoxelY), 10, 30);
+      const voxelCountZ = THREE.MathUtils.clamp(Math.round(sz / targetVoxelXZ), 3, 8);
       const voxelSizeX = sx / voxelCountX;
       const voxelSizeY = sy / voxelCountY;
       const voxelSizeZ = sz / voxelCountZ;
@@ -2917,6 +3005,43 @@
       blockState.visibleCount = instanceCount;
     };
 
+    const rebuildBlockColumnExtents = (blockState) => {
+      if (!blockState) return;
+      const countX = blockState.voxelCountX;
+      const countY = blockState.voxelCountY;
+      const countZ = blockState.voxelCountZ;
+      const columnCount = countX * countZ;
+      if (
+        !blockState.columnMinGy ||
+        !blockState.columnMaxGy ||
+        blockState.columnMinGy.length !== columnCount ||
+        blockState.columnMaxGy.length !== columnCount
+      ) {
+        blockState.columnMinGy = new Int16Array(columnCount);
+        blockState.columnMaxGy = new Int16Array(columnCount);
+      }
+
+      const columnMinGy = blockState.columnMinGy;
+      const columnMaxGy = blockState.columnMaxGy;
+      for (let i = 0; i < columnCount; i++) {
+        columnMinGy[i] = 32767;
+        columnMaxGy[i] = -1;
+      }
+
+      const voxelAlive = blockState.voxelAlive;
+      const layerStride = countX * countY;
+      for (let i = 0; i < voxelAlive.length; i++) {
+        if (!voxelAlive[i]) continue;
+        const gz = Math.floor(i / layerStride);
+        const remLayer = i - gz * layerStride;
+        const gy = Math.floor(remLayer / countX);
+        const gx = remLayer - gy * countX;
+        const columnIndex = gx + countX * gz;
+        if (gy < columnMinGy[columnIndex]) columnMinGy[columnIndex] = gy;
+        if (gy > columnMaxGy[columnIndex]) columnMaxGy[columnIndex] = gy;
+      }
+    };
+
     const syncBlockCollider = (blockState) => {
       const px = blockState.mesh.position.x;
       const py = blockState.mesh.position.y;
@@ -3047,6 +3172,8 @@
         totalVoxels: voxelGrid.totalVoxels,
         aliveCount: voxelGrid.totalVoxels,
         visibleCount: voxelGrid.visibleCount,
+        columnMinGy: null,
+        columnMaxGy: null,
         localBoundsMin: new THREE.Vector3(-sx * 0.5, -sy * 0.5, -sz * 0.5),
         localBoundsMax: new THREE.Vector3(sx * 0.5, sy * 0.5, sz * 0.5),
         halfX: sx * 0.5,
@@ -3061,6 +3188,7 @@
       };
 
       updateBlockBoundsFromVoxels(blockState);
+      rebuildBlockColumnExtents(blockState);
       syncBlockCollider(blockState);
       boxColliders.push(collider);
       markColliderSpatialDirty();
@@ -3723,6 +3851,8 @@
     const tempShootDir = new THREE.Vector3();
     const tempRecoilDir = new THREE.Vector3();
     const tempExplosionDir = new THREE.Vector3();
+    const tempExplosionClosestPoint = new THREE.Vector3();
+    const tempWallContactCandidateNormal = new THREE.Vector3();
     const playerVelocity = velocity;
     const impulsePhysicsEntities = [];
     let lastAmmoHudText = "";
@@ -3730,7 +3860,8 @@
       health: "",
       dash: "",
       crouch: "",
-      sprint: ""
+      sprint: "",
+      coords: ""
     };
     let switchCodeFxTimer = 0;
     let switchCodeFxTick = 0;
@@ -3786,11 +3917,13 @@
         : (dashCooldownTimer > 0 ? `CD ${dashCooldownTimer.toFixed(1)}s` : "LISTO");
       const crouchText = (isCrouching || crouchBlend > 0.1) ? "ON" : "OFF";
       const sprintText = isSprinting ? "ON" : "OFF";
+      const coordsText = `X:${playerBody.position.x.toFixed(2)} Y:${playerBody.position.y.toFixed(2)} Z:${playerBody.position.z.toFixed(2)}`;
 
       setStatusHudText(statusHealthValue, "health", "N/A");
       setStatusHudText(statusDashValue, "dash", dashText);
       setStatusHudText(statusCrouchValue, "crouch", crouchText);
       setStatusHudText(statusSprintValue, "sprint", sprintText);
+      setStatusHudText(statusCoordsValue, "coords", coordsText);
     };
     updateStatusHud(false, false);
 
@@ -4011,6 +4144,7 @@
       particleEffectsReduced: false,
       pixelStyle: true,
       dreamBoundaryFx: true,
+      floorStyle: "dream",
       mouseSensitivity: 55,
       recoilVibration: 100,
       cameraShake: true,
@@ -4080,6 +4214,7 @@
         optionState.particleEffectsReduced = parsed.particleEffectsReduced === true;
         optionState.pixelStyle = parsed.pixelStyle !== false;
         optionState.dreamBoundaryFx = parsed.dreamBoundaryFx !== false;
+        optionState.floorStyle = normalizeChoice(parsed.floorStyle, ["dream", "flat"], optionDefaults.floorStyle);
         optionState.mouseSensitivity = clampNumber(parsed.mouseSensitivity, 0, 100, optionDefaults.mouseSensitivity);
         optionState.recoilVibration = clampNumber(parsed.recoilVibration, 0, 120, optionDefaults.recoilVibration);
         optionState.cameraShake = parsed.cameraShake !== false;
@@ -4212,6 +4347,7 @@
       }
 
       renderer.domElement.style.imageRendering = optionState.pixelStyle ? "pixelated" : "auto";
+      applyFloorStyleVisual();
 
       dreamBoundaryFxEnabled = optionState.dreamBoundaryFx !== false;
       if (!dreamBoundaryFxEnabled) {
@@ -4959,6 +5095,7 @@
       if (meshChanged) blockState.voxelMesh.instanceMatrix.needsUpdate = true;
       blockState.aliveCount = Math.max(0, blockState.aliveCount - removedIndices.length);
       updateBlockBoundsFromVoxels(blockState);
+      rebuildBlockColumnExtents(blockState);
       syncBlockCollider(blockState);
       physicsBridge.rebuildBlockCollider(blockState);
       const aliveRatio = blockState.totalVoxels > 0 ? (blockState.aliveCount / blockState.totalVoxels) : 0;
@@ -5046,6 +5183,101 @@
       applyDamageToBlockState(blockState, damage, hit.point, tempNormal, impactDir, 1.0 + damage / 180);
     };
 
+    const getClosestPointOnVoxelBlock = (blockState, worldPoint, searchRadius, outPoint) => {
+      if (!blockState || blockState.destroyed || blockState.aliveCount <= 0) return Number.POSITIVE_INFINITY;
+      const meshPos = blockState.mesh.position;
+      const localX = worldPoint.x - meshPos.x;
+      const localY = worldPoint.y - meshPos.y;
+      const localZ = worldPoint.z - meshPos.z;
+      const radius = Math.max(0, searchRadius);
+      if (
+        localX < blockState.localBoundsMin.x - radius || localX > blockState.localBoundsMax.x + radius ||
+        localY < blockState.localBoundsMin.y - radius || localY > blockState.localBoundsMax.y + radius ||
+        localZ < blockState.localBoundsMin.z - radius || localZ > blockState.localBoundsMax.z + radius
+      ) {
+        return Number.POSITIVE_INFINITY;
+      }
+
+      const localHalfX = blockState.sizeX * 0.5;
+      const localHalfY = blockState.sizeY * 0.5;
+      const localHalfZ = blockState.sizeZ * 0.5;
+      const halfVX = blockState.voxelSizeX * 0.5;
+      const halfVY = blockState.voxelSizeY * 0.5;
+      const halfVZ = blockState.voxelSizeZ * 0.5;
+      const minGX = THREE.MathUtils.clamp(
+        Math.floor((localX - radius + localHalfX) / blockState.voxelSizeX) - 1,
+        0,
+        blockState.voxelCountX - 1
+      );
+      const maxGX = THREE.MathUtils.clamp(
+        Math.floor((localX + radius + localHalfX) / blockState.voxelSizeX) + 1,
+        0,
+        blockState.voxelCountX - 1
+      );
+      const minGY = THREE.MathUtils.clamp(
+        Math.floor((localY - radius + localHalfY) / blockState.voxelSizeY) - 1,
+        0,
+        blockState.voxelCountY - 1
+      );
+      const maxGY = THREE.MathUtils.clamp(
+        Math.floor((localY + radius + localHalfY) / blockState.voxelSizeY) + 1,
+        0,
+        blockState.voxelCountY - 1
+      );
+      const minGZ = THREE.MathUtils.clamp(
+        Math.floor((localZ - radius + localHalfZ) / blockState.voxelSizeZ) - 1,
+        0,
+        blockState.voxelCountZ - 1
+      );
+      const maxGZ = THREE.MathUtils.clamp(
+        Math.floor((localZ + radius + localHalfZ) / blockState.voxelSizeZ) + 1,
+        0,
+        blockState.voxelCountZ - 1
+      );
+
+      let bestDistSq = Number.POSITIVE_INFINITY;
+      let found = false;
+      for (let gz = minGZ; gz <= maxGZ; gz++) {
+        for (let gy = minGY; gy <= maxGY; gy++) {
+          for (let gx = minGX; gx <= maxGX; gx++) {
+            const voxelIndex = getVoxelIndex(blockState, gx, gy, gz);
+            if (!blockState.voxelAlive[voxelIndex]) continue;
+            const arrIndex = voxelIndex * 3;
+            const cx = blockState.voxelLocalCenters[arrIndex + 0];
+            const cy = blockState.voxelLocalCenters[arrIndex + 1];
+            const cz = blockState.voxelLocalCenters[arrIndex + 2];
+            const minX = cx - halfVX;
+            const maxX = cx + halfVX;
+            const minY = cy - halfVY;
+            const maxY = cy + halfVY;
+            const minZ = cz - halfVZ;
+            const maxZ = cz + halfVZ;
+
+            const closestX = THREE.MathUtils.clamp(localX, minX, maxX);
+            const closestY = THREE.MathUtils.clamp(localY, minY, maxY);
+            const closestZ = THREE.MathUtils.clamp(localZ, minZ, maxZ);
+            const dx = localX - closestX;
+            const dy = localY - closestY;
+            const dz = localZ - closestZ;
+            const distSq = dx * dx + dy * dy + dz * dz;
+            if (distSq >= bestDistSq) continue;
+
+            bestDistSq = distSq;
+            found = true;
+            if (outPoint) {
+              outPoint.set(
+                closestX + meshPos.x,
+                closestY + meshPos.y,
+                closestZ + meshPos.z
+              );
+            }
+          }
+        }
+      }
+
+      return found ? bestDistSq : Number.POSITIVE_INFINITY;
+    };
+
     const applyExplosionBlockDamage = (center, radius, maxDamage, impulseDir) => {
       if (radius <= 0 || maxDamage <= 0) return;
       const radiusSq = radius * radius;
@@ -5060,16 +5292,24 @@
           THREE.MathUtils.clamp(center.z, box.min.z, box.max.z)
         );
 
-        const distSq = tempClosest.distanceToSquared(center);
-        if (distSq > radiusSq) continue;
+        const broadphaseDistSq = tempClosest.distanceToSquared(center);
+        if (broadphaseDistSq > radiusSq) continue;
 
-        const dist = Math.sqrt(distSq);
+        const voxelDistSq = getClosestPointOnVoxelBlock(
+          blockState,
+          center,
+          radius,
+          tempExplosionClosestPoint
+        );
+        if (!Number.isFinite(voxelDistSq) || voxelDistSq > radiusSq) continue;
+
+        const dist = Math.sqrt(voxelDistSq);
         const t = 1 - THREE.MathUtils.clamp(dist / radius, 0, 1);
         const damage = maxDamage * t * t;
         if (damage <= 0.5) continue;
 
-        if (distSq > 0.0001) {
-          tempNormal.copy(tempClosest).sub(center).normalize();
+        if (voxelDistSq > 0.0001) {
+          tempNormal.copy(tempExplosionClosestPoint).sub(center).normalize();
         } else {
           tempNormal.copy(impulseDir).normalize();
           if (tempNormal.lengthSq() < 0.0001) tempNormal.set(0, 1, 0);
@@ -5078,7 +5318,7 @@
         applyDamageToBlockState(
           blockState,
           damage,
-          tempClosest,
+          tempExplosionClosestPoint,
           tempNormal,
           tempNormal,
           0.9 + t * 1.4
@@ -5322,60 +5562,83 @@
       return true;
     };
 
+    const detectProjectileCollisionAtPoint = (point, radius, outNormal) => {
+      if (point.y <= 0) {
+        outNormal.set(0, 1, 0);
+        return true;
+      }
+
+      const candidateBoxes = getNearbyColliders(point.x, point.z, radius + 0.45);
+      for (const box of candidateBoxes) {
+        tempClosest.set(
+          THREE.MathUtils.clamp(point.x, box.min.x, box.max.x),
+          THREE.MathUtils.clamp(point.y, box.min.y, box.max.y),
+          THREE.MathUtils.clamp(point.z, box.min.z, box.max.z)
+        );
+
+        const distSq = tempClosest.distanceToSquared(point);
+        if (distSq > radius * radius) continue;
+
+        const blockState = colliderToBlockState.get(box);
+        if (blockState) {
+          if (!sampleVoxelImpactNormal(blockState, point, radius, outNormal)) continue;
+        } else if (distSq > 0.0001) {
+          outNormal.copy(point).sub(tempClosest).normalize();
+        } else {
+          const toMinX = Math.abs(point.x - box.min.x);
+          const toMaxX = Math.abs(box.max.x - point.x);
+          const toMinY = Math.abs(point.y - box.min.y);
+          const toMaxY = Math.abs(box.max.y - point.y);
+          const toMinZ = Math.abs(point.z - box.min.z);
+          const toMaxZ = Math.abs(box.max.z - point.z);
+          const minPen = Math.min(toMinX, toMaxX, toMinY, toMaxY, toMinZ, toMaxZ);
+
+          if (minPen === toMinX) outNormal.set(-1, 0, 0);
+          else if (minPen === toMaxX) outNormal.set(1, 0, 0);
+          else if (minPen === toMinY) outNormal.set(0, -1, 0);
+          else if (minPen === toMaxY) outNormal.set(0, 1, 0);
+          else if (minPen === toMinZ) outNormal.set(0, 0, -1);
+          else outNormal.set(0, 0, 1);
+        }
+
+        return true;
+      }
+
+      return false;
+    };
+
     const traceProjectileImpact = (start, end, radius, outPoint, outNormal) => {
       const distance = start.distanceTo(end);
-      const stepSize = Math.max(0.08, radius * 0.7);
-      const steps = Math.max(1, Math.min(28, Math.ceil(distance / stepSize)));
+      const stepSize = Math.max(0.05, radius * 0.52);
+      const steps = Math.max(1, Math.min(72, Math.ceil(distance / stepSize)));
+      let previousT = 0;
 
       for (let step = 1; step <= steps; step++) {
         const t = step / steps;
         tempTracePos.lerpVectors(start, end, t);
 
-        if (tempTracePos.y <= 0) {
-          outPoint.copy(tempTracePos);
-          outPoint.y = 0.001;
-          outNormal.set(0, 1, 0);
-          return true;
-        }
-
-        const candidateBoxes = getNearbyColliders(tempTracePos.x, tempTracePos.z, radius + 0.45);
-        for (const box of candidateBoxes) {
-          tempClosest.set(
-            THREE.MathUtils.clamp(tempTracePos.x, box.min.x, box.max.x),
-            THREE.MathUtils.clamp(tempTracePos.y, box.min.y, box.max.y),
-            THREE.MathUtils.clamp(tempTracePos.z, box.min.z, box.max.z)
-          );
-
-          const distSq = tempClosest.distanceToSquared(tempTracePos);
-          if (distSq > radius * radius) continue;
-
-          const blockState = colliderToBlockState.get(box);
-          if (blockState) {
-            const hasVoxelHit = sampleVoxelImpactNormal(blockState, tempTracePos, radius, tempNormal);
-            if (!hasVoxelHit) continue;
-          } else if (distSq > 0.0001) {
-            tempNormal.copy(tempTracePos).sub(tempClosest).normalize();
-          } else {
-            const toMinX = Math.abs(tempTracePos.x - box.min.x);
-            const toMaxX = Math.abs(box.max.x - tempTracePos.x);
-            const toMinY = Math.abs(tempTracePos.y - box.min.y);
-            const toMaxY = Math.abs(box.max.y - tempTracePos.y);
-            const toMinZ = Math.abs(tempTracePos.z - box.min.z);
-            const toMaxZ = Math.abs(box.max.z - tempTracePos.z);
-            const minPen = Math.min(toMinX, toMaxX, toMinY, toMaxY, toMinZ, toMaxZ);
-
-            if (minPen === toMinX) tempNormal.set(-1, 0, 0);
-            else if (minPen === toMaxX) tempNormal.set(1, 0, 0);
-            else if (minPen === toMinY) tempNormal.set(0, -1, 0);
-            else if (minPen === toMaxY) tempNormal.set(0, 1, 0);
-            else if (minPen === toMinZ) tempNormal.set(0, 0, -1);
-            else tempNormal.set(0, 0, 1);
+        if (detectProjectileCollisionAtPoint(tempTracePos, radius, tempNormal)) {
+          let lowT = previousT;
+          let highT = t;
+          for (let i = 0; i < 6; i++) {
+            const midT = (lowT + highT) * 0.5;
+            tempTracePos.lerpVectors(start, end, midT);
+            if (detectProjectileCollisionAtPoint(tempTracePos, radius, tempNormal)) {
+              highT = midT;
+            } else {
+              lowT = midT;
+            }
           }
 
+          tempTracePos.lerpVectors(start, end, highT);
+          detectProjectileCollisionAtPoint(tempTracePos, radius, tempNormal);
           outPoint.copy(tempTracePos);
+          if (outPoint.y <= 0) outPoint.y = 0.001;
           outNormal.copy(tempNormal);
           return true;
         }
+
+        previousT = t;
       }
 
       return false;
@@ -5864,6 +6127,9 @@
     const maxAirWishSpeed = GameConfig.player.maxAirWishSpeed;
     const hardMaxHorizontalSpeed = GameConfig.player.hardMaxHorizontalSpeed;
     const gravity = GameConfig.player.gravity;
+    const movementGroundAccelScale = 0.42;
+    const movementAirAccelScale = 0.88;
+    const movementGroundFrictionScale = 0.72;
     const baseFov = GameConfig.player.baseFov;
     const sprintFovBoost = GameConfig.player.sprintFovBoost;
     const dashFovBoost = GameConfig.player.dashFovBoost;
@@ -5925,142 +6191,648 @@
       const speed = Math.hypot(velocity.x, velocity.z);
       if (speed < 0.0001) return;
       const control = Math.max(speed, stopSpeed);
-      const drop = control * groundFriction * dt;
+      const effectiveFriction = groundFriction * movementGroundFrictionScale;
+      const drop = control * effectiveFriction * dt;
       const newSpeed = Math.max(0, speed - drop);
       const scale = speed > 0 ? newSpeed / speed : 0;
       velocity.x *= scale;
       velocity.z *= scale;
-      if (newSpeed < 0.05) {
+      if (newSpeed < 0.02) {
         velocity.x = 0;
         velocity.z = 0;
       }
     };
 
-    const resolveHorizontalCollisions = () => {
-      const feetY = player.position.y;
-      const headY = feetY + currentEyeHeight + playerHeadClearance;
-      const floorTolerance = 0.06;
-      const collisionEpsilon = 0.0005;
-      const maxIterations = 3;
-      const probeRadius = playerRadius + 0.08;
+    const nearbyVoxelBlocks = [];
+    const nearbySolidBoxes = [];
+    const nearbyVoxelQueryResult = {
+      voxelBlocks: nearbyVoxelBlocks,
+      solidBoxes: nearbySolidBoxes
+    };
+    const nearbyVoxelQueryCache = {
+      revision: -1,
+      minCellX: 0,
+      maxCellX: 0,
+      minCellZ: 0,
+      maxCellZ: 0,
+      radius: 0,
+      ready: false
+    };
+    const lastCapsuleWallNormal = new THREE.Vector3();
+    let hasLastCapsuleWallNormal = false;
+    const maxStepDistance = playerRadius * 0.8;
+    const skinWidth = playerRadius * 0.1;
+    const minMoveDistance = playerRadius * 0.005;
+    const collisionVelocitySqThreshold = 0.0004;
+    const maxNearbyColliderLimit = 96;
+    const nearbyDistanceCullPadding = 1.4;
+    const COLLISION_AXIS_XZ = 0;
+    const COLLISION_AXIS_Y = 1;
+    const previousPlayerPosition = new THREE.Vector3().copy(player.position);
+    const currentPlayerPosBeforeMove = new THREE.Vector3();
+    const deltaMovement = new THREE.Vector3();
 
-      for (let iter = 0; iter < maxIterations; iter++) {
-        let hitAny = false;
-        const candidateBoxes = getNearbyColliders(player.position.x, player.position.z, probeRadius + 0.25);
-        for (const box of candidateBoxes) {
-          if (!overlapsCircleXZ(box, player.position.x, player.position.z, probeRadius)) continue;
-          // Ignore ceilings above the head and floors already under the feet.
-          if (headY <= box.min.y + collisionEpsilon) continue;
-          if (feetY >= box.max.y - floorTolerance) continue;
+    const getNearbyVoxels = (playerPosition, radius) => {
+      const queryRadius = radius + 0.24;
+      const minCellX = Math.floor((playerPosition.x - queryRadius) / colliderSpatialCellSize);
+      const maxCellX = Math.floor((playerPosition.x + queryRadius) / colliderSpatialCellSize);
+      const minCellZ = Math.floor((playerPosition.z - queryRadius) / colliderSpatialCellSize);
+      const maxCellZ = Math.floor((playerPosition.z + queryRadius) / colliderSpatialCellSize);
 
-          const closestX = THREE.MathUtils.clamp(player.position.x, box.min.x, box.max.x);
-          const closestZ = THREE.MathUtils.clamp(player.position.z, box.min.z, box.max.z);
-          const dx = player.position.x - closestX;
-          const dz = player.position.z - closestZ;
-          const distSq = dx * dx + dz * dz;
+      const canReuse =
+        nearbyVoxelQueryCache.ready &&
+        nearbyVoxelQueryCache.revision === colliderSpatialRevision &&
+        nearbyVoxelQueryCache.minCellX === minCellX &&
+        nearbyVoxelQueryCache.maxCellX === maxCellX &&
+        nearbyVoxelQueryCache.minCellZ === minCellZ &&
+        nearbyVoxelQueryCache.maxCellZ === maxCellZ &&
+        Math.abs(nearbyVoxelQueryCache.radius - queryRadius) <= 0.0001;
 
-          if (distSq >= playerRadius * playerRadius) continue;
-          hitAny = true;
+      if (canReuse) return nearbyVoxelQueryResult;
 
-          if (distSq < 1e-10) {
-            const toMinX = Math.abs(player.position.x - box.min.x);
-            const toMaxX = Math.abs(box.max.x - player.position.x);
-            const toMinZ = Math.abs(player.position.z - box.min.z);
-            const toMaxZ = Math.abs(box.max.z - player.position.z);
-            const minPen = Math.min(toMinX, toMaxX, toMinZ, toMaxZ);
+      const candidateBoxes = getNearbyColliders(playerPosition.x, playerPosition.z, queryRadius);
+      nearbyVoxelBlocks.length = 0;
+      nearbySolidBoxes.length = 0;
+      const useDistanceCull = candidateBoxes.length > maxNearbyColliderLimit;
+      const maxCheckRadius = queryRadius + nearbyDistanceCullPadding;
+      const maxCheckRadiusSquared = maxCheckRadius * maxCheckRadius;
 
-            if (minPen === toMinX) {
-              player.position.x = box.min.x - playerRadius - collisionEpsilon;
-              velocity.x = Math.min(velocity.x, 0);
-            } else if (minPen === toMaxX) {
-              player.position.x = box.max.x + playerRadius + collisionEpsilon;
-              velocity.x = Math.max(velocity.x, 0);
-            } else if (minPen === toMinZ) {
-              player.position.z = box.min.z - playerRadius - collisionEpsilon;
-              velocity.z = Math.min(velocity.z, 0);
-            } else {
-              player.position.z = box.max.z + playerRadius + collisionEpsilon;
-              velocity.z = Math.max(velocity.z, 0);
-            }
-            continue;
-          }
+      for (let i = 0; i < candidateBoxes.length; i++) {
+        const box = candidateBoxes[i];
+        if (useDistanceCull) {
+          const closestX = THREE.MathUtils.clamp(playerPosition.x, box.min.x, box.max.x);
+          const closestZ = THREE.MathUtils.clamp(playerPosition.z, box.min.z, box.max.z);
+          const dx = playerPosition.x - closestX;
+          const dz = playerPosition.z - closestZ;
+          const distanceSquared = dx * dx + dz * dz;
+          if (distanceSquared > maxCheckRadiusSquared) continue;
+        }
+        const blockState = colliderToBlockState.get(box);
+        if (blockState && !blockState.destroyed && blockState.aliveCount > 0) {
+          nearbyVoxelBlocks.push(blockState);
+        } else {
+          nearbySolidBoxes.push(box);
+        }
+      }
 
-          const dist = Math.sqrt(distSq);
-          const pushOut = playerRadius - dist + collisionEpsilon;
-          const nx = dx / dist;
-          const nz = dz / dist;
+      nearbyVoxelQueryCache.revision = colliderSpatialRevision;
+      nearbyVoxelQueryCache.minCellX = minCellX;
+      nearbyVoxelQueryCache.maxCellX = maxCellX;
+      nearbyVoxelQueryCache.minCellZ = minCellZ;
+      nearbyVoxelQueryCache.maxCellZ = maxCellZ;
+      nearbyVoxelQueryCache.radius = queryRadius;
+      nearbyVoxelQueryCache.ready = true;
+      return nearbyVoxelQueryResult;
+    };
 
-          player.position.x += nx * pushOut;
-          player.position.z += nz * pushOut;
+    const resolveCapsuleVsAabb = (
+      playerPosition,
+      radius,
+      capsuleSegMinY,
+      capsuleSegMaxY,
+      minX,
+      maxX,
+      minY,
+      maxY,
+      minZ,
+      maxZ,
+      collisionEpsilon,
+      axisMode
+    ) => {
+      const capsuleCenterY = (capsuleSegMinY + capsuleSegMaxY) * 0.5;
+      const closestX = THREE.MathUtils.clamp(playerPosition.x, minX, maxX);
+      const closestZ = THREE.MathUtils.clamp(playerPosition.z, minZ, maxZ);
+      const closestY = THREE.MathUtils.clamp(capsuleCenterY, minY, maxY);
+      const segY = THREE.MathUtils.clamp(closestY, capsuleSegMinY, capsuleSegMaxY);
+      const dx = playerPosition.x - closestX;
+      const dy = segY - closestY;
+      const dz = playerPosition.z - closestZ;
+      const distSq = dx * dx + dy * dy + dz * dz;
+      const radiusSq = radius * radius;
+      if (distSq >= radiusSq) return 0;
 
-          const intoWall = velocity.x * nx + velocity.z * nz;
-          if (intoWall < 0) {
-            velocity.x -= nx * intoWall;
-            velocity.z -= nz * intoWall;
-          }
+      let nx = 0;
+      let ny = 0;
+      let nz = 0;
+      let dist = 0;
+      if (distSq > 1e-12) {
+        dist = Math.sqrt(distSq);
+        const invDist = 1 / dist;
+        nx = dx * invDist;
+        ny = dy * invDist;
+        nz = dz * invDist;
+      } else {
+        if (axisMode === COLLISION_AXIS_Y) {
+          ny = capsuleCenterY >= (minY + maxY) * 0.5 ? 1 : -1;
+        } else {
+          const toMinX = Math.abs(playerPosition.x - minX);
+          const toMaxX = Math.abs(maxX - playerPosition.x);
+          const toMinZ = Math.abs(playerPosition.z - minZ);
+          const toMaxZ = Math.abs(maxZ - playerPosition.z);
+          if (toMinX <= toMaxX && toMinX <= toMinZ && toMinX <= toMaxZ) nx = -1;
+          else if (toMaxX <= toMinZ && toMaxX <= toMaxZ) nx = 1;
+          else if (toMinZ <= toMaxZ) nz = -1;
+          else nz = 1;
+        }
+      }
+
+      if (axisMode === COLLISION_AXIS_Y) {
+        if (Math.abs(ny) < 0.35) return 0;
+        const pushOut = radius - dist + collisionEpsilon;
+        playerPosition.y += ny * pushOut;
+        const blockedY = velocity.y * ny;
+        if (blockedY < 0) {
+          velocity.y -= ny * blockedY;
+          velocity.y *= 0.999;
+        }
+        return pushOut;
+      }
+
+      if (Math.abs(ny) > 0.72) return 0;
+
+      const pushOut = radius - dist + collisionEpsilon;
+      playerPosition.x += nx * pushOut;
+      playerPosition.z += nz * pushOut;
+
+      const blocked = velocity.x * nx + velocity.z * nz;
+      if (blocked < 0) {
+        velocity.x -= nx * blocked;
+        velocity.z -= nz * blocked;
+        velocity.x *= 0.999;
+        velocity.z *= 0.999;
+      }
+
+      tempWallContactCandidateNormal.set(nx, 0, nz);
+      const normalLenSq = tempWallContactCandidateNormal.lengthSq();
+      if (normalLenSq > 0.000001) {
+        tempWallContactCandidateNormal.multiplyScalar(1 / Math.sqrt(normalLenSq));
+      }
+      return pushOut;
+    };
+
+    const resolveCapsuleVsVoxel = (playerPosition, radius, capsuleHeight, axisMode = COLLISION_AXIS_XZ) => {
+      if (velocity.lengthSq() < 0.00001) return false;
+      const maxPenetrationPush = playerRadius * 0.3;
+      hasLastCapsuleWallNormal = false;
+      const capsuleSegMinY = playerPosition.y + radius;
+      const capsuleSegMaxY = Math.max(capsuleSegMinY, playerPosition.y + capsuleHeight - radius);
+      const capsuleMinX = playerPosition.x - radius;
+      const capsuleMaxX = playerPosition.x + radius;
+      const capsuleMinY = capsuleSegMinY - radius;
+      const capsuleMaxY = capsuleSegMaxY + radius;
+      const capsuleMinZ = playerPosition.z - radius;
+      const capsuleMaxZ = playerPosition.z + radius;
+      const nearby = getNearbyVoxels(playerPosition, radius + 0.12);
+      const nearbyCount = nearby.voxelBlocks.length + nearby.solidBoxes.length;
+      if (nearbyCount === 0) return false;
+      const useDistanceCull = nearbyCount > maxNearbyColliderLimit;
+
+      for (let i = 0; i < nearby.voxelBlocks.length; i++) {
+        const blockState = nearby.voxelBlocks[i];
+        const meshPos = blockState.mesh.position;
+        const halfX = blockState.sizeX * 0.5;
+        const halfY = blockState.sizeY * 0.5;
+        const halfZ = blockState.sizeZ * 0.5;
+        const blockMinX = meshPos.x - halfX;
+        const blockMaxX = meshPos.x + halfX;
+        const blockMinY = meshPos.y - halfY;
+        const blockMaxY = meshPos.y + halfY;
+        const blockMinZ = meshPos.z - halfZ;
+        const blockMaxZ = meshPos.z + halfZ;
+        if (
+          capsuleMaxX < blockMinX || capsuleMinX > blockMaxX ||
+          capsuleMaxY < blockMinY || capsuleMinY > blockMaxY ||
+          capsuleMaxZ < blockMinZ || capsuleMinZ > blockMaxZ
+        ) {
+          continue;
+        }
+        if (useDistanceCull) {
+          const dx = playerPosition.x - meshPos.x;
+          const dz = playerPosition.z - meshPos.z;
+          const blockCullRadius = Math.max(halfX, halfZ) + radius + nearbyDistanceCullPadding;
+          if (dx * dx + dz * dz > blockCullRadius * blockCullRadius) continue;
         }
 
-        if (!hitAny) break;
+        const localX = playerPosition.x - meshPos.x;
+        const localZ = playerPosition.z - meshPos.z;
+        const voxelSizeX = blockState.voxelSizeX;
+        const voxelSizeZ = blockState.voxelSizeZ;
+        const minGX = THREE.MathUtils.clamp(
+          Math.floor((localX - radius + halfX) / voxelSizeX) - 1,
+          0,
+          blockState.voxelCountX - 1
+        );
+        const maxGX = THREE.MathUtils.clamp(
+          Math.floor((localX + radius + halfX) / voxelSizeX) + 1,
+          0,
+          blockState.voxelCountX - 1
+        );
+        const minGZ = THREE.MathUtils.clamp(
+          Math.floor((localZ - radius + halfZ) / voxelSizeZ) - 1,
+          0,
+          blockState.voxelCountZ - 1
+        );
+        const maxGZ = THREE.MathUtils.clamp(
+          Math.floor((localZ + radius + halfZ) / voxelSizeZ) + 1,
+          0,
+          blockState.voxelCountZ - 1
+        );
+
+        for (let gz = minGZ; gz <= maxGZ; gz++) {
+          const minZ = blockMinZ + gz * voxelSizeZ;
+          const maxZ = minZ + voxelSizeZ;
+          if (capsuleMaxZ < minZ || capsuleMinZ > maxZ) continue;
+          for (let gx = minGX; gx <= maxGX; gx++) {
+            const minX = blockMinX + gx * voxelSizeX;
+            const maxX = minX + voxelSizeX;
+            if (capsuleMaxX < minX || capsuleMinX > maxX) continue;
+
+            const columnIndex = gx + blockState.voxelCountX * gz;
+            const maxGy = blockState.columnMaxGy[columnIndex];
+            if (maxGy < 0) continue;
+            const minGy = blockState.columnMinGy[columnIndex];
+            if (minGy === 32767) continue;
+
+            const minY = blockMinY + minGy * blockState.voxelSizeY;
+            const maxY = blockMinY + (maxGy + 1) * blockState.voxelSizeY;
+            if (capsuleMaxY < minY || capsuleMinY > maxY) continue;
+
+            const preResolveX = playerPosition.x;
+            const preResolveY = playerPosition.y;
+            const preResolveZ = playerPosition.z;
+            let pushOut = resolveCapsuleVsAabb(
+              playerPosition,
+              radius,
+              capsuleSegMinY,
+              capsuleSegMaxY,
+              minX,
+              maxX,
+              minY,
+              maxY,
+              minZ,
+              maxZ,
+              skinWidth,
+              axisMode
+            );
+            if (pushOut <= 0) continue;
+            let penetrationDepth = Math.max(0, pushOut - skinWidth);
+            penetrationDepth = Math.min(penetrationDepth, maxPenetrationPush);
+            const clampedPushOut = penetrationDepth + skinWidth;
+            if (clampedPushOut < pushOut) {
+              const appliedDx = playerPosition.x - preResolveX;
+              const appliedDy = playerPosition.y - preResolveY;
+              const appliedDz = playerPosition.z - preResolveZ;
+              const appliedLenSq = appliedDx * appliedDx + appliedDy * appliedDy + appliedDz * appliedDz;
+              if (appliedLenSq > 1e-12) {
+                const appliedLen = Math.sqrt(appliedLenSq);
+                const invAppliedLen = 1 / appliedLen;
+                const excess = pushOut - clampedPushOut;
+                playerPosition.x -= appliedDx * invAppliedLen * excess;
+                playerPosition.y -= appliedDy * invAppliedLen * excess;
+                playerPosition.z -= appliedDz * invAppliedLen * excess;
+              }
+              pushOut = clampedPushOut;
+            }
+            if (axisMode === COLLISION_AXIS_XZ) {
+              lastCapsuleWallNormal.copy(tempWallContactCandidateNormal);
+              hasLastCapsuleWallNormal = true;
+            }
+            return true;
+          }
+        }
       }
+
+      for (let i = 0; i < nearby.solidBoxes.length; i++) {
+        const box = nearby.solidBoxes[i];
+        if (
+          capsuleMaxX < box.min.x || capsuleMinX > box.max.x ||
+          capsuleMaxY < box.min.y || capsuleMinY > box.max.y ||
+          capsuleMaxZ < box.min.z || capsuleMinZ > box.max.z
+        ) {
+          continue;
+        }
+        if (useDistanceCull) {
+          const closestX = THREE.MathUtils.clamp(playerPosition.x, box.min.x, box.max.x);
+          const closestZ = THREE.MathUtils.clamp(playerPosition.z, box.min.z, box.max.z);
+          const dx = playerPosition.x - closestX;
+          const dz = playerPosition.z - closestZ;
+          const solidCullRadius = radius + nearbyDistanceCullPadding;
+          if (dx * dx + dz * dz > solidCullRadius * solidCullRadius) continue;
+        }
+
+        const preResolveX = playerPosition.x;
+        const preResolveY = playerPosition.y;
+        const preResolveZ = playerPosition.z;
+        let pushOut = resolveCapsuleVsAabb(
+          playerPosition,
+          radius,
+          capsuleSegMinY,
+          capsuleSegMaxY,
+          box.min.x,
+          box.max.x,
+          box.min.y,
+          box.max.y,
+          box.min.z,
+          box.max.z,
+          skinWidth,
+          axisMode
+        );
+        if (pushOut <= 0) continue;
+        let penetrationDepth = Math.max(0, pushOut - skinWidth);
+        penetrationDepth = Math.min(penetrationDepth, maxPenetrationPush);
+        const clampedPushOut = penetrationDepth + skinWidth;
+        if (clampedPushOut < pushOut) {
+          const appliedDx = playerPosition.x - preResolveX;
+          const appliedDy = playerPosition.y - preResolveY;
+          const appliedDz = playerPosition.z - preResolveZ;
+          const appliedLenSq = appliedDx * appliedDx + appliedDy * appliedDy + appliedDz * appliedDz;
+          if (appliedLenSq > 1e-12) {
+            const appliedLen = Math.sqrt(appliedLenSq);
+            const invAppliedLen = 1 / appliedLen;
+            const excess = pushOut - clampedPushOut;
+            playerPosition.x -= appliedDx * invAppliedLen * excess;
+            playerPosition.y -= appliedDy * invAppliedLen * excess;
+            playerPosition.z -= appliedDz * invAppliedLen * excess;
+          }
+          pushOut = clampedPushOut;
+        }
+        if (axisMode === COLLISION_AXIS_XZ) {
+          lastCapsuleWallNormal.copy(tempWallContactCandidateNormal);
+          hasLastCapsuleWallNormal = true;
+        }
+        return true;
+      }
+
+      return false;
+    };
+
+    const resolveHorizontalCollisions = () => {
+      resolveCapsuleVsVoxel(player.position, playerRadius, currentEyeHeight + playerHeadClearance, COLLISION_AXIS_XZ);
     };
 
     const getWallContactNormal = (outNormal) => {
-      const feetY = player.position.y;
-      const headY = feetY + currentEyeHeight + playerHeadClearance;
-      const collisionEpsilon = 0.0005;
-      const floorTolerance = 0.06;
-      const probeRadius = playerRadius + 0.035;
+      const probeRadius = playerRadius + 0.085;
+      const capsuleHeight = currentEyeHeight + playerHeadClearance;
+      const capsuleSegMinY = player.position.y + playerRadius;
+      const capsuleSegMaxY = Math.max(capsuleSegMinY, player.position.y + capsuleHeight - playerRadius);
+      const probeRadiusSq = probeRadius * probeRadius;
+      const capsuleCenterY = (capsuleSegMinY + capsuleSegMaxY) * 0.5;
       let bestPenetration = 0;
       outNormal.set(0, 0, 0);
 
-      const candidateBoxes = getNearbyColliders(player.position.x, player.position.z, playerRadius + 0.25);
-      for (const box of candidateBoxes) {
-        if (!overlapsCircleXZ(box, player.position.x, player.position.z, probeRadius + 0.05)) continue;
-        if (headY <= box.min.y + collisionEpsilon) continue;
-        if (feetY >= box.max.y - floorTolerance) continue;
+      const nearby = getNearbyVoxels(player.position, probeRadius + 0.12);
 
+      for (let i = 0; i < nearby.voxelBlocks.length; i++) {
+        const blockState = nearby.voxelBlocks[i];
+        const meshPos = blockState.mesh.position;
+        const localX = player.position.x - meshPos.x;
+        const localZ = player.position.z - meshPos.z;
+        const halfX = blockState.sizeX * 0.5;
+        const halfZ = blockState.sizeZ * 0.5;
+        if (
+          localX < -halfX - probeRadius || localX > halfX + probeRadius ||
+          localZ < -halfZ - probeRadius || localZ > halfZ + probeRadius
+        ) {
+          continue;
+        }
+
+        const voxelSizeX = blockState.voxelSizeX;
+        const voxelSizeZ = blockState.voxelSizeZ;
+        const minGX = THREE.MathUtils.clamp(
+          Math.floor((localX - probeRadius + halfX) / voxelSizeX) - 1,
+          0,
+          blockState.voxelCountX - 1
+        );
+        const maxGX = THREE.MathUtils.clamp(
+          Math.floor((localX + probeRadius + halfX) / voxelSizeX) + 1,
+          0,
+          blockState.voxelCountX - 1
+        );
+        const minGZ = THREE.MathUtils.clamp(
+          Math.floor((localZ - probeRadius + halfZ) / voxelSizeZ) - 1,
+          0,
+          blockState.voxelCountZ - 1
+        );
+        const maxGZ = THREE.MathUtils.clamp(
+          Math.floor((localZ + probeRadius + halfZ) / voxelSizeZ) + 1,
+          0,
+          blockState.voxelCountZ - 1
+        );
+
+        for (let gz = minGZ; gz <= maxGZ; gz++) {
+          const minZ = meshPos.z - halfZ + gz * voxelSizeZ;
+          const maxZ = minZ + voxelSizeZ;
+          for (let gx = minGX; gx <= maxGX; gx++) {
+            const columnIndex = gx + blockState.voxelCountX * gz;
+            const maxGy = blockState.columnMaxGy[columnIndex];
+            if (maxGy < 0) continue;
+            const minGy = blockState.columnMinGy[columnIndex];
+            if (minGy === 32767) continue;
+
+            const minY = meshPos.y - blockState.sizeY * 0.5 + minGy * blockState.voxelSizeY;
+            const maxY = meshPos.y - blockState.sizeY * 0.5 + (maxGy + 1) * blockState.voxelSizeY;
+            if (capsuleSegMaxY + probeRadius < minY || capsuleSegMinY - probeRadius > maxY) continue;
+
+            const minX = meshPos.x - halfX + gx * voxelSizeX;
+            const maxX = minX + voxelSizeX;
+            const closestX = THREE.MathUtils.clamp(player.position.x, minX, maxX);
+            const closestZ = THREE.MathUtils.clamp(player.position.z, minZ, maxZ);
+            const closestY = THREE.MathUtils.clamp(capsuleCenterY, minY, maxY);
+            const segY = THREE.MathUtils.clamp(closestY, capsuleSegMinY, capsuleSegMaxY);
+            const dx = player.position.x - closestX;
+            const dy = segY - closestY;
+            const dz = player.position.z - closestZ;
+            const distSq = dx * dx + dy * dy + dz * dz;
+            if (distSq > probeRadiusSq) continue;
+
+            let nx = 0;
+            let ny = 0;
+            let nz = 0;
+            let dist = 0;
+            if (distSq > 1e-12) {
+              dist = Math.sqrt(distSq);
+              const invDist = 1 / dist;
+              nx = dx * invDist;
+              ny = dy * invDist;
+              nz = dz * invDist;
+            } else {
+              const toMinX = Math.abs(player.position.x - minX);
+              const toMaxX = Math.abs(maxX - player.position.x);
+              const toMinZ = Math.abs(player.position.z - minZ);
+              const toMaxZ = Math.abs(maxZ - player.position.z);
+              if (toMinX <= toMaxX && toMinX <= toMinZ && toMinX <= toMaxZ) nx = -1;
+              else if (toMaxX <= toMinZ && toMaxX <= toMaxZ) nx = 1;
+              else if (toMinZ <= toMaxZ) nz = -1;
+              else nz = 1;
+            }
+
+            if (Math.abs(ny) > 0.72) continue;
+            const penetration = probeRadius - dist;
+            if (penetration <= bestPenetration) continue;
+            bestPenetration = penetration;
+            outNormal.set(nx, 0, nz).normalize();
+          }
+        }
+      }
+
+      for (let i = 0; i < nearby.solidBoxes.length; i++) {
+        const box = nearby.solidBoxes[i];
         const closestX = THREE.MathUtils.clamp(player.position.x, box.min.x, box.max.x);
         const closestZ = THREE.MathUtils.clamp(player.position.z, box.min.z, box.max.z);
+        const closestY = THREE.MathUtils.clamp(capsuleCenterY, box.min.y, box.max.y);
+        const segY = THREE.MathUtils.clamp(closestY, capsuleSegMinY, capsuleSegMaxY);
         const dx = player.position.x - closestX;
+        const dy = segY - closestY;
         const dz = player.position.z - closestZ;
-        const distSq = dx * dx + dz * dz;
-        if (distSq > probeRadius * probeRadius) continue;
+        const distSq = dx * dx + dy * dy + dz * dz;
+        if (distSq > probeRadiusSq) continue;
 
         let nx = 0;
+        let ny = 0;
         let nz = 0;
         let dist = 0;
-
-        if (distSq < 1e-10) {
+        if (distSq > 1e-12) {
+          dist = Math.sqrt(distSq);
+          const invDist = 1 / dist;
+          nx = dx * invDist;
+          ny = dy * invDist;
+          nz = dz * invDist;
+        } else {
           const toMinX = Math.abs(player.position.x - box.min.x);
           const toMaxX = Math.abs(box.max.x - player.position.x);
           const toMinZ = Math.abs(player.position.z - box.min.z);
           const toMaxZ = Math.abs(box.max.z - player.position.z);
-          const minPen = Math.min(toMinX, toMaxX, toMinZ, toMaxZ);
-
-          if (minPen === toMinX) {
-            nx = -1;
-          } else if (minPen === toMaxX) {
-            nx = 1;
-          } else if (minPen === toMinZ) {
-            nz = -1;
-          } else {
-            nz = 1;
-          }
-        } else {
-          dist = Math.sqrt(distSq);
-          nx = dx / dist;
-          nz = dz / dist;
+          if (toMinX <= toMaxX && toMinX <= toMinZ && toMinX <= toMaxZ) nx = -1;
+          else if (toMaxX <= toMinZ && toMaxX <= toMaxZ) nx = 1;
+          else if (toMinZ <= toMaxZ) nz = -1;
+          else nz = 1;
         }
 
+        if (Math.abs(ny) > 0.72) continue;
         const penetration = probeRadius - dist;
         if (penetration <= bestPenetration) continue;
         bestPenetration = penetration;
-        outNormal.set(nx, 0, nz);
+        outNormal.set(nx, 0, nz).normalize();
       }
 
-      if (outNormal.lengthSq() <= 0.0001) return false;
-      outNormal.normalize();
+      if (bestPenetration > 0.0001) return true;
+      if (!hasLastCapsuleWallNormal) return false;
+      outNormal.copy(lastCapsuleWallNormal);
       return true;
+    };
+
+    const getBlockColumnTopY = (blockState, sampleX, sampleZ) => {
+      if (!blockState || blockState.destroyed || blockState.aliveCount <= 0) return Number.NEGATIVE_INFINITY;
+      const meshPos = blockState.mesh.position;
+      const localX = sampleX - meshPos.x;
+      const localZ = sampleZ - meshPos.z;
+      const halfX = blockState.sizeX * 0.5;
+      const halfZ = blockState.sizeZ * 0.5;
+      if (localX < -halfX || localX > halfX || localZ < -halfZ || localZ > halfZ) {
+        return Number.NEGATIVE_INFINITY;
+      }
+
+      const gx = THREE.MathUtils.clamp(
+        Math.floor((localX + halfX) / blockState.voxelSizeX),
+        0,
+        blockState.voxelCountX - 1
+      );
+      const gz = THREE.MathUtils.clamp(
+        Math.floor((localZ + halfZ) / blockState.voxelSizeZ),
+        0,
+        blockState.voxelCountZ - 1
+      );
+      const columnIndex = gx + blockState.voxelCountX * gz;
+      const maxGy = blockState.columnMaxGy?.[columnIndex] ?? -1;
+      if (maxGy < 0) return Number.NEGATIVE_INFINITY;
+      const localTopY = -blockState.sizeY * 0.5 + (maxGy + 1) * blockState.voxelSizeY;
+      return meshPos.y + localTopY;
+    };
+
+    const getBlockColumnBottomY = (blockState, sampleX, sampleZ) => {
+      if (!blockState || blockState.destroyed || blockState.aliveCount <= 0) return Number.POSITIVE_INFINITY;
+      const meshPos = blockState.mesh.position;
+      const localX = sampleX - meshPos.x;
+      const localZ = sampleZ - meshPos.z;
+      const halfX = blockState.sizeX * 0.5;
+      const halfZ = blockState.sizeZ * 0.5;
+      if (localX < -halfX || localX > halfX || localZ < -halfZ || localZ > halfZ) {
+        return Number.POSITIVE_INFINITY;
+      }
+
+      const gx = THREE.MathUtils.clamp(
+        Math.floor((localX + halfX) / blockState.voxelSizeX),
+        0,
+        blockState.voxelCountX - 1
+      );
+      const gz = THREE.MathUtils.clamp(
+        Math.floor((localZ + halfZ) / blockState.voxelSizeZ),
+        0,
+        blockState.voxelCountZ - 1
+      );
+      const columnIndex = gx + blockState.voxelCountX * gz;
+      const minGy = blockState.columnMinGy?.[columnIndex] ?? 32767;
+      if (minGy === 32767) return Number.POSITIVE_INFINITY;
+      const localBottomY = -blockState.sizeY * 0.5 + minGy * blockState.voxelSizeY;
+      return meshPos.y + localBottomY;
+    };
+
+    const getBlockCeilingBottomY = (blockState, centerX, centerZ, radius) => {
+      const probe = Math.max(0.06, radius * 0.82);
+      const diag = probe * 0.7071;
+      let bestBottomY = Number.POSITIVE_INFINITY;
+      const probes = [
+        [0, 0],
+        [probe, 0],
+        [-probe, 0],
+        [0, probe],
+        [0, -probe],
+        [diag, diag],
+        [diag, -diag],
+        [-diag, diag],
+        [-diag, -diag]
+      ];
+
+      for (const [dx, dz] of probes) {
+        const bottomY = getBlockColumnBottomY(blockState, centerX + dx, centerZ + dz);
+        if (bottomY < bestBottomY) bestBottomY = bottomY;
+      }
+
+      return bestBottomY;
+    };
+
+    const getBlockSupportTopY = (blockState, centerX, centerZ, radius) => {
+      const innerProbe = Math.max(0.06, radius * 0.58);
+      const outerProbe = Math.max(innerProbe + 0.04, radius * 0.96);
+      const innerDiag = innerProbe * 0.7071;
+      const outerDiag = outerProbe * 0.7071;
+      let bestTopY = Number.NEGATIVE_INFINITY;
+      const probes = [
+        [0, 0],
+        [innerProbe, 0],
+        [-innerProbe, 0],
+        [0, innerProbe],
+        [0, -innerProbe],
+        [innerDiag, innerDiag],
+        [innerDiag, -innerDiag],
+        [-innerDiag, innerDiag],
+        [-innerDiag, -innerDiag],
+        [outerProbe, 0],
+        [-outerProbe, 0],
+        [0, outerProbe],
+        [0, -outerProbe],
+        [outerDiag, outerDiag],
+        [outerDiag, -outerDiag],
+        [-outerDiag, outerDiag],
+        [-outerDiag, -outerDiag]
+      ];
+
+      for (const [dx, dz] of probes) {
+        const topY = getBlockColumnTopY(blockState, centerX + dx, centerZ + dz);
+        if (topY > bestTopY) bestTopY = topY;
+      }
+
+      return bestTopY;
     };
 
     const findGroundY = (feetY) => {
@@ -6075,7 +6847,19 @@
 
         if (!overlapsXZ) continue;
 
-        const topY = box.max.y;
+        let topY = box.max.y;
+        const blockState = colliderToBlockState.get(box);
+        if (blockState) {
+          const supportTopY = getBlockSupportTopY(
+            blockState,
+            player.position.x,
+            player.position.z,
+            playerRadius
+          );
+          if (!Number.isFinite(supportTopY)) continue;
+          topY = supportTopY;
+        }
+
         const canStep = topY <= feetY + stepHeight;
         const insideTopBand = feetY <= topY && (topY - feetY) <= 0.35;
         if (canStep || (dynamicColliderSet.has(box) && insideTopBand)) {
@@ -6100,11 +6884,25 @@
           player.position.z - playerRadius < box.max.z;
 
         if (!overlapsXZ) continue;
-        if (previousHeadY > box.min.y + 0.001) continue;
-        if (headY <= box.min.y + 0.001) continue;
+
+        let ceilingY = box.min.y;
+        const blockState = colliderToBlockState.get(box);
+        if (blockState) {
+          const voxelBottomY = getBlockCeilingBottomY(
+            blockState,
+            player.position.x,
+            player.position.z,
+            playerRadius
+          );
+          if (!Number.isFinite(voxelBottomY)) continue;
+          ceilingY = voxelBottomY;
+        }
+
+        if (previousHeadY > ceilingY + 0.001) continue;
+        if (headY <= ceilingY + 0.001) continue;
         if (feetY >= box.max.y - 0.001) continue;
 
-        const candidateFeetY = box.min.y - (currentEyeHeight + playerHeadClearance) - 0.001;
+        const candidateFeetY = ceilingY - (currentEyeHeight + playerHeadClearance) - 0.001;
         bestCeilingFeetY = Math.min(bestCeilingFeetY, candidateFeetY);
       }
 
@@ -6129,7 +6927,13 @@
 
         if (!overlapsXZ) continue;
 
-        const topY = box.max.y;
+        const topY = getBlockSupportTopY(
+          tile.blockState,
+          player.position.x,
+          player.position.z,
+          playerRadius
+        );
+        if (!Number.isFinite(topY)) continue;
         if (Math.abs(feetY - topY) > followTolerance) continue;
         if (topY > bestTop) {
           bestTop = topY;
@@ -6159,6 +6963,15 @@
       const candidateBoxes = getNearbyColliders(probeX, probeZ, playerRadius + 0.55);
       for (const box of candidateBoxes) {
         if (!overlapsCircleXZ(box, probeX, probeZ, playerRadius + 0.05)) continue;
+        const blockState = colliderToBlockState.get(box);
+        if (blockState) {
+          const topY = getBlockSupportTopY(blockState, probeX, probeZ, playerRadius * 0.92);
+          if (!Number.isFinite(topY)) continue;
+          if (topY < minJumpTop || topY > maxJumpTop) continue;
+          targetTopY = Math.max(targetTopY, topY);
+          continue;
+        }
+
         if (headY <= box.min.y + 0.001) continue;
         if (feetY >= box.max.y - 0.001) continue;
 
@@ -6184,6 +6997,14 @@
       const landingCandidateBoxes = getNearbyColliders(landingX, landingZ, playerRadius + 0.55);
       for (const box of landingCandidateBoxes) {
         if (!overlapsCircleXZ(box, landingX, landingZ, playerRadius + 0.05)) continue;
+        const blockState = colliderToBlockState.get(box);
+        if (blockState) {
+          const landingTopY = getBlockSupportTopY(blockState, landingX, landingZ, playerRadius * 0.95);
+          if (!Number.isFinite(landingTopY)) continue;
+          if (landingFeetY < landingTopY + 0.001) return false;
+          continue;
+        }
+
         if (landingHeadY <= box.min.y + 0.001) continue;
         if (landingFeetY >= box.max.y - 0.001) continue;
 
@@ -7078,17 +7899,100 @@
       }
     };
 
-    const resolveHorizontalMovement = (dt) => {
-      const mapClamp = mapHalfSize - playerRadius - 0.2;
-      const horizontalMove = Math.hypot(velocity.x, velocity.z) * dt;
-      const maxMovePerSlice = playerRadius * 0.55;
-      const moveSlices = Math.max(1, Math.min(6, Math.ceil(horizontalMove / maxMovePerSlice)));
-      const sliceDt = dt / moveSlices;
+    const resolveY = (stepY, capsuleHeight) => {
+      if (Math.abs(stepY) <= 1e-7) return;
+      player.position.y += stepY;
+      const hitY = resolveCapsuleVsVoxel(player.position, playerRadius, capsuleHeight, COLLISION_AXIS_Y);
+      if (!hitY) return;
+      if ((stepY > 0 && velocity.y > 0) || (stepY < 0 && velocity.y < 0)) {
+        velocity.y = 0;
+      }
+    };
 
-      for (let moveStep = 0; moveStep < moveSlices; moveStep++) {
-        player.position.x += velocity.x * sliceDt;
-        player.position.z += velocity.z * sliceDt;
-        resolveHorizontalCollisions();
+    const resolveXZ = (stepX, stepZ, capsuleHeight, mapClamp) => {
+      if (Math.abs(stepX) > 1e-7) player.position.x += stepX;
+      if (Math.abs(stepZ) > 1e-7) player.position.z += stepZ;
+      if (Math.abs(stepX) > 1e-7 || Math.abs(stepZ) > 1e-7) {
+        const hitWall = resolveCapsuleVsVoxel(player.position, playerRadius, capsuleHeight, COLLISION_AXIS_XZ);
+        if (hitWall && hasLastCapsuleWallNormal) {
+          const intoWallSpeed = velocity.x * lastCapsuleWallNormal.x + velocity.z * lastCapsuleWallNormal.z;
+          if (intoWallSpeed < 0) {
+            velocity.x -= lastCapsuleWallNormal.x * intoWallSpeed;
+            velocity.z -= lastCapsuleWallNormal.z * intoWallSpeed;
+          }
+        }
+      }
+
+      if (player.position.x < -mapClamp) {
+        player.position.x = -mapClamp;
+        velocity.x = Math.max(velocity.x, 0);
+      } else if (player.position.x > mapClamp) {
+        player.position.x = mapClamp;
+        velocity.x = Math.min(velocity.x, 0);
+      }
+
+      if (player.position.z < -mapClamp) {
+        player.position.z = -mapClamp;
+        velocity.z = Math.max(velocity.z, 0);
+      } else if (player.position.z > mapClamp) {
+        player.position.z = mapClamp;
+        velocity.z = Math.min(velocity.z, 0);
+      }
+    };
+
+    const performSegmentedMove = (dt) => {
+      const mapClamp = mapHalfSize - playerRadius - 0.2;
+      const capsuleHeight = currentEyeHeight + playerHeadClearance;
+      let slideIterations = 0;
+      currentPlayerPosBeforeMove.copy(player.position);
+      deltaMovement.set(
+        currentPlayerPosBeforeMove.x - previousPlayerPosition.x + velocity.x * dt,
+        currentPlayerPosBeforeMove.y - previousPlayerPosition.y + velocity.y * dt,
+        currentPlayerPosBeforeMove.z - previousPlayerPosition.z + velocity.z * dt
+      );
+      previousPlayerPosition.copy(currentPlayerPosBeforeMove);
+
+      const deltaLengthSq = deltaMovement.lengthSq();
+      const minMoveDistanceSq = minMoveDistance * minMoveDistance;
+      if (deltaLengthSq < minMoveDistanceSq) return;
+      const sweepDistance = Math.sqrt(deltaLengthSq);
+      let segmentCount = Math.ceil(sweepDistance / Math.max(0.0001, playerRadius * 0.75));
+      const stabilitySegmentCount = Math.ceil(sweepDistance / Math.max(0.0001, maxStepDistance));
+      if (stabilitySegmentCount > segmentCount) segmentCount = stabilitySegmentCount;
+      segmentCount = Math.max(1, segmentCount);
+      segmentCount = Math.min(segmentCount, 6);
+      const stepX = deltaMovement.x / segmentCount;
+      const stepY = deltaMovement.y / segmentCount;
+      const stepZ = deltaMovement.z / segmentCount;
+
+      for (let moveStep = 0; moveStep < segmentCount; moveStep++) {
+        // 1) Apply gravity displacement (Y axis)
+        player.position.y += stepY;
+        // 2) Resolve Y axis
+        const hitY = resolveCapsuleVsVoxel(player.position, playerRadius, capsuleHeight, COLLISION_AXIS_Y);
+        if (hitY && ((stepY > 0 && velocity.y > 0) || (stepY < 0 && velocity.y < 0))) {
+          velocity.y = 0;
+        }
+        if (isGrounded && velocity.y <= 0) {
+          player.position.y -= 0.02;
+        }
+
+        // 3) Apply horizontal displacement (XZ)
+        player.position.x += stepX;
+        player.position.z += stepZ;
+        // 4) Resolve XZ axis
+        const hitWall = resolveCapsuleVsVoxel(player.position, playerRadius, capsuleHeight, COLLISION_AXIS_XZ);
+        if (hitWall && hasLastCapsuleWallNormal) {
+          if (slideIterations > 2) break;
+          slideIterations++;
+          const intoWallSpeed = velocity.x * lastCapsuleWallNormal.x + velocity.z * lastCapsuleWallNormal.z;
+          if (intoWallSpeed < 0) {
+            velocity.x -= lastCapsuleWallNormal.x * intoWallSpeed;
+            velocity.z -= lastCapsuleWallNormal.z * intoWallSpeed;
+            velocity.x *= 0.999;
+            velocity.z *= 0.999;
+          }
+        }
 
         if (player.position.x < -mapClamp) {
           player.position.x = -mapClamp;
@@ -7097,6 +8001,7 @@
           player.position.x = mapClamp;
           velocity.x = Math.min(velocity.x, 0);
         }
+
         if (player.position.z < -mapClamp) {
           player.position.z = -mapClamp;
           velocity.z = Math.max(velocity.z, 0);
@@ -7105,14 +8010,10 @@
           velocity.z = Math.min(velocity.z, 0);
         }
       }
+      deltaMovement.subVectors(player.position, previousPlayerPosition);
     };
 
-    const checkGroundCollisions = (dt) => {
-      const previousFeetY = player.position.y;
-      player.position.y += velocity.y * dt;
-      if (velocity.y > 0) {
-        resolveCeilingCollision(previousFeetY);
-      }
+    const checkGroundCollisions = () => {
       const feetY = player.position.y;
       const groundY = findGroundY(feetY);
 
@@ -7126,7 +8027,6 @@
       } else {
         isGrounded = false;
       }
-      resolveHorizontalCollisions();
       if (physicsBridge.enabled && physicsFlags.useRapierPlayerKCC) {
         physicsBridge.applyPlayerKCCCorrection();
       }
@@ -7231,16 +8131,32 @@
         velocity.z = dashDirection.z * dashSpeed;
       } else if (hasMoveInput) {
         if (isGrounded) {
-          applyAcceleration(moveWish, targetSpeed, groundAccel, dt);
+          applyAcceleration(moveWish, targetSpeed, groundAccel * movementGroundAccelScale, dt);
         } else {
-          applyAcceleration(moveWish, Math.min(targetSpeed, maxAirWishSpeed), airAccel, dt);
+          applyAcceleration(
+            moveWish,
+            Math.min(targetSpeed, maxAirWishSpeed),
+            airAccel * movementAirAccelScale,
+            dt
+          );
         }
       }
 
       handleWallJump(isDashing, hasMoveInput, hasWallContact);
+
+      if (!isDashing) {
+        const preMoveHorizontalSpeed = Math.hypot(velocity.x, velocity.z);
+        if (preMoveHorizontalSpeed > hardMaxHorizontalSpeed) {
+          const preMoveScale = hardMaxHorizontalSpeed / preMoveHorizontalSpeed;
+          velocity.x *= preMoveScale;
+          velocity.z *= preMoveScale;
+        }
+      }
+
       applyGravity(dt, isDashing);
-      resolveHorizontalMovement(dt);
-      checkGroundCollisions(dt);
+      performSegmentedMove(dt);
+      checkGroundCollisions();
+      previousPlayerPosition.copy(player.position);
 
       const horizontalSpeed = Math.hypot(velocity.x, velocity.z);
       if (!isDashing && horizontalSpeed > hardMaxHorizontalSpeed) {
@@ -7376,6 +8292,10 @@
       const frameDt = Math.min(clock.getDelta(), 0.1);
       const pausedVisualStepFactor = isPaused ? 2 : 1;
       skyMat.uniforms.time.value += frameDt * 0.45;
+      dreamFloorUniforms.time.value += frameDt * 0.5;
+      const floorPulse = 0.86 + Math.sin(dreamFloorUniforms.time.value * 1.08) * 0.14;
+      groundMat.emissiveIntensity = floorBaseEmissiveIntensity * floorPulse;
+      groundGlowMat.opacity = floorBaseGlowOpacity * floorPulse;
       fireflyAccumulator = Math.min(fireflyAccumulator + frameDt, 0.2);
       if (fireflyAccumulator >= runtimeFireflyStep * pausedVisualStepFactor) {
         updateFireflies(fireflyAccumulator);
