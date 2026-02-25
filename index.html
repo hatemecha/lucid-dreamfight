@@ -1194,16 +1194,21 @@
 
     const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.05, 300);
 
-    const controls = new PointerLockControls(camera, renderer.domElement);
-
     const playerBody = new THREE.Object3D();
+    const viewYaw = new THREE.Object3D();
+    viewYaw.rotation.order = 'YXZ'; 
     const viewRoll = new THREE.Object3D();
     const viewKick = new THREE.Object3D();
+    
     playerBody.position.set(0, 0, 5);
     scene.add(playerBody);
-    playerBody.add(viewRoll);
+    
+    playerBody.add(viewYaw);
+    viewYaw.add(viewRoll);
     viewRoll.add(viewKick);
     viewKick.add(camera);
+
+    const controls = new PointerLockControls(viewYaw, renderer.domElement);
 
     const ambientFill = new THREE.AmbientLight(0x594a7e, 2.5);
     scene.add(ambientFill);
@@ -1266,13 +1271,27 @@
     let weaponEffectsVolumeLevel = 1;
     let backgroundMusicStarted = false;
 
-    const backgroundMusicElement = new Audio("./loop_music.ogg");
+    const backgroundMusicElement = new Audio("./loop_music2.ogg");
     backgroundMusicElement.loop = true;
     backgroundMusicElement.preload = "auto";
     backgroundMusicElement.playsInline = true;
     backgroundMusicElement.crossOrigin = "anonymous";
     backgroundMusic.setMediaElementSource(backgroundMusicElement);
     backgroundMusicElement.load();
+
+    const musicAnalyzer = audioListener.context.createAnalyser();
+    musicAnalyzer.fftSize = 256;
+    const musicDataArray = new Uint8Array(musicAnalyzer.frequencyBinCount);
+    backgroundMusic.gain.connect(musicAnalyzer);
+
+    let musicIntensity = 0;
+    let musicKick = 0;
+    let musicKickThreshold = 0.5; // Adaptive threshold
+    let musicKickHistory = [];
+    const kickHistorySize = 10;
+    let rawMusicKick = 0;
+    let smoothedMusicKick = 0;
+    let smoothedMusicIntensity = 0;
 
     const updateBackgroundMusicState = (paused) => {
       const now = audioListener.context.currentTime;
@@ -1330,7 +1349,7 @@
     };
 
     backgroundMusicElement.addEventListener("error", (event) => {
-      console.warn("[Audio] Could not play loop_music.ogg", event);
+      console.warn("[Audio] Could not play loop_music2.ogg", event);
     });
 
     const initRapierCompat = async () => {
@@ -1393,7 +1412,8 @@
         bottomColor: { value: new THREE.Color(0x07090d) },
         offset: { value: 22.0 },
         exponent: { value: 0.92 },
-        time: { value: 0.0 }
+        time: { value: 0.0 },
+        musicGlow: { value: 0.0 }
       },
       vertexShader: `
         varying vec3 vWorldPos;
@@ -1412,6 +1432,7 @@
         uniform float offset;
         uniform float exponent;
         uniform float time;
+        uniform float musicGlow;
         varying vec3 vWorldPos;
         varying vec3 vPos;
         void main() {
@@ -1439,7 +1460,7 @@
           float auroraIntensity = smoothstep(0.4, 0.9, bands) * auroraMask;
 
           // Sumar la aurora al fondo, multiplicando por sí misma para saturar el núcleo
-          vec3 glow = auroraColor * auroraIntensity * 1.5;
+          vec3 glow = auroraColor * (auroraIntensity + musicGlow * 0.8) * 1.5;
           vec3 finalColor = baseCol + glow;
 
           // Rematar con un ligero tinte general en el cielo alto
@@ -7520,7 +7541,7 @@
         const slowFlicker = 0.5 + 0.5 * Math.sin(bug.flickerPhase + Math.sin(bug.phase * 0.27 + bug.pulseBias) * 0.35);
         const sideFlicker = 0.5 + 0.5 * Math.sin(bug.flickerPhaseB);
         const pulse = THREE.MathUtils.clamp(0.28 + slowFlicker * (0.56 * bug.flickerAmount) + sideFlicker * 0.18, 0.05, 1.0);
-        const renderPulse = bug.state === FIREFLY_STATE_LANDED ? 0.62 : pulse;
+        const renderPulse = (bug.state === FIREFLY_STATE_LANDED ? 0.62 : pulse) + smoothedMusicKick * 0.45;
         bug.lastPulse = renderPulse;
         const coreScale = bug.baseScale * (0.7 + renderPulse * 1.05);
         const haloScale = coreScale * (7.2 + renderPulse * 2.4);
@@ -7570,9 +7591,9 @@
         if (canEnable) {
           activeLightCount += 1;
           bug.light.position.copy(tempFireflyPos);
-          const lightPulse = bug.lastPulse ?? 0.62;
-          bug.light.distance = bug.lightBaseDistance + lightPulse * 16.5;
-          bug.light.intensity = 2.6 + lightPulse * 3.35;
+          const lightPulse = (bug.lastPulse ?? 0.62) + smoothedMusicKick * 0.55;
+          bug.light.distance = bug.lightBaseDistance + lightPulse * 14.5;
+          bug.light.intensity = 2.6 + lightPulse * 2.8 + smoothedMusicIntensity * 1.8;
         }
       }
 
@@ -8316,8 +8337,16 @@
       const adsMotionScale = THREE.MathUtils.lerp(1.0, 0.12, adsWeight);
       const cameraShakeScale = cameraShakeEnabled ? 1 : 0;
 
-      const sideVelocity = velocity.x * right.x + velocity.z * right.z;
-      const targetTilt = THREE.MathUtils.clamp(-sideVelocity * 0.04, -0.45, 0.45);
+      const currentYaw = viewYaw.rotation.y;
+      let yawDelta = currentYaw - (window._lastCameraYaw || currentYaw);
+      if (yawDelta > Math.PI) yawDelta -= Math.PI * 2;
+      if (yawDelta < -Math.PI) yawDelta += Math.PI * 2;
+      window._lastCameraYaw = currentYaw;
+
+      // Tilts now happen in viewYaw's coordinate space, so Z is always camera "roll"
+      const inputTiltFactor = -direction.x * 0.14; 
+      const rotationTiltFactor = -yawDelta * 1.8; 
+      const targetTilt = THREE.MathUtils.clamp(inputTiltFactor + rotationTiltFactor, -0.42, 0.42);
       viewRollBaseZ += (targetTilt - viewRollBaseZ) * dt * 8;
 
       recoilBack = THREE.MathUtils.lerp(recoilBack, 0, 1 - Math.exp(-11.5 * dt));
@@ -8517,11 +8546,61 @@
         updateNeonLights(player.position);
         lightAccumulator = 0;
       }
+      const kickFactor = smoothedMusicKick * 0.8;
+      const intensityFactor = smoothedMusicIntensity * 0.25;
+      
+      // Only update lights if there's significant change or music is playing
+      if (kickFactor > 0.01 || intensityFactor > 0.01) {
+        dirLight.intensity = 1.2 + kickFactor * 2.5 + intensityFactor;
+        ambientFill.intensity = 2.5 + kickFactor * 0.8;
+        hemiLight.intensity = 2.2 + kickFactor * 1.5;
+        skyMat.uniforms.musicGlow.value = kickFactor * 1.5 + intensityFactor * 0.5;
+      } else if (dirLight.intensity !== 1.2) {
+        dirLight.intensity = 1.2;
+        ambientFill.intensity = 2.5;
+        hemiLight.intensity = 2.2;
+        skyMat.uniforms.musicGlow.value = 0;
+      }
+
       updateDreamBoundaryFx(frameDt);
     };
 
-    const updateAudioFrame = () => {
-      // Audio playback is event-driven; keep stage for deterministic pipeline ordering.
+    const updateAudioFrame = (dt) => {
+      if (backgroundMusicStarted && !backgroundMusicElement.paused) {
+        musicAnalyzer.getByteFrequencyData(musicDataArray);
+        
+        // Intensity: full spectrum average
+        let sum = 0;
+        for (let i = 0; i < musicDataArray.length; i++) {
+          sum += musicDataArray[i];
+        }
+        const currentIntensity = sum / (musicDataArray.length * 255);
+        smoothedMusicIntensity = THREE.MathUtils.lerp(smoothedMusicIntensity, currentIntensity, 1 - Math.exp(-10 * dt));
+        
+        // Kick: Low frequency peak (mostly sub and bass bins)
+        // We look for a sudden spike in the low end
+        const currentKick = (musicDataArray[0] + musicDataArray[1] + musicDataArray[2]) / (3 * 255);
+        
+        // Adaptive thresholding for peak detection
+        musicKickHistory.push(currentKick);
+        if (musicKickHistory.length > kickHistorySize) musicKickHistory.shift();
+        
+        const avgKick = musicKickHistory.reduce((a, b) => a + b, 0) / musicKickHistory.length;
+        const kickThreshold = avgKick * 1.35 + 0.15; // Requires being 35% above average and minimum noise floor
+        
+        if (currentKick > kickThreshold && currentKick > 0.45) {
+          rawMusicKick = currentKick;
+        } else {
+          rawMusicKick = 0;
+        }
+        
+        // Exponential decay for the kick visual effect (snap up, fade down)
+        const decaySpeed = rawMusicKick > smoothedMusicKick ? 35 : 8;
+        smoothedMusicKick = THREE.MathUtils.lerp(smoothedMusicKick, rawMusicKick, 1 - Math.exp(-decaySpeed * dt));
+      } else {
+        smoothedMusicIntensity = THREE.MathUtils.lerp(smoothedMusicIntensity, 0, 1 - Math.exp(-5 * dt));
+        smoothedMusicKick = THREE.MathUtils.lerp(smoothedMusicKick, 0, 1 - Math.exp(-5 * dt));
+      }
     };
 
     const updateFpsAndDebugHud = (frameDt) => {
@@ -8570,7 +8649,7 @@
       // 5) FX + PARTICLES
       updateFxAndParticlesFrame(frameDt);
       // 6) AUDIO UPDATES
-      updateAudioFrame();
+      updateAudioFrame(frameDt);
 
       // 7) RENDER
       renderer.setRenderTarget(renderTarget);
