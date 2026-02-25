@@ -1321,13 +1321,57 @@
     let weaponEffectsVolumeLevel = 1;
     let backgroundMusicStarted = false;
 
-    const backgroundMusicElement = new Audio("./loop_music2.ogg");
+    const backgroundMusicElement = new Audio("assets/audio/loop_music2.ogg");
     backgroundMusicElement.loop = true;
     backgroundMusicElement.preload = "auto";
     backgroundMusicElement.playsInline = true;
     backgroundMusicElement.crossOrigin = "anonymous";
     backgroundMusic.setMediaElementSource(backgroundMusicElement);
     backgroundMusicElement.load();
+
+    // SOUND FX SYSTEM
+    const soundBuffers = new Map();
+    const audioLoader = new THREE.AudioLoader();
+    const soundPools = new Map();
+
+    const loadSound = (id, url) => {
+      audioLoader.load(url, (buffer) => {
+        soundBuffers.set(id, buffer);
+      });
+    };
+
+    const getSoundFromPool = (id) => {
+      let pool = soundPools.get(id);
+      if (!pool) {
+        pool = [];
+        soundPools.set(id, pool);
+      }
+      for (const sound of pool) {
+        if (!sound.isPlaying) return sound;
+      }
+      const newSound = new THREE.Audio(audioListener);
+      newSound.setBuffer(soundBuffers.get(id));
+      pool.push(newSound);
+      return newSound;
+    };
+
+    const playSound = (id, volumeMultiplier = 1.0) => {
+      if (!soundBuffers.has(id)) return;
+      const sound = getSoundFromPool(id);
+      sound.setVolume(backgroundMusicMasterLevel * weaponEffectsVolumeLevel * volumeMultiplier);
+      if (sound.isPlaying) sound.stop();
+      sound.play();
+    };
+
+    loadSound("shotgun", "assets/audio/shotgun.ogg");
+    loadSound("pistol", "assets/audio/gunshot.ogg");
+    loadSound("punch", "assets/audio/punch.ogg");
+    loadSound("reload", "assets/audio/reload.ogg");
+    loadSound("sniper", "assets/audio/sniper.ogg");
+    loadSound("bazooka", "assets/audio/bazooka.ogg");
+    loadSound("jump", "assets/audio/jump.ogg");
+    loadSound("dash", "assets/audio/dash.ogg");
+    loadSound("boom", "assets/audio/boom.ogg");
 
     const KICK_BPM = 140;
     const BEAT_PERIOD = 60 / KICK_BPM; 
@@ -4684,6 +4728,7 @@
       reloadTimer = activeWeapon.reloadTime;
       recoilBack = Math.min(recoilBack + 0.22 * recoilEffectScale, 0.85);
       recoilCamPitch = Math.min(recoilCamPitch + 0.05 * recoilEffectScale, 0.26);
+      playSound("reload");
       updateAmmoHud();
     };
 
@@ -5215,6 +5260,7 @@
       if (removedIndices.length === 0) return 0;
 
       spawnBlockDebris(blockState, hitPoint, hitNormal, impactDir, energy, removedIndices.length);
+      playSound("boom", 0.65 + Math.random() * 0.2);
 
       const floatingComponents = collectFloatingVoxelIslands(blockState);
       for (const component of floatingComponents) {
@@ -5538,6 +5584,7 @@
       cameraKick += (activeWeapon.recoilCam || 0) * 3.6;
       muzzleFlashTimer = 0;
       if (activeMuzzleFlash) activeMuzzleFlash.visible = false;
+      playSound("punch");
       updateAmmoHud();
     };
 
@@ -5910,8 +5957,12 @@
       camera.getWorldDirection(tempShootDir).normalize();
       if (activeWeapon.fireType === "hitscan") {
         fireHitscanWeapon(activeWeapon, tempShootDir);
+        if (activeWeapon.id === "shotgun") playSound("shotgun");
+        else if (activeWeapon.id === "sniper") playSound("sniper");
+        else playSound("pistol");
       } else if (activeWeapon.fireType === "projectile") {
         spawnBazookaProjectile(activeWeapon, tempShootDir);
+        playSound("bazooka");
       }
 
       if (activeWeapon.clipSize > 0) {
@@ -8082,6 +8133,7 @@
         velocity.y = jumpVelocity;
         isGrounded = false;
         jumpBufferTime = 0;
+        playSound("jump", 0.82);
       } else if (!isDashing && !isGrounded && jumpBufferTime > 0 && wallJumpCharges > 0 && wallContactTimer > 0) {
         const jumpNormal = hasWallContact ? tempWallNormal : lastWallContactNormal;
         const wallDotVel = velocity.x * jumpNormal.x + velocity.z * jumpNormal.z;
@@ -8096,6 +8148,7 @@
           wallContactTimer = 0;
           jumpBufferTime = 0;
           sprintFromDoubleTap = false;
+          playSound("jump", 0.95);
         }
       }
     };
@@ -8350,6 +8403,7 @@
       if (isDashing) {
         velocity.x = dashDirection.x * dashSpeed;
         velocity.z = dashDirection.z * dashSpeed;
+        playSound("dash");
       } else if (hasMoveInput) {
         if (isGrounded) {
           applyAcceleration(moveWish, targetSpeed, groundAccel * movementGroundAccelScale, dt);
