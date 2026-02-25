@@ -391,9 +391,26 @@
       font-size: 0.95rem;
       line-height: 1.6;
       letter-spacing: 0.1em;
-      max-width: 800px;
+      max-width: 900px;
       width: 100%;
       color: #fff;
+      max-height: calc(100vh - 100px);
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding: 0 20px 40px;
+      scrollbar-width: thin;
+      scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+      position: relative;
+    }
+
+    #controlsSection::-webkit-scrollbar,
+    #optionsSection::-webkit-scrollbar {
+      width: 4px;
+    }
+
+    #controlsSection::-webkit-scrollbar-thumb,
+    #optionsSection::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.15);
     }
 
     .controlsSubTitle {
@@ -406,6 +423,7 @@
       width: 100%;
       border-bottom: 1px solid rgba(255, 255, 255, 0.05);
       padding-bottom: 8px;
+      grid-column: 1 / -1;
     }
 
     .optionRow, .controlRow {
@@ -518,9 +536,10 @@
     }
 
     #optionsBackBtn, #controlsBackBtn {
-      position: absolute;
+      position: sticky;
       top: 0;
       left: 0;
+      z-index: 10;
       font-size: 1.5rem;
       opacity: 0.5;
       transition: opacity 0.2s, transform 0.2s;
@@ -528,7 +547,10 @@
       border: none;
       color: #fff;
       cursor: pointer;
-      padding: 20px;
+      padding: 10px;
+      margin-left: -20px;
+      margin-top: -10px;
+      float: left;
     }
 
     #optionsBackBtn:hover, #controlsBackBtn:hover {
@@ -578,6 +600,25 @@
       display: flex;
       flex-direction: column;
       gap: 2px;
+    }
+
+    @media (min-width: 960px) {
+      #optionsSection:not(.hidden) {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0 40px;
+        align-content: start;
+      }
+      #optionsSection > *:not(.optionRow) { grid-column: 1 / -1; }
+      #optionsSection .optionRow { grid-column: auto; }
+
+      #bindRows {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0 40px;
+      }
+      
+      #optionsIntroText, #fixedControlsText { grid-column: 1 / -1; }
     }
 
     #ammoHud {
@@ -6098,6 +6139,17 @@
         waitingBindAction = null;
         updateBindingUi();
         return;
+      }
+
+      if (normalizedCode === "Escape" && isPaused) {
+        if (!optionsSection.classList.contains("hidden")) {
+          closeOptionsMenu();
+          return;
+        }
+        if (!controlsSection.classList.contains("hidden")) {
+          closeControlsMenu();
+          return;
+        }
       }
 
       if (e.target instanceof HTMLElement && e.target.closest("button")) return;
