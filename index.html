@@ -200,22 +200,35 @@
       display: none;
     }
 
+    #fpsHud {
+      position: fixed;
+      right: clamp(16px, 2.3vw, 30px);
+      top: clamp(16px, 2.3vh, 30px);
+      z-index: 12;
+      pointer-events: none;
+      color: var(--hud-mid);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      font-size: 0.72rem;
+      font-weight: 300;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      text-shadow: var(--hud-aberration);
+      transform: scale(var(--hud-scale));
+      transform-origin: top right;
+      opacity: var(--hud-opacity);
+      white-space: nowrap;
+    }
+
     #sniperScope {
       position: fixed;
       inset: 0;
       z-index: 13;
       pointer-events: none;
       background:
-        radial-gradient(
-          circle at center,
-          rgba(2, 4, 8, 0) 0 22%,
-          rgba(2, 4, 8, 0.12) 22% 23%,
-          rgba(2, 4, 8, 0.26) 23% 24%,
-          rgba(2, 4, 8, 0.42) 24% 25%,
-          rgba(2, 4, 8, 0.58) 25% 26%,
-          rgba(2, 4, 8, 0.74) 26% 27%,
-          rgba(2, 4, 8, 0.92) 27% 100%
-        );
+        repeating-linear-gradient(135deg, rgba(239, 246, 255, 0.05) 0 1px, rgba(0, 0, 0, 0) 1px 4px),
+        linear-gradient(90deg, rgba(2, 4, 8, 0.94) 0 16%, rgba(2, 4, 8, 0) 16% 84%, rgba(2, 4, 8, 0.94) 84% 100%),
+        linear-gradient(rgba(2, 4, 8, 0.94) 0 16%, rgba(2, 4, 8, 0) 16% 84%, rgba(2, 4, 8, 0.94) 84% 100%);
+      image-rendering: pixelated;
     }
 
     #sniperScope::before,
@@ -229,76 +242,96 @@
     }
 
     #sniperScope::before {
-      width: min(58vmin, 440px);
-      height: min(58vmin, 440px);
+      width: min(62vmin, 470px);
+      height: min(62vmin, 470px);
       background:
-        linear-gradient(rgba(234, 0, 0, 0.96), rgba(234, 0, 0, 0.96)),
-        linear-gradient(rgba(234, 0, 0, 0.96), rgba(234, 0, 0, 0.96)),
-        linear-gradient(rgba(234, 0, 0, 0.96), rgba(234, 0, 0, 0.96)),
-        linear-gradient(rgba(234, 0, 0, 0.96), rgba(234, 0, 0, 0.96));
+        linear-gradient(
+          rgba(239, 246, 255, 0) calc(50% - 1px),
+          rgba(239, 246, 255, 0.88) calc(50% - 1px),
+          rgba(239, 246, 255, 0.88) calc(50% + 1px),
+          rgba(239, 246, 255, 0) calc(50% + 1px)
+        ),
+        linear-gradient(
+          90deg,
+          rgba(239, 246, 255, 0) calc(50% - 1px),
+          rgba(239, 246, 255, 0.88) calc(50% - 1px),
+          rgba(239, 246, 255, 0.88) calc(50% + 1px),
+          rgba(239, 246, 255, 0) calc(50% + 1px)
+        );
       background-repeat: no-repeat;
-      background-size:
-        1.9% 18%,
-        1.9% 18%,
-        18% 1.9%,
-        18% 1.9%;
-      background-position:
-        50% 22%,
-        50% 78%,
-        22% 50%,
-        78% 50%;
+      background-size: 100% 100%, 100% 100%;
+      background-position: 0 0, 1px 0;
       image-rendering: pixelated;
+      border: 1px solid rgba(239, 246, 255, 0.72);
       clip-path: polygon(
-        50% 0%,
-        61% 0%,
-        61% 6%,
-        71% 6%,
-        71% 12%,
-        80% 12%,
-        80% 20%,
-        87% 20%,
-        87% 30%,
-        92% 30%,
-        92% 70%,
-        87% 70%,
-        87% 80%,
-        80% 80%,
-        80% 88%,
-        71% 88%,
-        71% 94%,
-        61% 94%,
-        61% 100%,
-        39% 100%,
-        39% 94%,
-        29% 94%,
-        29% 88%,
-        20% 88%,
-        20% 80%,
-        13% 80%,
-        13% 70%,
-        8% 70%,
-        8% 30%,
-        13% 30%,
-        13% 20%,
-        20% 20%,
-        20% 12%,
-        29% 12%,
-        29% 6%,
-        39% 6%,
-        39% 0%
+        44% 0%,
+        56% 0%,
+        56% 5%,
+        68% 5%,
+        68% 12%,
+        78% 12%,
+        78% 22%,
+        88% 22%,
+        88% 32%,
+        95% 32%,
+        95% 68%,
+        88% 68%,
+        88% 78%,
+        78% 78%,
+        78% 88%,
+        68% 88%,
+        68% 95%,
+        56% 95%,
+        56% 100%,
+        44% 100%,
+        44% 95%,
+        32% 95%,
+        32% 88%,
+        22% 88%,
+        22% 78%,
+        12% 78%,
+        12% 68%,
+        5% 68%,
+        5% 32%,
+        12% 32%,
+        12% 22%,
+        22% 22%,
+        22% 12%,
+        32% 12%,
+        32% 5%,
+        44% 5%
       );
       filter:
-        drop-shadow(0 0 3px rgba(234, 0, 0, 0.34))
-        drop-shadow(0 0 2px rgba(234, 0, 0, 0.26));
+        drop-shadow(0 0 7px rgba(255, 108, 126, 0.36))
+        drop-shadow(0 0 8px rgba(109, 196, 255, 0.3));
+      box-shadow: inset 0 0 18px rgba(2, 4, 8, 0.52);
     }
 
     #sniperScope::after {
-      width: clamp(8px, 1.25vmin, 12px);
-      height: clamp(8px, 1.25vmin, 12px);
-      background: #0b111b;
+      width: clamp(10px, 1.45vmin, 14px);
+      height: clamp(10px, 1.45vmin, 14px);
+      border: 3px solid rgba(239, 246, 255, 0.86);
+      background: rgba(11, 17, 27, 0.94);
       image-rendering: pixelated;
       box-shadow:
-        0 0 4px rgba(234, 0, 0, 0.2);
+        0 0 5px rgba(255, 108, 126, 0.24),
+        0 0 8px rgba(109, 196, 255, 0.2);
+    }
+
+    #dashSpeedOverlay {
+      position: fixed;
+      inset: 0;
+      z-index: 11;
+      pointer-events: none;
+      opacity: 0;
+      transform: scale(1);
+      transform-origin: center;
+      transition: opacity 80ms linear;
+      background:
+        radial-gradient(circle at center, rgba(3, 5, 10, 0) 0 62%, rgba(12, 18, 30, 0.4) 74%, rgba(2, 4, 8, 0.76) 100%),
+        radial-gradient(circle at 25% 50%, rgba(255, 108, 126, 0.1), rgba(0, 0, 0, 0) 60%),
+        radial-gradient(circle at 75% 50%, rgba(109, 196, 255, 0.12), rgba(0, 0, 0, 0) 60%);
+      mix-blend-mode: screen;
     }
 
     #menuTitle {
@@ -344,15 +377,17 @@
 
     #controlsSection {
       margin-top: 12px;
-      width: min(780px, 100%);
+      width: min(920px, 100%);
+      max-width: 920px;
       border: 0;
       background: transparent;
       box-shadow: none;
       padding: 10px 0 2px;
       text-align: left;
       font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-      font-size: 0.86rem;
-      letter-spacing: 0.06em;
+      font-size: 1.12rem;
+      line-height: 1.6;
+      letter-spacing: 0.08em;
       text-transform: uppercase;
       color: var(--hud-main);
       text-shadow: var(--hud-aberration);
@@ -360,15 +395,17 @@
 
     #optionsSection {
       margin-top: 12px;
-      width: min(780px, 100%);
+      width: min(920px, 100%);
+      max-width: 920px;
       border: 0;
       background: transparent;
       box-shadow: none;
       padding: 10px 0 2px;
       text-align: left;
       font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-      font-size: 0.86rem;
-      letter-spacing: 0.06em;
+      font-size: 1.12rem;
+      line-height: 1.6;
+      letter-spacing: 0.08em;
       text-transform: uppercase;
       color: var(--hud-main);
       text-shadow: var(--hud-aberration);
@@ -430,10 +467,10 @@
       align-items: center;
       gap: 16px;
       min-height: 28px;
-      padding: 4px 0;
+      padding: 8px 0;
       border-bottom: 0;
       color: var(--hud-mid);
-      font-size: 0.79rem;
+      font-size: 1rem;
       letter-spacing: 0.08em;
       line-height: 1.2;
       transition:
@@ -579,11 +616,11 @@
 
     .optionRow {
       display: grid;
-      grid-template-columns: minmax(180px, 1fr) minmax(260px, 1.4fr);
+      grid-template-columns: minmax(240px, 1fr) minmax(360px, 1.6fr);
       align-items: center;
-      gap: 16px;
+      gap: 28px;
       min-height: 30px;
-      padding: 5px 0;
+      padding: 12px 0;
       color: var(--hud-mid);
     }
 
@@ -597,13 +634,14 @@
       display: inline-flex;
       align-items: center;
       gap: 10px;
-      min-width: 240px;
+      min-width: 320px;
       justify-content: flex-end;
     }
 
     .optionSlider {
       width: min(210px, 42vw);
-      height: 2px;
+      height: 4px;
+      transform: scaleY(1.4);
       accent-color: rgba(239, 246, 255, 0.92);
       background: transparent;
       cursor: pointer;
@@ -764,6 +802,7 @@
     }
 
     body.hud-fast #statusHud,
+    body.hud-fast #fpsHud,
     body.hud-fast #ammoHud,
     body.hud-fast #reloadHud {
       opacity: 0.62;
@@ -773,6 +812,7 @@
 <body>
   <div id="app"></div>
   <div id="crosshair"></div>
+  <div id="dashSpeedOverlay" class="hidden"></div>
   <div id="statusHud" aria-label="Estado">
     <div class="statusRow">
       <i class="fa-solid fa-heart-pulse" aria-hidden="true"></i>
@@ -800,6 +840,7 @@
       <span id="statusCoordsValue" class="statusValue">X:0.00 Y:0.00 Z:0.00</span>
     </div>
   </div>
+  <div id="fpsHud" class="hidden">FPS: --</div>
   <div id="sniperScope" class="hidden"></div>
   <div id="reloadHud" class="hidden"><div id="reloadBarFill"></div></div>
   <div id="ammoHud"></div>
@@ -932,6 +973,18 @@
             <button id="optDreamBoundaryFx" class="optionToggleBtn" type="button">Activado</button>
           </div>
         </div>
+        <div class="optionRow">
+          <span class="optionLabel">Mostrar FPS</span>
+          <div class="optionControl">
+            <button id="optShowFps" class="optionToggleBtn" type="button">Desactivado</button>
+          </div>
+        </div>
+        <div class="optionRow">
+          <span class="optionLabel">Debug Rendimiento</span>
+          <div class="optionControl">
+            <button id="optDebugPerf" class="optionToggleBtn" type="button">Desactivado</button>
+          </div>
+        </div>
 
         <p class="controlsSubTitle">Jugabilidad</p>
         <div class="optionRow">
@@ -939,6 +992,13 @@
           <div class="optionControl">
             <input id="optMouseSensitivity" class="optionSlider" type="range" min="0" max="100" step="1" value="55">
             <span id="optMouseSensitivityValue" class="optionValue">55%</span>
+          </div>
+        </div>
+        <div class="optionRow">
+          <span class="optionLabel">Campo de Vision</span>
+          <div class="optionControl">
+            <input id="optFovSlider" class="optionSlider" type="range" min="60" max="110" step="1" value="75">
+            <span id="optFovValue" class="optionValue">75</span>
           </div>
         </div>
         <div class="optionRow">
@@ -1223,6 +1283,8 @@
     const statusCrouchValue = document.getElementById("statusCrouchValue");
     const statusSprintValue = document.getElementById("statusSprintValue");
     const statusCoordsValue = document.getElementById("statusCoordsValue");
+    const fpsHud = document.getElementById("fpsHud");
+    const dashSpeedOverlay = document.getElementById("dashSpeedOverlay");
 
     const optMasterVolume = document.getElementById("optMasterVolume");
     const optMasterVolumeValue = document.getElementById("optMasterVolumeValue");
@@ -1243,8 +1305,12 @@
     const optParticleEffects = document.getElementById("optParticleEffects");
     const optPixelStyle = document.getElementById("optPixelStyle");
     const optDreamBoundaryFx = document.getElementById("optDreamBoundaryFx");
+    const optShowFps = document.getElementById("optShowFps");
+    const optDebugPerf = document.getElementById("optDebugPerf");
     const optMouseSensitivity = document.getElementById("optMouseSensitivity");
     const optMouseSensitivityValue = document.getElementById("optMouseSensitivityValue");
+    const optFovSlider = document.getElementById("optFovSlider");
+    const optFovValue = document.getElementById("optFovValue");
     const optRecoilVibration = document.getElementById("optRecoilVibration");
     const optRecoilVibrationValue = document.getElementById("optRecoilVibrationValue");
     const optCameraShake = document.getElementById("optCameraShake");
@@ -1253,7 +1319,7 @@
     const renderer = new THREE.WebGLRenderer({
       antialias: false,
       powerPreference: "high-performance",
-      desynchronized: true
+      desynchronized: false
     });
     const rendererPixelRatioCap = 1.5;
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, rendererPixelRatioCap));
@@ -3587,10 +3653,16 @@
       return root;
     };
 
-    const weapons = GameConfig.weapons.map((weaponDef) => ({
-      ...weaponDef,
-      currentAmmo: weaponDef.clipSize > 0 ? weaponDef.clipSize : 0
-    }));
+    const weapons = GameConfig.weapons.map((weaponDef) => {
+      const tunedReloadTime = weaponDef.reloadTime > 0
+        ? weaponDef.reloadTime * 0.45 * 0.9
+        : weaponDef.reloadTime;
+      return {
+        ...weaponDef,
+        reloadTime: tunedReloadTime,
+        currentAmmo: weaponDef.clipSize > 0 ? weaponDef.clipSize : 0
+      };
+    });
 
     const weaponModels = new Map();
     for (const weaponDef of weapons) {
@@ -3616,6 +3688,21 @@
     let recoilCamPitch = 0;
     let recoilEffectScale = 1;
     let cameraShakeEnabled = true;
+    let cameraShakeTime = 0;
+    let cameraShakeStrength = 0;
+    let viewRollBaseZ = 0;
+    let viewKickBaseX = 0;
+    let viewKickBounceY = 0;
+    let viewKickStretchZ = 0;
+    let cameraKick = 0;
+    let landingBounceOffset = 0;
+    let landingBounceVelocity = 0;
+    let targetBaseFov = GameConfig.player.baseFov;
+    let dashVisualTimer = 0;
+    let dashVisualStrength = 0;
+    const dashVisualDuration = 0.14;
+    let dashOverlayOpacity = 0;
+    let dashOverlayScale = 1;
     let muzzleFlashTimer = 0;
     let activeMuzzleFlash = null;
     let fistPunchTimer = 0;
@@ -3928,6 +4015,16 @@
     };
     updateStatusHud(false, false);
 
+    const countActiveLights = () => {
+      let count = 0;
+      scene.traverseVisible((object) => {
+        if (!object.isLight) return;
+        if ((object.intensity ?? 1) <= 0) return;
+        count += 1;
+      });
+      return count;
+    };
+
     const registerImpulseEntity = (entity) => {
       if (!entity || !entity.position || !entity.velocity) return null;
       impulsePhysicsEntities.push(entity);
@@ -3943,6 +4040,12 @@
       targetVelocity.x += direction.x * normalizedScale;
       targetVelocity.y += direction.y * normalizedScale;
       targetVelocity.z += direction.z * normalizedScale;
+    };
+
+    const addCameraShake = (strength) => {
+      if (!cameraShakeEnabled) return;
+      if (!Number.isFinite(strength) || strength <= 0) return;
+      cameraShakeStrength = THREE.MathUtils.clamp(cameraShakeStrength + strength, 0, 1.5);
     };
 
     const applyWeaponRecoilImpulse = (weaponDef, shootDir) => {
@@ -3987,6 +4090,8 @@
           const impulseStrength = baseForce * (entity.impulseScale ?? 1);
           if (targetVelocity === playerVelocity) {
             applyImpulse(pendingImpulse, tempExplosionDir, impulseStrength);
+            cameraKick += impulseStrength * 0.003;
+            addCameraShake(THREE.MathUtils.clamp(impulseStrength * 0.02, 0.05, 0.5));
           } else {
             applyImpulse(targetVelocity, tempExplosionDir, impulseStrength);
           }
@@ -4000,6 +4105,8 @@
         const impulseStrength = baseForce * falloff * (entity.impulseScale ?? 1);
         if (targetVelocity === playerVelocity) {
           applyImpulse(pendingImpulse, tempExplosionDir, impulseStrength);
+          cameraKick += impulseStrength * 0.003;
+          addCameraShake(THREE.MathUtils.clamp(impulseStrength * 0.02, 0.04, 0.45));
         } else {
           applyImpulse(targetVelocity, tempExplosionDir, impulseStrength);
         }
@@ -4158,11 +4265,22 @@
       dreamBoundaryFx: true,
       floorStyle: "dream",
       mouseSensitivity: 55,
+      fov: GameConfig.player.baseFov,
       recoilVibration: 100,
       cameraShake: true,
+      showFps: false,
+      debugPerformance: false,
       autoJump: true
     };
     const optionState = { ...optionDefaults };
+    let fpsHudEnabled = false;
+    let debugPerformanceEnabled = false;
+    let fpsDisplayText = "FPS: --";
+    let fpsFrameCounter = 0;
+    let fpsTimeAccumulator = 0;
+    let fpsAverage = 0;
+    let debugProfilerTimer = 0;
+    let renderScale = 1.0;
 
     let runtimeParticleQualityScale = particleQualityScale;
     let runtimeLightQualityScale = lightQualityScale;
@@ -4228,8 +4346,11 @@
         optionState.dreamBoundaryFx = parsed.dreamBoundaryFx !== false;
         optionState.floorStyle = normalizeChoice(parsed.floorStyle, ["dream", "flat"], optionDefaults.floorStyle);
         optionState.mouseSensitivity = clampNumber(parsed.mouseSensitivity, 0, 100, optionDefaults.mouseSensitivity);
+        optionState.fov = clampNumber(parsed.fov, 60, 110, optionDefaults.fov);
         optionState.recoilVibration = clampNumber(parsed.recoilVibration, 0, 120, optionDefaults.recoilVibration);
         optionState.cameraShake = parsed.cameraShake !== false;
+        optionState.showFps = parsed.showFps === true;
+        optionState.debugPerformance = parsed.debugPerformance === true;
         optionState.autoJump = parsed.autoJump !== false;
       } catch (_) {
       }
@@ -4261,6 +4382,9 @@
       if (optMouseSensitivity) optMouseSensitivity.value = String(optionState.mouseSensitivity);
       if (optMouseSensitivityValue) optMouseSensitivityValue.textContent = `${Math.round(optionState.mouseSensitivity)}%`;
 
+      if (optFovSlider) optFovSlider.value = String(optionState.fov);
+      if (optFovValue) optFovValue.textContent = `${Math.round(optionState.fov)}`;
+
       if (optRecoilVibration) optRecoilVibration.value = String(optionState.recoilVibration);
       if (optRecoilVibrationValue) optRecoilVibrationValue.textContent = `${Math.round(optionState.recoilVibration)}%`;
 
@@ -4269,6 +4393,8 @@
       setToggleText(optPixelStyle, optionState.pixelStyle, "Activado", "Desactivado");
       setToggleText(optDreamBoundaryFx, optionState.dreamBoundaryFx, "Activado", "Desactivado");
       setToggleText(optCameraShake, optionState.cameraShake, "Activada", "Desactivada");
+      setToggleText(optShowFps, optionState.showFps, "Activado", "Desactivado");
+      setToggleText(optDebugPerf, optionState.debugPerformance, "Activado", "Desactivado");
       setToggleText(optAutoJump, optionState.autoJump, "Activado", "Desactivado");
     };
 
@@ -4343,9 +4469,15 @@
 
       postUniforms.bloomStrength.value = targetBloomStrength;
       postUniforms.postExposure.value = targetPostExposure;
-      postUniforms.aberrationStrength.value = targetAberrationStrength;
-      postUniforms.aberrationMix.value = baseAberrationMix;
-      postUniforms.bloomRadius.value = baseBloomRadius;
+      if (Math.abs(postUniforms.aberrationStrength.value - targetAberrationStrength) > 0.0001) {
+        postUniforms.aberrationStrength.value = targetAberrationStrength;
+      }
+      if (Math.abs(postUniforms.aberrationMix.value - baseAberrationMix) > 0.0001) {
+        postUniforms.aberrationMix.value = baseAberrationMix;
+      }
+      if (Math.abs(postUniforms.bloomRadius.value - baseBloomRadius) > 0.0001) {
+        postUniforms.bloomRadius.value = baseBloomRadius;
+      }
 
       postBaseBloomStrength = targetBloomStrength;
       postBaseBloomRadius = baseBloomRadius;
@@ -4359,6 +4491,15 @@
       }
 
       renderer.domElement.style.imageRendering = optionState.pixelStyle ? "pixelated" : "auto";
+      renderScale = 1.0;
+      if (optionState.pixelStyle) {
+        renderScale = ({
+          alta: 0.85,
+          media: 0.7,
+          baja: 0.6
+        }[optionState.visualQuality] || 0.7);
+      }
+      renderer.setSize(window.innerWidth * renderScale, window.innerHeight * renderScale, false);
       applyFloorStyleVisual();
 
       dreamBoundaryFxEnabled = optionState.dreamBoundaryFx !== false;
@@ -4367,16 +4508,48 @@
       }
     };
 
+    const applyPerformanceDebugOptions = () => {
+      fpsHudEnabled = !!optionState.showFps;
+      debugPerformanceEnabled = !!optionState.debugPerformance;
+      if (fpsHud) {
+        fpsHud.classList.toggle("hidden", !fpsHudEnabled);
+        if (fpsHudEnabled) {
+          fpsHud.textContent = fpsDisplayText;
+        }
+      }
+      if (!fpsHudEnabled) fpsDisplayText = "FPS: --";
+      if (!debugPerformanceEnabled) debugProfilerTimer = 0;
+      if (!fpsHudEnabled && !debugPerformanceEnabled) {
+        fpsFrameCounter = 0;
+        fpsTimeAccumulator = 0;
+        fpsAverage = 0;
+      }
+    };
+
     const applyGameplayComfortOptions = () => {
       const sensitivityT = clampNumber(optionState.mouseSensitivity, 0, 100, optionDefaults.mouseSensitivity) / 100;
       controls.pointerSpeed = THREE.MathUtils.lerp(0.4, 2.4, sensitivityT);
+      targetBaseFov = clampNumber(optionState.fov, 60, 110, optionDefaults.fov);
 
       recoilEffectScale = clampNumber(optionState.recoilVibration, 0, 120, optionDefaults.recoilVibration) / 100;
       cameraShakeEnabled = !!optionState.cameraShake;
 
       if (!cameraShakeEnabled) {
+        cameraShakeStrength = 0;
+        viewRollBaseZ = 0;
+        viewKickBaseX = 0;
+        viewKickBounceY = 0;
+        viewKickStretchZ = 0;
+        cameraKick = 0;
         viewRoll.rotation.z = 0;
         viewKick.rotation.x = 0;
+        viewKick.position.y = 0;
+        viewKick.position.z = 0;
+      }
+
+      if (isPaused && Math.abs(camera.fov - targetBaseFov) > 0.001) {
+        camera.fov = targetBaseFov;
+        camera.updateProjectionMatrix();
       }
     };
 
@@ -4396,6 +4569,7 @@
     applySoundOptions();
     applyHudOptions();
     applyPerformanceOptions();
+    applyPerformanceDebugOptions();
     applyGameplayComfortOptions();
     applyAutoJumpOption(true);
 
@@ -4453,9 +4627,21 @@
       optionState.dreamBoundaryFx = !optionState.dreamBoundaryFx;
       commitOptionChange(applyPerformanceOptions);
     });
+    optShowFps?.addEventListener("click", () => {
+      optionState.showFps = !optionState.showFps;
+      commitOptionChange(applyPerformanceDebugOptions);
+    });
+    optDebugPerf?.addEventListener("click", () => {
+      optionState.debugPerformance = !optionState.debugPerformance;
+      commitOptionChange(applyPerformanceDebugOptions);
+    });
 
     optMouseSensitivity?.addEventListener("input", () => {
       optionState.mouseSensitivity = clampNumber(optMouseSensitivity.value, 0, 100, optionDefaults.mouseSensitivity);
+      commitOptionChange(applyGameplayComfortOptions);
+    });
+    optFovSlider?.addEventListener("input", () => {
+      optionState.fov = clampNumber(optFovSlider.value, 60, 110, optionDefaults.fov);
       commitOptionChange(applyGameplayComfortOptions);
     });
     optRecoilVibration?.addEventListener("input", () => {
@@ -5400,6 +5586,8 @@
       applyWeaponRecoilImpulse(activeWeapon, tempShootDir);
       recoilBack = Math.min(recoilBack + (activeWeapon.recoilBack || 0) * 1.9 * recoilEffectScale, 0.62);
       recoilCamPitch = Math.min(recoilCamPitch + (activeWeapon.recoilCam || 0) * 1.7 * recoilEffectScale, 0.2);
+      cameraKick += (activeWeapon.recoilCam || 0) * 2.4;
+      addCameraShake(0.1 + (activeWeapon.recoilCam || 0) * 1.15);
       muzzleFlashTimer = 0;
       if (activeMuzzleFlash) activeMuzzleFlash.visible = false;
       updateAmmoHud();
@@ -5785,6 +5973,8 @@
       applyWeaponRecoilImpulse(activeWeapon, tempShootDir);
       recoilBack = Math.min(recoilBack + (activeWeapon.recoilBack || 0) * 2.3 * recoilEffectScale, 0.78);
       recoilCamPitch = Math.min(recoilCamPitch + (activeWeapon.recoilCam || 0) * 1.95 * recoilEffectScale, 0.26);
+      cameraKick += (activeWeapon.recoilCam || 0) * 2.4;
+      addCameraShake(0.14 + (activeWeapon.recoilCam || 0) * 1.45);
       muzzleFlashTimer = 0.05;
       if (activeMuzzleFlash) activeMuzzleFlash.visible = true;
       updateAmmoHud();
@@ -5816,10 +6006,24 @@
       adsWeight = 0;
       recoilBack = 0;
       recoilCamPitch = 0;
+      viewRollBaseZ = 0;
+      viewKickBaseX = 0;
+      viewKickBounceY = 0;
+      viewKickStretchZ = 0;
+      landingBounceOffset = 0;
+      landingBounceVelocity = 0;
+      cameraShakeStrength = 0;
+      cameraShakeTime = 0;
+      cameraKick = 0;
+      dashVisualTimer = 0;
+      dashVisualStrength = 0;
+      dashOverlayOpacity = 0;
+      dashOverlayScale = 1;
       muzzleFlashTimer = 0;
       fistPunchTimer = 0;
       fistPunchSide = 0;
       fistPendingHit = false;
+      viewKick.position.set(0, 0, 0);
       if (activeMuzzleFlash) activeMuzzleFlash.visible = false;
     };
 
@@ -5941,6 +6145,20 @@
       velocity.set(0, 0, 0);
       viewRoll.rotation.z = 0;
       viewKick.rotation.x = 0;
+      viewKick.position.set(0, 0, 0);
+      viewRollBaseZ = 0;
+      viewKickBaseX = 0;
+      viewKickBounceY = 0;
+      viewKickStretchZ = 0;
+      landingBounceOffset = 0;
+      landingBounceVelocity = 0;
+      cameraShakeStrength = 0;
+      cameraShakeTime = 0;
+      cameraKick = 0;
+      dashVisualTimer = 0;
+      dashVisualStrength = 0;
+      dashOverlayOpacity = 0;
+      dashOverlayScale = 1;
       dashTimer = 0;
       dashCooldownTimer = 0;
       wallJumpCharges = wallJumpMaxCharges;
@@ -5954,8 +6172,8 @@
       weaponRig.visible = true;
       weaponRig.position.copy(weaponHipPos);
       weaponRig.rotation.copy(weaponHipRot);
-      if (Math.abs(camera.fov - 75) > 0.001) {
-        camera.fov = 75;
+      if (Math.abs(camera.fov - targetBaseFov) > 0.001) {
+        camera.fov = targetBaseFov;
         camera.updateProjectionMatrix();
       }
       camera.position.set(0, PLAYER_HEIGHT_STAND, 0);
@@ -6142,7 +6360,6 @@
     const movementGroundAccelScale = 0.42;
     const movementAirAccelScale = 0.88;
     const movementGroundFrictionScale = 0.72;
-    const baseFov = GameConfig.player.baseFov;
     const sprintFovBoost = GameConfig.player.sprintFovBoost;
     const dashFovBoost = GameConfig.player.dashFovBoost;
     const maxTilt = GameConfig.player.maxTilt;
@@ -6171,7 +6388,7 @@
     const moveWish = new THREE.Vector3();
     const dashDirection = new THREE.Vector3();
     const fixedDt = 1 / 60;
-    const maxPhysicsSubsteps = 5;
+    const maxPhysicsSubsteps = GameConfig.physics.maxSubsteps;
     let physicsAccumulator = 0;
     let fireflyAccumulator = 0;
     let ambientParticleAccumulator = 0;
@@ -7624,13 +7841,15 @@
       );
 
       const postBoostFactor = dreamBoundaryFxEnabled ? dreamBoundaryNearFactor : 0;
+      const dashAberrationBoost = dashVisualStrength * 0.24;
+      const dashAberrationMixBoost = dashVisualStrength * 0.05;
       const targetAberrationStrength = THREE.MathUtils.clamp(
-        postBaseAberrationStrength + DREAM_BOUNDARY_ABERRATION_BOOST * postBoostFactor,
+        postBaseAberrationStrength + DREAM_BOUNDARY_ABERRATION_BOOST * postBoostFactor + dashAberrationBoost,
         0,
         3
       );
       const targetAberrationMix = THREE.MathUtils.clamp(
-        postBaseAberrationMix + DREAM_BOUNDARY_ABERRATION_MIX_BOOST * postBoostFactor,
+        postBaseAberrationMix + DREAM_BOUNDARY_ABERRATION_MIX_BOOST * postBoostFactor + dashAberrationMixBoost,
         0,
         1
       );
@@ -7645,26 +7864,41 @@
         6
       );
 
-      postUniforms.aberrationStrength.value = THREE.MathUtils.lerp(
+      const nextAberrationStrength = THREE.MathUtils.lerp(
         postUniforms.aberrationStrength.value,
         targetAberrationStrength,
         smoothing
       );
-      postUniforms.aberrationMix.value = THREE.MathUtils.lerp(
+      if (Math.abs(nextAberrationStrength - postUniforms.aberrationStrength.value) > 0.0001) {
+        postUniforms.aberrationStrength.value = nextAberrationStrength;
+      }
+
+      const nextAberrationMix = THREE.MathUtils.lerp(
         postUniforms.aberrationMix.value,
         targetAberrationMix,
         smoothing
       );
-      postUniforms.bloomStrength.value = THREE.MathUtils.lerp(
+      if (Math.abs(nextAberrationMix - postUniforms.aberrationMix.value) > 0.0001) {
+        postUniforms.aberrationMix.value = nextAberrationMix;
+      }
+
+      const nextBloomStrength = THREE.MathUtils.lerp(
         postUniforms.bloomStrength.value,
         targetBloomStrength,
         smoothing
       );
-      postUniforms.bloomRadius.value = THREE.MathUtils.lerp(
+      if (Math.abs(nextBloomStrength - postUniforms.bloomStrength.value) > 0.0001) {
+        postUniforms.bloomStrength.value = nextBloomStrength;
+      }
+
+      const nextBloomRadius = THREE.MathUtils.lerp(
         postUniforms.bloomRadius.value,
         targetBloomRadius,
         smoothing
       );
+      if (Math.abs(nextBloomRadius - postUniforms.bloomRadius.value) > 0.0001) {
+        postUniforms.bloomRadius.value = nextBloomRadius;
+      }
     };
 
     const updateWeaponStateTimers = (dt) => {
@@ -8048,6 +8282,15 @@
     };
 
     const updatePlayerPhysics = (dt) => {
+      const wasGroundedAtFrameStart = isGrounded;
+      const preGroundVerticalVelocity = velocity.y;
+      dashVisualTimer = Math.max(0, dashVisualTimer - dt);
+      const dashPulsePhase = dashVisualDuration > 0 ? (1 - (dashVisualTimer / dashVisualDuration)) : 0;
+      const dashPulse = dashVisualTimer > 0 ? Math.sin(dashPulsePhase * Math.PI) : 0;
+      dashVisualStrength = THREE.MathUtils.lerp(dashVisualStrength, dashPulse, 1 - Math.exp(-30 * dt));
+      landingBounceVelocity += (-landingBounceOffset * 64 - landingBounceVelocity * 11) * dt;
+      landingBounceOffset += landingBounceVelocity * dt;
+
       velocity.add(pendingImpulse);
       pendingImpulse.set(0, 0, 0);
       jumpBufferTime = Math.max(0, jumpBufferTime - dt);
@@ -8127,6 +8370,9 @@
           dashDirection.normalize();
           dashTimer = dashDuration;
           dashCooldownTimer = dashCooldown;
+          dashVisualTimer = dashVisualDuration;
+          addCameraShake(0.08);
+          if (dashSpeedOverlay) dashSpeedOverlay.classList.remove("hidden");
           sprintFromDoubleTap = false;
         }
       }
@@ -8173,6 +8419,10 @@
       applyGravity(dt, isDashing);
       performSegmentedMove(dt);
       checkGroundCollisions();
+      if (!wasGroundedAtFrameStart && isGrounded && preGroundVerticalVelocity < -2.2) {
+        const landingImpulse = THREE.MathUtils.clamp(Math.abs(preGroundVerticalVelocity) * 0.02, 0.03, 0.11);
+        landingBounceVelocity -= landingImpulse;
+      }
       previousPlayerPosition.copy(player.position);
 
       const horizontalSpeed = Math.hypot(velocity.x, velocity.z);
@@ -8201,30 +8451,50 @@
       const adsMotionScale = THREE.MathUtils.lerp(1.0, 0.12, adsWeight);
       const cameraShakeScale = cameraShakeEnabled ? 1 : 0;
 
-      const tiltLerp = 1 - Math.exp(-12 * dt);
-      const dashTilt = isDashing ? -THREE.MathUtils.clamp(dashDirection.dot(right), -1, 1) * 0.006 : 0;
-      const targetTilt =
-        (-THREE.MathUtils.clamp(direction.x, -1, 1) * maxTilt + dashTilt) *
-        THREE.MathUtils.lerp(1, 0.1, adsWeight) *
-        cameraShakeScale;
-      const nextTilt = THREE.MathUtils.lerp(viewRoll.rotation.z, targetTilt, tiltLerp);
-      viewRoll.rotation.z = THREE.MathUtils.clamp(nextTilt, -maxTilt, maxTilt);
+      const lateralSpeed = velocity.x * right.x + velocity.z * right.z;
+      const targetTilt = THREE.MathUtils.clamp(lateralSpeed * 0.004, -0.085, 0.085);
+      viewRollBaseZ += (targetTilt - viewRollBaseZ) * dt * 10;
 
       recoilBack = THREE.MathUtils.lerp(recoilBack, 0, 1 - Math.exp(-11.5 * dt));
       recoilCamPitch = THREE.MathUtils.lerp(recoilCamPitch, 0, 1 - Math.exp(-14 * dt));
-      viewKick.rotation.x = THREE.MathUtils.lerp(viewKick.rotation.x, -recoilCamPitch * cameraShakeScale, 1 - Math.exp(-20 * dt));
+      viewKickBaseX = THREE.MathUtils.lerp(viewKickBaseX, 0, 1 - Math.exp(-20 * dt));
+      cameraKick *= Math.exp(-dt * 8);
 
       const movementFactor = THREE.MathUtils.clamp(horizontalSpeed / sprintGroundSpeed, 0, 1);
-      bobTime += dt * (7.0 + horizontalSpeed * 0.45);
-      const bobGroundScale = isGrounded ? 1.0 : 0.35;
-      const bobAdsScale = THREE.MathUtils.lerp(1, 0.3, adsWeight);
+      bobTime += dt * (7.6 + horizontalSpeed * 0.52);
+      const bobGroundScale = isGrounded ? 1.0 : 0.32;
+      const bobAdsScale = THREE.MathUtils.lerp(1, 0.28, adsWeight);
       const bobTargetX =
-        Math.sin(bobTime * 1.8) * bobSideAmplitude * movementFactor * bobGroundScale * bobAdsScale * cameraShakeScale;
+        Math.sin(bobTime * 1.8) * bobSideAmplitude * 1.08 * movementFactor * bobGroundScale * bobAdsScale * cameraShakeScale;
       const bobTargetY =
-        Math.abs(Math.sin(bobTime * 3.2)) * bobUpAmplitude * movementFactor * bobGroundScale * bobAdsScale * cameraShakeScale;
+        (
+          Math.abs(Math.sin(bobTime * 3.2)) * 0.78 +
+          Math.max(0, Math.sin(bobTime * 6.4)) * 0.22
+        ) * bobUpAmplitude * 1.26 * movementFactor * bobGroundScale * bobAdsScale * cameraShakeScale;
       const bobLerp = 1 - Math.exp(-10 * dt);
       bobOffsetX = THREE.MathUtils.lerp(bobOffsetX, bobTargetX, bobLerp);
       bobOffsetY = THREE.MathUtils.lerp(bobOffsetY, bobTargetY, bobLerp);
+      viewKickBounceY = THREE.MathUtils.lerp(
+        viewKickBounceY,
+        (bobOffsetY + landingBounceOffset) * cameraShakeScale,
+        1 - Math.exp(-16 * dt)
+      );
+      viewKickStretchZ = THREE.MathUtils.lerp(
+        viewKickStretchZ,
+        -dashVisualStrength * 0.18,
+        1 - Math.exp(-24 * dt)
+      );
+
+      cameraShakeTime += dt * (1 + cameraShakeStrength * 0.3);
+      cameraShakeStrength = THREE.MathUtils.lerp(cameraShakeStrength, 0, 1 - Math.exp(-9 * dt));
+      const proceduralShakeStrength = cameraShakeEnabled ? cameraShakeStrength : 0;
+      const shakePitch = Math.sin(cameraShakeTime * 60) * proceduralShakeStrength * 0.01;
+      const shakeRoll = Math.sin(cameraShakeTime * 45 + 0.9) * proceduralShakeStrength * 0.006;
+      const dashRoll = -THREE.MathUtils.clamp(dashDirection.dot(right), -1, 1) * 0.06 * dashVisualStrength;
+      viewRoll.rotation.z = viewRollBaseZ + shakeRoll + dashRoll + cameraKick * 0.35 * cameraShakeScale;
+      viewKick.rotation.x = viewKickBaseX + shakePitch - cameraKick * cameraShakeScale;
+      viewKick.position.y = viewKickBounceY;
+      viewKick.position.z = viewKickStretchZ - dashVisualStrength * 0.22;
 
       const idleFactor = THREE.MathUtils.clamp(1 - horizontalSpeed / 2.2, 0, 1);
       const sprintBreathScale = isSprinting ? 0.14 : 1.0;
@@ -8235,19 +8505,31 @@
         Math.sin(breathTime) * breathAmplitude * idleFactor * sprintBreathScale * dashBreathScale * adsBreathScale * cameraShakeScale;
       const breathLerp = 1 - Math.exp(-6 * dt);
       breathOffset = THREE.MathUtils.lerp(breathOffset, targetBreath, breathLerp);
-      camera.position.set(bobOffsetX, currentEyeHeight + breathOffset + bobOffsetY, 0);
+      camera.position.set(bobOffsetX, currentEyeHeight + breathOffset, 0);
 
-      const movementFov = baseFov + (isSprinting ? sprintFovBoost : 0) + (isDashing ? dashFovBoost : 0);
+      const dashFovSpike = dashVisualStrength * 7;
+      const movementFov = targetBaseFov + (isSprinting ? sprintFovBoost : 0) + (isDashing ? dashFovBoost : 0) + dashFovSpike;
       const adsFov = activeWeapon.adsFov || movementFov;
-      const scopedFov = THREE.MathUtils.lerp(baseFov, sniperScopeZoomFov, adsWeight);
+      const scopedFov = THREE.MathUtils.lerp(targetBaseFov, sniperScopeZoomFov, adsWeight);
       const finalFovTarget = sniperScopeRequested
         ? scopedFov
         : THREE.MathUtils.lerp(movementFov, adsFov, adsWeight);
-      const fovLerp = 1 - Math.exp(-10 * dt);
+      const fovLerp = THREE.MathUtils.clamp(dt * 8, 0, 1);
       const nextFov = THREE.MathUtils.lerp(camera.fov, finalFovTarget, fovLerp);
       if (Math.abs(nextFov - camera.fov) > 0.001) {
         camera.fov = nextFov;
         camera.updateProjectionMatrix();
+      }
+
+      if (dashSpeedOverlay) {
+        const dashTargetOpacity = dashVisualStrength * 0.55;
+        dashOverlayOpacity = THREE.MathUtils.lerp(dashOverlayOpacity, dashTargetOpacity, 1 - Math.exp(-18 * dt));
+        dashOverlayScale = THREE.MathUtils.lerp(dashOverlayScale, dashVisualStrength > 0.001 ? 1.06 : 1, 1 - Math.exp(-16 * dt));
+        dashSpeedOverlay.style.opacity = dashOverlayOpacity.toFixed(3);
+        dashSpeedOverlay.style.transform = `scale(${dashOverlayScale.toFixed(3)})`;
+        if (dashOverlayOpacity <= 0.01 && dashVisualStrength <= 0.01) {
+          dashSpeedOverlay.classList.add("hidden");
+        }
       }
 
       const swaySpeed = Math.hypot(velocity.x, velocity.z);
@@ -8281,7 +8563,10 @@
       const poseBaseZ = THREE.MathUtils.lerp(currentHipPos.z, currentAdsPos.z, adsWeight);
       const targetRigX = poseBaseX + swayPoseX + reloadWeight * 0.09 + reloadSwing * 0.05;
       const targetRigY = poseBaseY + swayPoseY + switchOffsetY - reloadWeight * 0.22 - reloadArc * 0.08 + recoilBack * 0.14;
-      const targetRigZ = poseBaseZ + recoilBack + reloadWeight * 0.2 + reloadArc * 0.11;
+      const fovWeaponOffset = (camera.fov - GameConfig.player.baseFov) * 0.018;
+      const minWeaponZ = poseBaseZ - 0.7;
+      const fovAdjustedBaseZ = Math.max(poseBaseZ - fovWeaponOffset, minWeaponZ);
+      const targetRigZ = fovAdjustedBaseZ + recoilBack + reloadWeight * 0.2 + reloadArc * 0.11;
       weaponRig.position.x = THREE.MathUtils.lerp(weaponRig.position.x, targetRigX, poseLerp);
       weaponRig.position.y = THREE.MathUtils.lerp(weaponRig.position.y, targetRigY, poseLerp);
       weaponRig.position.z = THREE.MathUtils.lerp(weaponRig.position.z, targetRigZ, poseLerp);
@@ -8372,6 +8657,35 @@
       // Audio playback is event-driven; keep stage for deterministic pipeline ordering.
     };
 
+    const updateFpsAndDebugHud = (frameDt) => {
+      if (!fpsHudEnabled && !debugPerformanceEnabled) return;
+
+      fpsFrameCounter += 1;
+      fpsTimeAccumulator += frameDt;
+      if (fpsTimeAccumulator >= 0.2) {
+        fpsAverage = fpsFrameCounter / Math.max(0.0001, fpsTimeAccumulator);
+        fpsFrameCounter = 0;
+        fpsTimeAccumulator = 0;
+        fpsDisplayText = `FPS: ${Math.round(fpsAverage)}`;
+        if (fpsHudEnabled && fpsHud) fpsHud.textContent = fpsDisplayText;
+      }
+
+      if (!debugPerformanceEnabled) return;
+
+      debugProfilerTimer += frameDt;
+      if (debugProfilerTimer < 2) return;
+      debugProfilerTimer = 0;
+
+      const fpsForLog = fpsAverage > 0
+        ? fpsAverage
+        : (fpsFrameCounter / Math.max(0.0001, fpsTimeAccumulator));
+      const renderInfo = renderer.info.render;
+      const activeLights = countActiveLights();
+      console.log(
+        `[DEBUG PERF] FPS avg: ${fpsForLog.toFixed(1)} | draw calls: ${renderInfo.calls} | triangles: ${renderInfo.triangles} | active lights: ${activeLights} | projectiles: ${projectiles.length}`
+      );
+    };
+
     const animate = () => {
       requestAnimationFrame(animate);
 
@@ -8399,6 +8713,8 @@
       renderer.setRenderTarget(null);
       renderer.clear();
       renderer.render(postScene, postCamera);
+
+      updateFpsAndDebugHud(frameDt);
     };
 
     animate();
@@ -8407,7 +8723,7 @@
       camera.aspect = window.innerWidth / window.innerHeight;
       camera.updateProjectionMatrix();
       renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, rendererPixelRatioCap));
-      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.setSize(window.innerWidth * renderScale, window.innerHeight * renderScale, false);
     });
   </script>
 </body>
