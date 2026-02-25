@@ -589,6 +589,8 @@
     }
 
     .optionRow{
+      display: grid;
+      align-items: center;
       grid-template-columns:
         minmax(240px, 1fr)
         minmax(360px, 1.6fr);
@@ -625,22 +627,40 @@
 
     .optionSelect {
       appearance: none;
-      border: 0;
-      border-bottom: 1px solid rgba(239, 246, 255, 0.2);
-      background: transparent;
+      -webkit-appearance: none;
+      border: 1px solid rgba(239, 246, 255, 0.15);
+      border-radius: 6px;
+      background:
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' stroke='white' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 6l4 4 4-4'/%3E%3C/svg%3E") no-repeat calc(100% - 10px) 50%,
+        linear-gradient(to bottom, rgba(15, 21, 32, 0.6), rgba(15, 21, 32, 0.8));
+      background-size: 16px 16px, 100% 100%;
       color: var(--hud-main);
       font: inherit;
+      font-size: 0.85rem;
       letter-spacing: 0.08em;
       text-transform: uppercase;
-      padding: 2px 0;
+      padding: 6px 32px 6px 12px;
       min-width: 160px;
       text-align: right;
       cursor: pointer;
+      transition: border-color 0.2s, background-color 0.2s, box-shadow 0.2s;
+    }
+
+    .optionSelect:hover {
+      border-color: rgba(239, 246, 255, 0.4);
+      background-color: rgba(255, 255, 255, 0.04);
     }
 
     .optionSelect:focus {
       outline: none;
-      border-bottom-color: rgba(239, 246, 255, 0.48);
+      border-color: var(--accent);
+      box-shadow: 0 0 0 2px rgba(87, 165, 255, 0.2);
+    }
+
+    .optionSelect option {
+      background: #0f1520;
+      color: #d6deeb;
+      text-align: left;
     }
 
     .optionToggleBtn {
@@ -4470,14 +4490,17 @@
         material.emissiveIntensity = (neonBlock.baseEmissiveIntensity || 3.5) * neonBrightnessScale;
       }
 
-      renderer.domElement.style.imageRendering = optionState.pixelStyle ? "pixelated" : "auto";
-      if (optionState.pixelStyle) {
-        renderScale =
-          optionState.visualQuality === "alta" ? 0.85 :
-          optionState.visualQuality === "media" ? 0.7  :
-          0.6;
+      // Tie resolution to quality for better performance as requested
+      if (optionState.visualQuality === "alta") {
+        renderer.domElement.style.imageRendering = optionState.pixelStyle ? "pixelated" : "auto";
+        renderScale = optionState.pixelStyle ? 0.85 : 1.0;
+      } else if (optionState.visualQuality === "media") {
+        renderer.domElement.style.imageRendering = "pixelated";
+        renderScale = 0.65;
       } else {
-        renderScale = 1.0;
+        // baja
+        renderer.domElement.style.imageRendering = "pixelated";
+        renderScale = 0.45;
       }
       applyRendererScale();
       applyFloorStyleVisual();
