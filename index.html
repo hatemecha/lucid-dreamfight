@@ -753,6 +753,13 @@
             <span id="optBassIntensityValue" class="optionValue">50%</span>
           </div>
         </div>
+        <div class="optionRow">
+          <span class="optionLabel">Sincronia del Beat</span>
+          <div class="optionControl">
+            <input id="optBeatOffset" class="optionSlider" type="range" min="-150" max="150" step="1" value="0">
+            <span id="optBeatOffsetValue" class="optionValue">0ms</span>
+          </div>
+        </div>
 
         <p class="controlsSubTitle">Interfaz</p>
         <div class="optionRow">
@@ -1152,6 +1159,8 @@
     const optWeaponFxVolumeValue = document.getElementById("optWeaponFxVolumeValue");
     const optBassIntensity = document.getElementById("optBassIntensity");
     const optBassIntensityValue = document.getElementById("optBassIntensityValue");
+    const optBeatOffset = document.getElementById("optBeatOffset");
+    const optBeatOffsetValue = document.getElementById("optBeatOffsetValue");
     const optHudSize = document.getElementById("optHudSize");
     const optHudOpacity = document.getElementById("optHudOpacity");
     const optHudOpacityValue = document.getElementById("optHudOpacityValue");
@@ -1279,19 +1288,21 @@
     backgroundMusic.setMediaElementSource(backgroundMusicElement);
     backgroundMusicElement.load();
 
-    const musicAnalyzer = audioListener.context.createAnalyser();
-    musicAnalyzer.fftSize = 256;
-    const musicDataArray = new Uint8Array(musicAnalyzer.frequencyBinCount);
-    backgroundMusic.gain.connect(musicAnalyzer);
+    const KICK_BPM = 140;
+    const BEAT_PERIOD = 60 / KICK_BPM; 
+    const KICK_START_SEC = 6.085;
 
-    let musicIntensity = 0;
-    let musicKick = 0;
-    let musicKickThreshold = 0.5; // Adaptive threshold
-    let musicKickHistory = [];
-    const kickHistorySize = 10;
-    let rawMusicKick = 0;
-    let smoothedMusicKick = 0;
-    let smoothedMusicIntensity = 0;
+    let kickOffsetSec = 0;
+    let nextBeatSongTime = -1;
+    let lastSongTime = 0;
+    let kickEnv = 0;
+    let kickDrive = 0;
+    let smoothMusicDrive = 0;
+
+    const ambientBaseInt = 2.5;
+    const hemiBaseInt = 2.2;
+    const dirBaseInt = 1.2;
+    const floorBaseEmissiveInt = 0.24;
 
     const updateBackgroundMusicState = (paused) => {
       const now = audioListener.context.currentTime;
@@ -3365,8 +3376,9 @@
         tempNeonLightPos.y += neonBlock.lightOffsetY;
         pooledLight.position.copy(tempNeonLightPos);
         pooledLight.color.setHex(neonBlock.lightColor);
-        pooledLight.intensity = neonBlock.lightIntensity * neonBrightnessScale;
-        pooledLight.distance = neonBlock.lightDistance;
+        pooledLight.identity = neonBlock.lightIntensity * neonBrightnessScale;
+        pooledLight.intensity = pooledLight.identity * (1.0 + smoothMusicDrive * 0.45);
+        pooledLight.distance = neonBlock.lightDistance + smoothMusicDrive * 2.5;
         pooledLight.decay = neonBlock.lightDecay;
         pooledLight.visible = true;
         poolIndex += 1;
@@ -4150,7 +4162,8 @@
       cameraShake: true,
       showFps: false,
       debugPerformance: false,
-      autoJump: true
+      autoJump: true,
+      beatOffset: 0
     };
     const optionState = { ...optionDefaults };
     let fpsHudEnabled = false;
@@ -4237,6 +4250,7 @@
         optionState.showFps = parsed.showFps === true;
         optionState.debugPerformance = parsed.debugPerformance === true;
         optionState.autoJump = parsed.autoJump !== false;
+        optionState.beatOffset = clampNumber(parsed.beatOffset, -150, 150, optionDefaults.beatOffset);
       } catch (_) {
       }
     };
@@ -4251,8 +4265,9 @@
       if (optWeaponFxVolume) optWeaponFxVolume.value = String(optionState.weaponFxVolume);
       if (optWeaponFxVolumeValue) optWeaponFxVolumeValue.textContent = `${Math.round(optionState.weaponFxVolume)}%`;
 
-      if (optBassIntensity) optBassIntensity.value = String(optionState.bassIntensity);
       if (optBassIntensityValue) optBassIntensityValue.textContent = `${Math.round(optionState.bassIntensity)}%`;
+      if (optBeatOffset) optBeatOffset.value = String(optionState.beatOffset);
+      if (optBeatOffsetValue) optBeatOffsetValue.textContent = `${Math.round(optionState.beatOffset)}ms`;
 
       if (optHudSize) optHudSize.value = optionState.hudSize;
       if (optHudOpacity) optHudOpacity.value = String(optionState.hudOpacity);
@@ -4288,6 +4303,7 @@
       backgroundMusicMusicLevel = clampNumber(optionState.musicVolume, 0, 100, optionDefaults.musicVolume) / 100;
       backgroundMusicBassLevel = clampNumber(optionState.bassIntensity, 0, 100, optionDefaults.bassIntensity) / 100;
       weaponEffectsVolumeLevel = clampNumber(optionState.weaponFxVolume, 0, 100, optionDefaults.weaponFxVolume) / 100;
+      kickOffsetSec = (optionState.beatOffset || 0) / 1000;
       void syncBackgroundMusicPlayback(isPaused, false);
     };
 
@@ -4475,6 +4491,10 @@
     });
     optBassIntensity?.addEventListener("input", () => {
       optionState.bassIntensity = clampNumber(optBassIntensity.value, 0, 100, optionDefaults.bassIntensity);
+      commitOptionChange(applySoundOptions);
+    });
+    optBeatOffset?.addEventListener("input", () => {
+      optionState.beatOffset = clampNumber(optBeatOffset.value, -150, 150, optionDefaults.beatOffset);
       commitOptionChange(applySoundOptions);
     });
 
@@ -7541,7 +7561,7 @@
         const slowFlicker = 0.5 + 0.5 * Math.sin(bug.flickerPhase + Math.sin(bug.phase * 0.27 + bug.pulseBias) * 0.35);
         const sideFlicker = 0.5 + 0.5 * Math.sin(bug.flickerPhaseB);
         const pulse = THREE.MathUtils.clamp(0.28 + slowFlicker * (0.56 * bug.flickerAmount) + sideFlicker * 0.18, 0.05, 1.0);
-        const renderPulse = (bug.state === FIREFLY_STATE_LANDED ? 0.62 : pulse) + smoothedMusicKick * 0.45;
+        const renderPulse = (bug.state === FIREFLY_STATE_LANDED ? 0.62 : pulse) + smoothMusicDrive * 0.15;
         bug.lastPulse = renderPulse;
         const coreScale = bug.baseScale * (0.7 + renderPulse * 1.05);
         const haloScale = coreScale * (7.2 + renderPulse * 2.4);
@@ -7591,9 +7611,9 @@
         if (canEnable) {
           activeLightCount += 1;
           bug.light.position.copy(tempFireflyPos);
-          const lightPulse = (bug.lastPulse ?? 0.62) + smoothedMusicKick * 0.55;
-          bug.light.distance = bug.lightBaseDistance + lightPulse * 14.5;
-          bug.light.intensity = 2.6 + lightPulse * 2.8 + smoothedMusicIntensity * 1.8;
+          const lightPulse = (bug.lastPulse ?? 0.62) + smoothMusicDrive * 0.18;
+          bug.light.distance = bug.lightBaseDistance + lightPulse * 12.0;
+          bug.light.intensity = 2.6 + lightPulse * 2.8 + smoothMusicDrive * 0.6;
         }
       }
 
@@ -8536,71 +8556,81 @@
         ambientParticleAccumulator = 0;
       }
 
+      updateMusicReactiveFX(frameDt);
+
       const playerIsMoving = (velocity.x * velocity.x + velocity.y * velocity.y + velocity.z * velocity.z) > 0.0009;
       const recentExplosion = recentExplosionTimer > 0;
       const skipDynamicFX = !playerIsMoving && !recentExplosion;
       if (skipDynamicFX) return;
-
-      lightAccumulator = Math.min(lightAccumulator + frameDt, 0.3);
-      if (lightAccumulator >= runtimeLightStep * pausedVisualStepFactor) {
-        updateNeonLights(player.position);
-        lightAccumulator = 0;
-      }
-      const kickFactor = smoothedMusicKick * 0.8;
-      const intensityFactor = smoothedMusicIntensity * 0.25;
-      
-      // Only update lights if there's significant change or music is playing
-      if (kickFactor > 0.01 || intensityFactor > 0.01) {
-        dirLight.intensity = 1.2 + kickFactor * 2.5 + intensityFactor;
-        ambientFill.intensity = 2.5 + kickFactor * 0.8;
-        hemiLight.intensity = 2.2 + kickFactor * 1.5;
-        skyMat.uniforms.musicGlow.value = kickFactor * 1.5 + intensityFactor * 0.5;
-      } else if (dirLight.intensity !== 1.2) {
-        dirLight.intensity = 1.2;
-        ambientFill.intensity = 2.5;
-        hemiLight.intensity = 2.2;
-        skyMat.uniforms.musicGlow.value = 0;
-      }
-
       updateDreamBoundaryFx(frameDt);
     };
 
-    const updateAudioFrame = (dt) => {
-      if (backgroundMusicStarted && !backgroundMusicElement.paused) {
-        musicAnalyzer.getByteFrequencyData(musicDataArray);
-        
-        // Intensity: full spectrum average
-        let sum = 0;
-        for (let i = 0; i < musicDataArray.length; i++) {
-          sum += musicDataArray[i];
+    const updateMusicReactiveFX = (dt) => {
+      const isPlaying = backgroundMusicStarted && !backgroundMusicElement.paused;
+      const songTime = backgroundMusicElement.currentTime;
+      const KICK_DECAY = 10.5;
+
+      if (isPlaying && songTime > 0.001) {
+        // Detect loop wrap
+        if (songTime < lastSongTime - 0.5) {
+          nextBeatSongTime = -1;
         }
-        const currentIntensity = sum / (musicDataArray.length * 255);
-        smoothedMusicIntensity = THREE.MathUtils.lerp(smoothedMusicIntensity, currentIntensity, 1 - Math.exp(-10 * dt));
-        
-        // Kick: Low frequency peak (mostly sub and bass bins)
-        // We look for a sudden spike in the low end
-        const currentKick = (musicDataArray[0] + musicDataArray[1] + musicDataArray[2]) / (3 * 255);
-        
-        // Adaptive thresholding for peak detection
-        musicKickHistory.push(currentKick);
-        if (musicKickHistory.length > kickHistorySize) musicKickHistory.shift();
-        
-        const avgKick = musicKickHistory.reduce((a, b) => a + b, 0) / musicKickHistory.length;
-        const kickThreshold = avgKick * 1.35 + 0.15; // Requires being 35% above average and minimum noise floor
-        
-        if (currentKick > kickThreshold && currentKick > 0.45) {
-          rawMusicKick = currentKick;
+        lastSongTime = songTime;
+
+        const syncSongTime = songTime - (KICK_START_SEC + kickOffsetSec);
+
+        if (syncSongTime >= 0) {
+          if (nextBeatSongTime < 0) {
+            const beatIndex = Math.floor(syncSongTime / BEAT_PERIOD);
+            nextBeatSongTime = KICK_START_SEC + kickOffsetSec + (beatIndex + 1) * BEAT_PERIOD;
+          }
+
+          if (songTime >= nextBeatSongTime) {
+            kickEnv = 1.0;
+            nextBeatSongTime += BEAT_PERIOD;
+            
+            // Catch up
+            let safety = 0;
+            while (songTime >= nextBeatSongTime && safety < 5) {
+              nextBeatSongTime += BEAT_PERIOD;
+              safety++;
+            }
+
+            if (debugPerformanceEnabled) {
+              console.log(`[BEAT] KICK triggered at ${songTime.toFixed(3)}s`);
+            }
+          }
         } else {
-          rawMusicKick = 0;
+          nextBeatSongTime = -1;
         }
-        
-        // Exponential decay for the kick visual effect (snap up, fade down)
-        const decaySpeed = rawMusicKick > smoothedMusicKick ? 35 : 8;
-        smoothedMusicKick = THREE.MathUtils.lerp(smoothedMusicKick, rawMusicKick, 1 - Math.exp(-decaySpeed * dt));
       } else {
-        smoothedMusicIntensity = THREE.MathUtils.lerp(smoothedMusicIntensity, 0, 1 - Math.exp(-5 * dt));
-        smoothedMusicKick = THREE.MathUtils.lerp(smoothedMusicKick, 0, 1 - Math.exp(-5 * dt));
+        kickEnv = THREE.MathUtils.lerp(kickEnv, 0, 1 - Math.exp(-6 * dt));
+        nextBeatSongTime = -1;
       }
+
+      // Frame decay (Smoother transition)
+      kickEnv = Math.max(0, kickEnv - dt * 8.0);
+      kickDrive = kickEnv * (0.4 + kickEnv * 0.6); 
+
+      // Visual Smoothing
+      smoothMusicDrive = smoothMusicDrive + (kickDrive - smoothMusicDrive) * (1 - Math.exp(-20 * dt));
+
+      // Apply (50% less than previous)
+      if (skyMat.uniforms.musicGlow) {
+        skyMat.uniforms.musicGlow.value = smoothMusicDrive * 0.45;
+      }
+
+      ambientFill.intensity = ambientBaseInt * (1.0 + smoothMusicDrive * 0.08);
+      hemiLight.intensity = hemiBaseInt * (1.0 + smoothMusicDrive * 0.1);
+      dirLight.intensity = dirBaseInt * (1.0 + smoothMusicDrive * 0.05);
+      
+      if (groundMat) {
+        groundMat.emissiveIntensity = floorBaseEmissiveInt * (1.0 + smoothMusicDrive * 0.12);
+      }
+    };
+
+    const updateAudioFrame = (dt) => {
+       // Placeholder for pipeline compatibility
     };
 
     const updateFpsAndDebugHud = (frameDt) => {
