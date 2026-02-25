@@ -368,345 +368,209 @@
       appearance: none;
       border: none;
       background: transparent;
-      color: var(--hud-mid);
-      padding: 7px 10px;
+      color: #fff;
+      padding: 10px 15px;
       cursor: pointer;
       font: inherit;
-      letter-spacing: 0.1em;
+      letter-spacing: 0.15em;
       font-weight: 300;
       text-transform: uppercase;
       text-shadow: var(--hud-aberration);
-      transition:
-        opacity var(--hud-fast-transition),
-        letter-spacing var(--hud-fast-transition);
+      transition: opacity var(--hud-fast-transition), letter-spacing var(--hud-fast-transition), transform var(--hud-fast-transition);
+      opacity: 0.7;
     }
 
     .pauseBtn:hover {
       opacity: 1;
-      letter-spacing: 0.125em;
-    }
-
-    #controlsToggle {
-      margin-top: 6px;
-      min-width: 220px;
+      letter-spacing: 0.2em;
+      transform: scale(1.05);
     }
 
     #controlsSection,
-    #optionsSection{
-      font-size: 1.12rem;
+    #optionsSection {
+      font-size: 0.95rem;
       line-height: 1.6;
-      letter-spacing: 0.08em;
-      max-width: 920px;
-    }
-
-    #controlsBackBtn {
-      appearance: none;
-      border: 0;
-      background: transparent;
-      color: var(--hud-mid);
-      padding: 2px 2px 12px 0;
-      cursor: pointer;
-      font: inherit;
-      font-size: 1.3rem;
-      line-height: 1;
-      text-shadow: var(--hud-aberration);
-      transition:
-        transform var(--hud-fast-transition),
-        opacity var(--hud-fast-transition);
-    }
-
-    #optionsBackBtn {
-      appearance: none;
-      border: 0;
-      background: transparent;
-      color: var(--hud-mid);
-      padding: 2px 2px 12px 0;
-      cursor: pointer;
-      font: inherit;
-      font-size: 1.3rem;
-      line-height: 1;
-      text-shadow: var(--hud-aberration);
-      transition:
-        transform var(--hud-fast-transition),
-        opacity var(--hud-fast-transition);
-    }
-
-    #controlsBackBtn:hover {
-      opacity: 1;
-      transform: translateX(-2px);
-    }
-
-    #optionsBackBtn:hover {
-      opacity: 1;
-      transform: translateX(-2px);
-    }
-
-    #bindRows {
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-      margin-bottom: 10px;
-    }
-
-    .controlRow{
-      font-size: 1rem;
-      padding: 8px 0;
-    }
-
-    .controlRow:last-child {
-      border-bottom: 0;
-    }
-
-    .controlRow::after {
-      content: "";
-      position: absolute;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      height: 1px;
-      background: linear-gradient(90deg, rgba(239, 246, 255, 0), rgba(239, 246, 255, 0.16), rgba(239, 246, 255, 0));
-      opacity: 0;
-      transform: scaleX(0.96);
-      transition:
-        opacity var(--hud-fast-transition),
-        transform var(--hud-fast-transition);
-    }
-
-    .controlRow:hover {
-      opacity: 1;
-      transform: translateX(1px);
-      text-shadow: var(--hud-aberration);
-    }
-
-    .controlRow:hover::after {
-      opacity: 1;
-      transform: scaleX(1);
-    }
-
-    .controlRow > :first-child {
-      justify-self: start;
-      opacity: 0.92;
-      display: inline-flex;
-      align-items: center;
-      gap: 9px;
-    }
-
-    .controlRow > :last-child {
-      justify-self: end;
-      text-align: right;
-      opacity: 0.7;
-    }
-
-    #bindRows .controlRow > :first-child {
-      order: 2;
-      justify-self: end;
-      opacity: 0.64;
-      gap: 9px;
-    }
-
-    #bindRows .controlRow > :last-child {
-      order: 1;
-      justify-self: start;
-      text-align: left;
-      opacity: 0.96;
-    }
-
-    .controlRow i {
-      width: 11px;
-      text-align: center;
-      font-size: 0.64rem;
-      opacity: 0.58;
-    }
-
-    .bindBtn {
-      appearance: none;
-      border: 0;
-      background: transparent;
-      color: var(--hud-main);
-      padding: 0;
-      min-width: 110px;
-      text-align: left;
-      cursor: pointer;
-      font: inherit;
-      letter-spacing: 0.14em;
-      font-size: 0.82rem;
-      font-weight: 300;
-      text-transform: uppercase;
-      text-shadow: var(--hud-aberration);
-      transition:
-        opacity var(--hud-fast-transition),
-        transform var(--hud-fast-transition);
-    }
-
-    .bindBtn:hover {
-      opacity: 1;
-      transform: translateX(1px);
-    }
-
-    .bindBtn.waiting {
-      opacity: 1;
-      animation: bindPulse 900ms ease-in-out infinite;
-    }
-
-    .bindBtn.unbound {
-      opacity: 0.5;
-    }
-
-    @keyframes bindPulse {
-      0% { opacity: 0.42; }
-      50% { opacity: 1; }
-      100% { opacity: 0.42; }
-    }
-
-    #bindWarnings {
-      margin: 10px 0 6px;
-      min-height: 1.25em;
-      color: var(--hud-dim);
-      font-size: 0.72rem;
       letter-spacing: 0.1em;
-    }
-
-    #fixedControlsText {
-      margin: 0 0 12px;
-      color: var(--hud-dim);
-      font-size: 0.72rem;
-      letter-spacing: 0.14em;
-    }
-
-    #optionsIntroText {
-      margin: 0 0 12px;
-      color: var(--hud-dim);
-      font-size: 0.72rem;
-      letter-spacing: 0.14em;
+      max-width: 800px;
+      width: 100%;
+      color: #fff;
     }
 
     .controlsSubTitle {
-      margin: 14px 0 8px;
-      color: var(--hud-faint);
-      font-size: 0.66rem;
-      letter-spacing: 0.16em;
+      margin: 24px 0 12px;
+      color: rgba(255, 255, 255, 0.4);
+      font-size: 0.7rem;
+      letter-spacing: 0.25em;
       text-transform: uppercase;
+      text-align: center;
+      width: 100%;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      padding-bottom: 8px;
     }
 
-    .optionRow{
-      display: grid;
+    .optionRow, .controlRow {
+      display: flex;
+      justify-content: space-between;
       align-items: center;
-      grid-template-columns:
-        minmax(240px, 1fr)
-        minmax(360px, 1.6fr);
-      padding: 12px 0;
-      gap: 28px;
+      padding: 10px 0;
+      transition: transform 0.2s;
     }
 
-    .optionLabel {
-      justify-self: start;
-      opacity: 0.9;
+    .optionRow:hover, .controlRow:hover {
+      transform: translateX(4px);
     }
 
-    .optionControl {
-      justify-self: end;
-      display: inline-flex;
+    .optionLabel, .controlRow > span:first-child {
+      opacity: 0.6;
+      font-weight: 300;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      display: flex;
       align-items: center;
-      gap: 10px;
-      min-width: 320px;
-      justify-content: flex-end;
+      gap: 12px;
     }
 
-    .optionSlider{
-      height: 4px;
-      transform: scaleY(1.4);
+    .optionControl, .bindBtn, .optionToggleBtn, .optionSelect {
+      display: flex;
+      align-items: center;
+      gap: 15px;
+      color: #fff;
+      text-shadow: var(--hud-aberration);
+      text-transform: uppercase;
+      font-weight: 300;
+      letter-spacing: 0.1em;
+    }
+
+    /* Sliders minimalistas */
+    .optionSlider {
+      -webkit-appearance: none;
+      width: 140px;
+      height: 2px;
+      background: rgba(255, 255, 255, 0.1);
+      outline: none;
+      transition: background 0.2s;
+    }
+
+    .optionSlider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 8px;
+      height: 8px;
+      background: #fff;
+      cursor: pointer;
+      box-shadow: 0 0 8px #fff;
+      border-radius: 0;
+    }
+
+    .optionSlider:hover {
+      background: rgba(255, 255, 255, 0.2);
+    }
+
+    /* Selects sin bordes ni botones */
+    .optionSelect {
+      appearance: none;
+      -webkit-appearance: none;
+      background: transparent;
+      border: none;
+      padding: 0;
+      text-align: right;
+      cursor: pointer;
+      font-size: 0.85rem;
+      opacity: 0.8;
+      transition: opacity 0.2s;
+    }
+
+    .optionSelect:hover {
+      opacity: 1;
+    }
+
+    .optionSelect:focus {
+      outline: none;
+    }
+
+    .optionSelect option {
+      background: #07090d;
+      color: #fff;
+    }
+
+    /* Toggles y Binds como texto simple */
+    .optionToggleBtn, .bindBtn {
+      background: transparent;
+      border: none;
+      padding: 0;
+      cursor: pointer;
+      opacity: 0.8;
+      transition: opacity 0.2s, letter-spacing 0.2s;
+    }
+
+    .optionToggleBtn:hover, .bindBtn:hover {
+      opacity: 1;
+      letter-spacing: 0.15em;
+    }
+
+    .bindBtn.waiting {
+      color: var(--accent);
+      animation: textPulse 1s infinite;
+    }
+
+    @keyframes textPulse {
+      0%, 100% { opacity: 0.5; }
+      50% { opacity: 1; text-shadow: 0 0 10px var(--accent); }
+    }
+
+    #optionsBackBtn, #controlsBackBtn {
+      position: absolute;
+      top: 0;
+      left: 0;
+      font-size: 1.5rem;
+      opacity: 0.5;
+      transition: opacity 0.2s, transform 0.2s;
+      background: transparent;
+      border: none;
+      color: #fff;
+      cursor: pointer;
+      padding: 20px;
+    }
+
+    #optionsBackBtn:hover, #controlsBackBtn:hover {
+      opacity: 1;
+      transform: translateX(-5px);
+    }
+
+    #optionsIntroText, #fixedControlsText {
+      text-align: center;
+      opacity: 0.3;
+      font-size: 0.65rem;
+      text-transform: uppercase;
+      letter-spacing: 0.2em;
+      margin-top: 40px;
+      margin-bottom: 10px;
     }
 
     .optionValue {
       min-width: 48px;
       text-align: right;
-      color: var(--hud-main);
       opacity: 0.9;
-      letter-spacing: 0.1em;
     }
 
-    .optionSelect {
-      appearance: none;
-      -webkit-appearance: none;
-      border: 1px solid rgba(239, 246, 255, 0.15);
-      border-radius: 6px;
-      background:
-        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' stroke='white' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M4 6l4 4 4-4'/%3E%3C/svg%3E") no-repeat calc(100% - 10px) 50%,
-        linear-gradient(to bottom, rgba(15, 21, 32, 0.6), rgba(15, 21, 32, 0.8));
-      background-size: 16px 16px, 100% 100%;
-      color: var(--hud-main);
-      font: inherit;
-      font-size: 0.85rem;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      padding: 6px 32px 6px 12px;
-      min-width: 160px;
-      text-align: right;
-      cursor: pointer;
-      transition: border-color 0.2s, background-color 0.2s, box-shadow 0.2s;
-    }
-
-    .optionSelect:hover {
-      border-color: rgba(239, 246, 255, 0.4);
-      background-color: rgba(255, 255, 255, 0.04);
-    }
-
-    .optionSelect:focus {
-      outline: none;
-      border-color: var(--accent);
-      box-shadow: 0 0 0 2px rgba(87, 165, 255, 0.2);
-    }
-
-    .optionSelect option {
-      background: #0f1520;
-      color: #d6deeb;
-      text-align: left;
-    }
-
-    .optionToggleBtn {
-      appearance: none;
-      border: 0;
-      background: transparent;
-      color: var(--hud-main);
-      font: inherit;
-      letter-spacing: 0.11em;
-      text-transform: uppercase;
-      padding: 0;
-      min-width: 148px;
-      text-align: right;
-      cursor: pointer;
-      text-shadow: var(--hud-aberration);
-      opacity: 0.9;
-      transition:
-        opacity var(--hud-fast-transition),
-        transform var(--hud-fast-transition);
-    }
-
-    .optionToggleBtn:hover {
+    .optionRow:hover .optionLabel, .controlRow:hover > span:first-child {
       opacity: 1;
-      transform: translateX(1px);
+      text-shadow: 0 0 8px rgba(255, 255, 255, 0.4), var(--hud-aberration);
     }
 
     @media (max-width: 760px) {
-      .optionRow {
-        grid-template-columns: 1fr;
-        gap: 6px;
-        padding: 8px 0;
+      .optionRow, .controlRow {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
       }
 
       .optionControl {
-        justify-self: start;
         width: 100%;
         justify-content: space-between;
       }
 
       .optionSlider {
-        width: min(260px, 72vw);
-      }
-
-      .optionSelect,
-      .optionToggleBtn {
-        text-align: left;
+        width: 60%;
       }
     }
 
@@ -841,7 +705,7 @@
       <button id="optionsToggle" class="pauseBtn" type="button">Opciones</button>
       <div id="controlsSection" class="hidden">
         <button id="controlsBackBtn" type="button" aria-label="Volver">←</button>
-        <p id="fixedControlsText">Controles configurables (click en la tecla para reasignar):</p>
+        <p id="fixedControlsText">PERSONALIZAR CONTROLES</p>
         <div id="bindRows"></div>
         <p class="controlsSubTitle">Ajustes</p>
         <div class="controlRow"><span><i class="fa-solid fa-angles-up" aria-hidden="true"></i>Auto Jump (obstaculos)</span><button id="autoJumpToggleBtn" class="bindBtn" type="button">ON</button></div>
@@ -858,7 +722,7 @@
       </div>
       <div id="optionsSection" class="hidden">
         <button id="optionsBackBtn" type="button" aria-label="Volver">←</button>
-        <p id="optionsIntroText">Opciones de comodidad y experiencia:</p>
+        <p id="optionsIntroText">CONFIGURACIÓN</p>
 
         <p class="controlsSubTitle">Sonido</p>
         <div class="optionRow">
