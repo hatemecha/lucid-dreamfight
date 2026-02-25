@@ -3854,6 +3854,7 @@
     const tempExplosionClosestPoint = new THREE.Vector3();
     const tempWallContactCandidateNormal = new THREE.Vector3();
     const playerVelocity = velocity;
+    const pendingImpulse = new THREE.Vector3();
     const impulsePhysicsEntities = [];
     let lastAmmoHudText = "";
     const lastStatusHudText = {
@@ -3952,11 +3953,11 @@
       const finalRecoil = (recoilForce / massFactor) * selfImpulseMultiplier;
       if (finalRecoil > 0) {
         tempRecoilDir.copy(shootDir).multiplyScalar(-1);
-        applyImpulse(playerVelocity, tempRecoilDir, finalRecoil);
+        applyImpulse(pendingImpulse, tempRecoilDir, finalRecoil);
       }
       const verticalKick = weaponDef.verticalKick || 0;
       if (verticalKick !== 0) {
-        playerVelocity.y += verticalKick;
+        pendingImpulse.y += verticalKick;
       }
     };
 
@@ -3964,6 +3965,7 @@
       if (!origin) return;
       if (!Number.isFinite(radius) || radius <= 0) return;
       if (!Number.isFinite(baseForce) || baseForce <= 0) return;
+      recentExplosionTimer = Math.max(recentExplosionTimer, recentExplosionHoldDuration);
       const radiusSq = radius * radius;
 
       for (let i = 0; i < impulsePhysicsEntities.length; i++) {
@@ -3982,7 +3984,12 @@
 
         if (distSq <= 0.00000001) {
           tempExplosionDir.set(0, 1, 0);
-          applyImpulse(targetVelocity, tempExplosionDir, baseForce * (entity.impulseScale ?? 1));
+          const impulseStrength = baseForce * (entity.impulseScale ?? 1);
+          if (targetVelocity === playerVelocity) {
+            applyImpulse(pendingImpulse, tempExplosionDir, impulseStrength);
+          } else {
+            applyImpulse(targetVelocity, tempExplosionDir, impulseStrength);
+          }
           continue;
         }
 
@@ -3990,7 +3997,12 @@
         const falloff = 1 - THREE.MathUtils.clamp(distance / radius, 0, 1);
         if (falloff <= 0) continue;
         tempExplosionDir.set(dx, dy, dz);
-        applyImpulse(targetVelocity, tempExplosionDir, baseForce * falloff * (entity.impulseScale ?? 1));
+        const impulseStrength = baseForce * falloff * (entity.impulseScale ?? 1);
+        if (targetVelocity === playerVelocity) {
+          applyImpulse(pendingImpulse, tempExplosionDir, impulseStrength);
+        } else {
+          applyImpulse(targetVelocity, tempExplosionDir, impulseStrength);
+        }
       }
     };
 
@@ -6165,6 +6177,9 @@
     let ambientParticleAccumulator = 0;
     let dreamSparkAccumulator = 0;
     let lightAccumulator = 0;
+    let frameCount = 0;
+    let recentExplosionTimer = 0;
+    const recentExplosionHoldDuration = 0.22;
     let wallJumpCharges = wallJumpMaxCharges;
     let wallContactTimer = 0;
     const lastWallContactNormal = new THREE.Vector3();
@@ -8033,6 +8048,8 @@
     };
 
     const updatePlayerPhysics = (dt) => {
+      velocity.add(pendingImpulse);
+      pendingImpulse.set(0, 0, 0);
       jumpBufferTime = Math.max(0, jumpBufferTime - dt);
       autoJumpCooldown = Math.max(0, autoJumpCooldown - dt);
       dashCooldownTimer = Math.max(0, dashCooldownTimer - dt);
@@ -8286,32 +8303,15 @@
     preLandFirefliesOnLoad();
 
     // Rendering
-    const animate = () => {
-      requestAnimationFrame(animate);
+    const updateInputFrame = () => {
+      // Input state is event-driven; this keeps frame pipeline ordering explicit.
+    };
 
-      const frameDt = Math.min(clock.getDelta(), 0.1);
-      const pausedVisualStepFactor = isPaused ? 2 : 1;
-      skyMat.uniforms.time.value += frameDt * 0.45;
-      dreamFloorUniforms.time.value += frameDt * 0.5;
-      const floorPulse = 0.86 + Math.sin(dreamFloorUniforms.time.value * 1.08) * 0.14;
-      groundMat.emissiveIntensity = floorBaseEmissiveIntensity * floorPulse;
-      groundGlowMat.opacity = floorBaseGlowOpacity * floorPulse;
-      fireflyAccumulator = Math.min(fireflyAccumulator + frameDt, 0.2);
-      if (fireflyAccumulator >= runtimeFireflyStep * pausedVisualStepFactor) {
-        updateFireflies(fireflyAccumulator);
-        fireflyAccumulator = 0;
-      }
-      dreamSparkAccumulator = Math.min(dreamSparkAccumulator + frameDt, 0.2);
-      if (dreamSparkAccumulator >= runtimeDreamSparkStep * pausedVisualStepFactor) {
-        updateDreamSparks(dreamSparkAccumulator);
-        dreamSparkAccumulator = 0;
-      }
-      ambientParticleAccumulator = Math.min(ambientParticleAccumulator + frameDt, 0.2);
-      if (ambientParticleAccumulator >= runtimeAmbientStep * pausedVisualStepFactor) {
-        updateAmbientParticles(ambientParticleAccumulator);
-        ambientParticleAccumulator = 0;
-      }
+    const updateImpulseAccumulationFrame = (frameDt) => {
+      recentExplosionTimer = Math.max(0, recentExplosionTimer - frameDt);
+    };
 
+    const updatePlayerMovementFrame = (frameDt) => {
       if (controls.isLocked && !isPaused) {
         physicsAccumulator = Math.min(
           physicsAccumulator + frameDt,
@@ -8324,13 +8324,74 @@
       } else {
         physicsAccumulator = 0;
       }
+    };
+
+    const updateWorldCollisionsFrame = () => {
+      // World collision resolution runs inside fixed-step player controller updates.
+    };
+
+    const updateFxAndParticlesFrame = (frameDt) => {
+      const pausedVisualStepFactor = isPaused ? 2 : 1;
+      skyMat.uniforms.time.value += frameDt * 0.45;
+      dreamFloorUniforms.time.value += frameDt * 0.5;
+      const floorPulse = 0.86 + Math.sin(dreamFloorUniforms.time.value * 1.08) * 0.14;
+      groundMat.emissiveIntensity = floorBaseEmissiveIntensity * floorPulse;
+      groundGlowMat.opacity = floorBaseGlowOpacity * floorPulse;
+
+      const skipFireflyUpdate = (frameCount % 2) !== 0;
+      fireflyAccumulator = Math.min(fireflyAccumulator + frameDt, 0.2);
+      if (!skipFireflyUpdate && fireflyAccumulator >= runtimeFireflyStep * pausedVisualStepFactor) {
+        updateFireflies(fireflyAccumulator);
+        fireflyAccumulator = 0;
+      }
+      dreamSparkAccumulator = Math.min(dreamSparkAccumulator + frameDt, 0.2);
+      if (!skipFireflyUpdate && dreamSparkAccumulator >= runtimeDreamSparkStep * pausedVisualStepFactor) {
+        updateDreamSparks(dreamSparkAccumulator);
+        dreamSparkAccumulator = 0;
+      }
+      ambientParticleAccumulator = Math.min(ambientParticleAccumulator + frameDt, 0.2);
+      if (!skipFireflyUpdate && ambientParticleAccumulator >= runtimeAmbientStep * pausedVisualStepFactor) {
+        updateAmbientParticles(ambientParticleAccumulator);
+        ambientParticleAccumulator = 0;
+      }
+
+      const playerIsMoving = (velocity.x * velocity.x + velocity.y * velocity.y + velocity.z * velocity.z) > 0.0009;
+      const recentExplosion = recentExplosionTimer > 0;
+      const skipDynamicFX = !playerIsMoving && !recentExplosion;
+      if (skipDynamicFX) return;
+
       lightAccumulator = Math.min(lightAccumulator + frameDt, 0.3);
       if (lightAccumulator >= runtimeLightStep * pausedVisualStepFactor) {
         updateNeonLights(player.position);
         lightAccumulator = 0;
       }
       updateDreamBoundaryFx(frameDt);
+    };
 
+    const updateAudioFrame = () => {
+      // Audio playback is event-driven; keep stage for deterministic pipeline ordering.
+    };
+
+    const animate = () => {
+      requestAnimationFrame(animate);
+
+      const frameDt = Math.min(clock.getDelta(), 0.1);
+      frameCount += 1;
+
+      // 1) INPUT UPDATE
+      updateInputFrame();
+      // 2) IMPULSE ACCUMULATION
+      updateImpulseAccumulationFrame(frameDt);
+      // 3) PLAYER MOVEMENT
+      updatePlayerMovementFrame(frameDt);
+      // 4) WORLD COLLISIONS
+      updateWorldCollisionsFrame();
+      // 5) FX + PARTICLES
+      updateFxAndParticlesFrame(frameDt);
+      // 6) AUDIO UPDATES
+      updateAudioFrame();
+
+      // 7) RENDER
       renderer.setRenderTarget(renderTarget);
       renderer.clear();
       renderer.render(scene, camera);
