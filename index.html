@@ -8452,8 +8452,9 @@
       const adsMotionScale = THREE.MathUtils.lerp(1.0, 0.12, adsWeight);
       const cameraShakeScale = cameraShakeEnabled ? 1 : 0;
 
-      const targetTilt = THREE.MathUtils.clamp(velocity.x * 0.006, -0.11, 0.11);
-      viewRollBaseZ += (targetTilt - viewRollBaseZ) * dt * 12;
+      const sideVelocity = velocity.x * right.x + velocity.z * right.z;
+      const targetTilt = THREE.MathUtils.clamp(-sideVelocity * 0.04, -0.45, 0.45);
+      viewRollBaseZ += (targetTilt - viewRollBaseZ) * dt * 8;
 
       recoilBack = THREE.MathUtils.lerp(recoilBack, 0, 1 - Math.exp(-11.5 * dt));
       recoilCamPitch = THREE.MathUtils.lerp(recoilCamPitch, 0, 1 - Math.exp(-14 * dt));
