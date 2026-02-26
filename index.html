@@ -929,7 +929,8 @@
       "imports": {
         "three": "https://cdn.jsdelivr.net/npm/three@0.161.0/build/three.module.js",
         "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.161.0/examples/jsm/",
-        "@dimforge/rapier3d-compat": "https://cdn.jsdelivr.net/npm/@dimforge/rapier3d-compat@0.19.3/rapier.mjs"
+        "@dimforge/rapier3d-compat": "https://cdn.jsdelivr.net/npm/@dimforge/rapier3d-compat@0.19.3/rapier.mjs",
+        "game/": "./game/"
       }
     }
   </script>
@@ -938,6 +939,7 @@
     import * as THREE from "three";
     import { PointerLockControls } from "three/addons/controls/PointerLockControls.js";
     import RAPIER from "@dimforge/rapier3d-compat";
+    import { WeaponManager } from "game/WeaponManager.js";
 
     const GameConfig = {
       colors: {
@@ -3630,16 +3632,14 @@
       return root;
     };
 
-    const weapons = GameConfig.weapons.map((weaponDef) => {
-      const tunedReloadTime = weaponDef.reloadTime > 0
-        ? weaponDef.reloadTime * 0.45 * 0.9
-        : weaponDef.reloadTime;
-      return {
-        ...weaponDef,
-        reloadTime: tunedReloadTime,
-        currentAmmo: weaponDef.clipSize > 0 ? weaponDef.clipSize : 0
-      };
-    });
+    const weaponManager = new WeaponManager(GameConfig.weapons);
+    const weapons = weaponManager.weapons;
+    // Proxies for legacy variable compatibility
+    let currentWeaponIndex = weaponManager.currentWeaponIndex;
+    let isReloading = weaponManager.isReloading;
+    let reloadTimer = weaponManager.reloadTimer;
+    let reloadWeight = weaponManager.reloadWeight;
+    let fireCooldown = weaponManager.fireCooldown;
 
     const weaponModels = new Map();
     for (const weaponDef of weapons) {
@@ -3648,7 +3648,6 @@
       weaponRig.add(model);
     }
 
-    let currentWeaponIndex = 0;
     let pendingWeaponIndex = -1;
     let queuedWeaponIndex = -1;
     let switchPhase = "idle";
@@ -3657,10 +3656,6 @@
     const switchDownDuration = GameConfig.input.switchDownDuration;
     const switchUpDuration = GameConfig.input.switchUpDuration;
     let adsWeight = 0;
-    let isReloading = false;
-    let reloadTimer = 0;
-    let reloadWeight = 0;
-    let fireCooldown = 0;
     let recoilBack = 0;
     let recoilCamPitch = 0;
     let recoilEffectScale = 1;
@@ -4653,7 +4648,8 @@
     });
 
     const setActiveWeapon = (index) => {
-      currentWeaponIndex = THREE.MathUtils.clamp(index, 0, weapons.length - 1);
+      weaponManager.switchWeapon(index);
+      currentWeaponIndex = weaponManager.currentWeaponIndex;
       const activeWeaponId = weapons[currentWeaponIndex].id;
       for (const [weaponId, model] of weaponModels) {
         model.visible = weaponId === activeWeaponId;
@@ -4707,8 +4703,13 @@
       switchTimer = 0;
       triggerSwitchCodeFx();
       inputManager.setMouseButtonState(2, false);
-      isReloading = false;
-      reloadTimer = 0;
+      
+      // Sync with weaponManager
+      weaponManager.switchWeapon(nextIndex);
+      currentWeaponIndex = weaponManager.currentWeaponIndex;
+      isReloading = weaponManager.isReloading;
+      reloadTimer = weaponManager.reloadTimer;
+      
       updateAmmoHud();
     };
 
@@ -4718,29 +4719,26 @@
       requestWeaponSwitch(target);
     };
 
+
     const startReload = () => {
-      const activeWeapon = getActiveWeapon();
-      if (activeWeapon.clipSize <= 0) return;
-      if (activeWeapon.currentAmmo >= activeWeapon.clipSize) return;
-      if (activeWeapon.reserveAmmo <= 0) return;
-      if (isReloading || switchPhase !== "idle") return;
-      isReloading = true;
-      reloadTimer = activeWeapon.reloadTime;
-      recoilBack = Math.min(recoilBack + 0.22 * recoilEffectScale, 0.85);
-      recoilCamPitch = Math.min(recoilCamPitch + 0.05 * recoilEffectScale, 0.26);
-      playSound("reload");
-      updateAmmoHud();
+      if (switchPhase !== "idle" || isReloading) return;
+      if (weaponManager.startReload()) {
+        const activeWeapon = getActiveWeapon();
+        // Sync legacy state immediately
+        isReloading = weaponManager.isReloading;
+        reloadTimer = weaponManager.reloadTimer;
+        
+        recoilBack = Math.min(recoilBack + 0.22 * recoilEffectScale, 0.85);
+        recoilCamPitch = Math.min(recoilCamPitch + 0.05 * recoilEffectScale, 0.26);
+        playSound("reload");
+        updateAmmoHud();
+      }
     };
 
     const finishReload = () => {
-      const activeWeapon = getActiveWeapon();
-      if (activeWeapon.clipSize <= 0) return;
-      const needed = activeWeapon.clipSize - activeWeapon.currentAmmo;
-      if (needed <= 0) return;
-      const taken = Math.min(needed, activeWeapon.reserveAmmo);
-      activeWeapon.currentAmmo += taken;
-      activeWeapon.reserveAmmo -= taken;
-      updateAmmoHud();
+       // logic moved to weaponManager.update() -> weapon.completeReload()
+       // this is now a stub to keep the interface if called elsewhere
+       updateAmmoHud();
     };
 
     const impactMarkGeometry = new THREE.BoxGeometry(1, 1, 0.18);
@@ -5944,38 +5942,39 @@
       if (switchPhase !== "idle" || isReloading) return;
       if (fireCooldown > 0) return;
 
-      const activeWeapon = getActiveWeapon();
-      if (activeWeapon.fireType === "melee") {
-        attemptMeleePunch(-1);
-        return;
-      }
-      if (activeWeapon.clipSize > 0 && activeWeapon.currentAmmo <= 0) {
-        startReload();
-        return;
-      }
+      if (weaponManager.attemptFire()) {
+        const activeWeapon = getActiveWeapon();
+        
+        // Visuals/Sound
+        if (activeWeapon.fireType === "melee") {
+          attemptMeleePunch(-1);
+        } else {
+          camera.getWorldDirection(tempShootDir).normalize();
+          if (activeWeapon.fireType === "hitscan") {
+            fireHitscanWeapon(activeWeapon, tempShootDir);
+            if (activeWeapon.id === "shotgun") playSound("shotgun");
+            else if (activeWeapon.id === "sniper") playSound("sniper");
+            else playSound("pistol");
+          } else if (activeWeapon.fireType === "projectile") {
+            spawnBazookaProjectile(activeWeapon, tempShootDir);
+            playSound("bazooka");
+          }
 
-      camera.getWorldDirection(tempShootDir).normalize();
-      if (activeWeapon.fireType === "hitscan") {
-        fireHitscanWeapon(activeWeapon, tempShootDir);
-        if (activeWeapon.id === "shotgun") playSound("shotgun");
-        else if (activeWeapon.id === "sniper") playSound("sniper");
-        else playSound("pistol");
-      } else if (activeWeapon.fireType === "projectile") {
-        spawnBazookaProjectile(activeWeapon, tempShootDir);
-        playSound("bazooka");
+          applyWeaponRecoilImpulse(activeWeapon, tempShootDir);
+          recoilBack = Math.min(recoilBack + (activeWeapon.recoilBack || 0) * 2.3 * recoilEffectScale, 0.78);
+          recoilCamPitch = Math.min(recoilCamPitch + (activeWeapon.recoilCam || 0) * 1.95 * recoilEffectScale, 0.26);
+          cameraKick += (activeWeapon.recoilCam || 0) * 3.6;
+          muzzleFlashTimer = 0.05;
+          if (activeMuzzleFlash) activeMuzzleFlash.visible = true;
+        }
+        updateAmmoHud();
+      } else {
+        // Handle dry fire or auto-reload trigger
+        const activeWeapon = getActiveWeapon();
+        if (activeWeapon.clipSize > 0 && activeWeapon.currentAmmo <= 0 && !isReloading && switchPhase === "idle") {
+          weaponManager.startReload();
+        }
       }
-
-      if (activeWeapon.clipSize > 0) {
-        activeWeapon.currentAmmo = Math.max(0, activeWeapon.currentAmmo - 1);
-      }
-      fireCooldown = activeWeapon.fireInterval;
-      applyWeaponRecoilImpulse(activeWeapon, tempShootDir);
-      recoilBack = Math.min(recoilBack + (activeWeapon.recoilBack || 0) * 2.3 * recoilEffectScale, 0.78);
-      recoilCamPitch = Math.min(recoilCamPitch + (activeWeapon.recoilCam || 0) * 1.95 * recoilEffectScale, 0.26);
-      cameraKick += (activeWeapon.recoilCam || 0) * 3.6;
-      muzzleFlashTimer = 0.05;
-      if (activeMuzzleFlash) activeMuzzleFlash.visible = true;
-      updateAmmoHud();
     };
 
     const clearMovementState = () => {
@@ -7920,13 +7919,7 @@
         }
       }
 
-      if (isReloading) {
-        reloadTimer = Math.max(0, reloadTimer - dt);
-        if (reloadTimer <= 0) {
-          isReloading = false;
-          finishReload();
-        }
-      }
+      // isReloading and reloadTimer are now managed by weaponManager
 
       if (switchPhase === "down") {
         switchTimer += dt;
@@ -8308,7 +8301,17 @@
       autoJumpCooldown = Math.max(0, autoJumpCooldown - dt);
       dashCooldownTimer = Math.max(0, dashCooldownTimer - dt);
       dashTimer = Math.max(0, dashTimer - dt);
-      fireCooldown = Math.max(0, fireCooldown - dt);
+      
+      // Update weapon logic
+      weaponManager.update(dt);
+      
+      // Synchronize back to legacy variables for compatibility
+      isReloading = weaponManager.isReloading;
+      reloadTimer = weaponManager.reloadTimer;
+      reloadWeight = weaponManager.reloadWeight;
+      fireCooldown = weaponManager.fireCooldown;
+      currentWeaponIndex = weaponManager.currentWeaponIndex;
+
       updateDynamicTerrain(dt);
       if (physicsBridge.enabled) {
         physicsBridge.step(dt);
@@ -8605,6 +8608,10 @@
       }
 
       updateAmmoHud();
+
+      // Push back to manager for two-way sync
+      weaponManager.fireCooldown = fireCooldown;
+      weaponManager.reloadWeight = reloadWeight;
     };
 
     preLandFirefliesOnLoad();
@@ -8612,6 +8619,10 @@
     // Rendering
     const updateInputFrame = () => {
       // Input state is event-driven; this keeps frame pipeline ordering explicit.
+      // However, we need to bridge firing and reloading here or inside updatePlayerPhysics
+      if (inputManager.isPressed("reload")) {
+        weaponManager.startReload();
+      }
     };
 
     const updateImpulseAccumulationFrame = (frameDt) => {
