@@ -4479,16 +4479,17 @@
       }
 
       // Tie resolution to quality for better performance as requested
+      const specResScale = lowSpecProfile ? 0.82 : 1.0; 
       if (optionState.visualQuality === "alta") {
         renderer.domElement.style.imageRendering = optionState.pixelStyle ? "pixelated" : "auto";
-        renderScale = optionState.pixelStyle ? 0.85 : 1.0;
+        renderScale = (optionState.pixelStyle ? 0.85 : 1.0) * specResScale;
       } else if (optionState.visualQuality === "media") {
         renderer.domElement.style.imageRendering = "pixelated";
-        renderScale = 0.65;
+        renderScale = 0.65 * specResScale;
       } else {
         // baja
         renderer.domElement.style.imageRendering = "pixelated";
-        renderScale = 0.45;
+        renderScale = 0.45 * specResScale;
       }
       applyRendererScale();
       applyFloorStyleVisual();
@@ -7333,7 +7334,8 @@
 
     const keepFireflyOutsideBlocks = (pos, clearanceXZ = 0.22, clearanceY = 0.04) => {
       let collided = false;
-      for (let iteration = 0; iteration < 2; iteration++) {
+      const maxIterations = lowSpecProfile ? 1 : 2;
+      for (let iteration = 0; iteration < maxIterations; iteration++) {
         let touched = false;
         const candidateBoxes = getNearbyColliders(pos.x, pos.z, clearanceXZ + 0.65);
         for (const box of candidateBoxes) {
@@ -7715,7 +7717,8 @@
         const dx = tempFireflyPos.x - player.position.x;
         const dy = tempFireflyPos.y - (player.position.y + currentEyeHeight);
         const dz = tempFireflyPos.z - player.position.z;
-        const nearPlayer = (dx * dx + dy * dy + dz * dz) <= fireflyLightCullRadiusSq;
+        const effectiveCullRadiusSq = lowSpecProfile ? fireflyLightCullRadiusSq * 0.65 : fireflyLightCullRadiusSq;
+        const nearPlayer = (dx * dx + dy * dy + dz * dz) <= effectiveCullRadiusSq;
         const canEnable = nearPlayer && activeLightCount < runtimeMaxActiveFireflyLights;
         bug.light.visible = canEnable;
         if (canEnable) {
@@ -7771,7 +7774,8 @@
     const updateAmbientParticles = (dt) => {
       ambientInstanceQuat.copy(camera.quaternion);
       const positions = ambientParticlePositions;
-      for (let i = 0; i < ambientParticleCount; i++) {
+      const visibleCount = ambientParticles.count;
+      for (let i = 0; i < visibleCount; i++) {
         const idx = i * 3;
         ambientParticlePhases[i] += dt * ambientParticleDriftSpeeds[i];
         const phase = ambientParticlePhases[i];
@@ -8824,6 +8828,16 @@
         fpsAverage = fpsFrameCounter / Math.max(0.0001, fpsTimeAccumulator);
         fpsFrameCounter = 0;
         fpsTimeAccumulator = 0;
+
+        // DYNAMIC LIGHT OPTIMIZATION
+        if (lowSpecProfile) {
+          if (fpsAverage < 48 && runtimeMaxActiveFireflyLights > 2) {
+            runtimeMaxActiveFireflyLights = Math.max(2, runtimeMaxActiveFireflyLights - 1);
+          } else if (fpsAverage > 72 && runtimeMaxActiveFireflyLights < tunedMaxActiveFireflyLights) {
+            runtimeMaxActiveFireflyLights = Math.min(tunedMaxActiveFireflyLights, runtimeMaxActiveFireflyLights + 1);
+          }
+        }
+
         fpsDisplayText = `FPS: ${Math.round(fpsAverage)}`;
         if (fpsHudEnabled && fpsHud) fpsHud.textContent = fpsDisplayText;
       }
