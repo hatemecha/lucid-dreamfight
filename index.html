@@ -1038,6 +1038,9 @@
         maxAirWishSpeed: 10.5,
         hardMaxHorizontalSpeed: 22.0,
         gravity: 27.0,
+        movementGroundAccelScale: 0.42,
+        movementAirAccelScale: 0.88,
+        movementGroundFrictionScale: 0.72,
         baseFov: 75.0,
         sprintFovBoost: 6.0,
         dashFovBoost: 5.0,
@@ -6372,9 +6375,9 @@
     const maxAirWishSpeed = GameConfig.player.maxAirWishSpeed;
     const hardMaxHorizontalSpeed = GameConfig.player.hardMaxHorizontalSpeed;
     const gravity = GameConfig.player.gravity;
-    const movementGroundAccelScale = 0.42;
-    const movementAirAccelScale = 0.88;
-    const movementGroundFrictionScale = 0.72;
+    const movementGroundAccelScale = GameConfig.player.movementGroundAccelScale;
+    const movementAirAccelScale = GameConfig.player.movementAirAccelScale;
+    const movementGroundFrictionScale = GameConfig.player.movementGroundFrictionScale;
     const sprintFovBoost = GameConfig.player.sprintFovBoost;
     const dashFovBoost = GameConfig.player.dashFovBoost;
     const maxTilt = GameConfig.player.maxTilt;
@@ -7558,16 +7561,14 @@
       if (fireflyAuraInstanced.instanceColor) fireflyAuraInstanced.instanceColor.needsUpdate = true;
     };
 
+    let fireflyTime = 0;
     const firefliesPerTick = 220;
     let fireflyUpdateCursor = 0;
 
     const updateFireflies = (dt) => {
       if (fireflies.length === 0) return;
 
-      for (const bug of fireflies) {
-        bug.pendingDt = Math.min(0.2, (bug.pendingDt || 0) + dt);
-      }
-
+      fireflyTime += dt;
       fireflyInstanceQuat.copy(camera.quaternion);
       let landingChecksThisFrame = 0;
       let matricesDirty = false;
@@ -7583,8 +7584,8 @@
           if (bug.light) bug.light.visible = false;
           continue;
         }
-        const simDt = Math.max(dt, bug.pendingDt || 0);
-        bug.pendingDt = 0;
+        const simDt = Math.min(0.2, Math.max(dt, fireflyTime - (bug.lastUpdateTime || 0)));
+        bug.lastUpdateTime = fireflyTime;
 
         bug.flickerPhase += simDt * bug.flickerSpeed;
         bug.flickerPhaseB += simDt * bug.flickerSpeedB;
@@ -8294,15 +8295,16 @@
 
     const updatePlayerPhysics = (dt) => {
       const groundFriction = GameConfig.player.groundFriction;
-      const groundStopSpeed = GameConfig.player.stopSpeed;
+      const stopSpeed = GameConfig.player.stopSpeed;
+      const groundStopSpeed = stopSpeed;
       const groundAccel = GameConfig.player.groundAccel;
       const airAccel = GameConfig.player.airAccel;
       const jumpVelocity = GameConfig.player.jumpVelocity;
       const dashSpeed = GameConfig.player.dashSpeed;
 
-      const movementGroundAccelScale = 0.42;
-      const movementAirAccelScale = 0.88;
-      const movementGroundFrictionScale = 0.72;
+      const movementGroundAccelScale = GameConfig.player.movementGroundAccelScale;
+      const movementAirAccelScale = GameConfig.player.movementAirAccelScale;
+      const movementGroundFrictionScale = GameConfig.player.movementGroundFrictionScale;
 
       const wasGroundedAtFrameStart = isGrounded;
       const preGroundVerticalVelocity = velocity.y;
