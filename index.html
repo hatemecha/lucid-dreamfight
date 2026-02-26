@@ -930,7 +930,8 @@
         "three": "https://cdn.jsdelivr.net/npm/three@0.161.0/build/three.module.js",
         "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.161.0/examples/jsm/",
         "@dimforge/rapier3d-compat": "https://cdn.jsdelivr.net/npm/@dimforge/rapier3d-compat@0.19.3/rapier.mjs",
-        "game/": "./game/"
+        "game/": "./game/",
+        "game/MovementManager.js": "./game/MovementManager.js"
       }
     }
   </script>
@@ -940,6 +941,7 @@
     import { PointerLockControls } from "three/addons/controls/PointerLockControls.js";
     import RAPIER from "@dimforge/rapier3d-compat";
     import { WeaponManager } from "game/WeaponManager.js";
+    import { MovementManager } from "game/MovementManager.js";
 
     const GameConfig = {
       colors: {
@@ -3640,6 +3642,8 @@
     let reloadTimer = weaponManager.reloadTimer;
     let reloadWeight = weaponManager.reloadWeight;
     let fireCooldown = weaponManager.fireCooldown;
+
+    const movementManager = new MovementManager(GameConfig);
 
     const weaponModels = new Map();
     for (const weaponDef of weapons) {
@@ -8121,25 +8125,25 @@
 
     const handleWallJump = (isDashing, hasMoveInput, hasWallContact) => {
       if (!isDashing && isGrounded && jumpBufferTime > 0) {
-        velocity.x *= bhopBoost;
-        velocity.z *= bhopBoost;
-        velocity.y = jumpVelocity;
-        isGrounded = false;
-        jumpBufferTime = 0;
+        movementManager.handleJump(jumpVelocity, bhopBoost);
+        velocity.x = movementManager.velocity.x;
+        velocity.y = movementManager.velocity.y;
+        velocity.z = movementManager.velocity.z;
+        isGrounded = movementManager.isGrounded;
+        jumpBufferTime = movementManager.jumpBufferTime;
         playSound("jump", 0.82);
       } else if (!isDashing && !isGrounded && jumpBufferTime > 0 && wallJumpCharges > 0 && wallContactTimer > 0) {
         const jumpNormal = hasWallContact ? tempWallNormal : lastWallContactNormal;
         const wallDotVel = velocity.x * jumpNormal.x + velocity.z * jumpNormal.z;
         const pushingTowardWall = hasMoveInput && moveWish.dot(jumpNormal) < -0.12;
         if (pushingTowardWall || wallDotVel < -0.45) {
-          const tangentX = velocity.x - jumpNormal.x * wallDotVel;
-          const tangentZ = velocity.z - jumpNormal.z * wallDotVel;
-          velocity.x = tangentX * wallJumpTangentCarry + jumpNormal.x * wallJumpPushSpeed;
-          velocity.z = tangentZ * wallJumpTangentCarry + jumpNormal.z * wallJumpPushSpeed;
-          velocity.y = wallJumpVerticalVelocity;
-          wallJumpCharges -= 1;
-          wallContactTimer = 0;
-          jumpBufferTime = 0;
+          movementManager.handleWallJump(jumpNormal, wallJumpVerticalVelocity, wallJumpPushSpeed, wallJumpTangentCarry);
+          velocity.x = movementManager.velocity.x;
+          velocity.y = movementManager.velocity.y;
+          velocity.z = movementManager.velocity.z;
+          wallJumpCharges = movementManager.wallJumpCharges;
+          wallContactTimer = movementManager.wallContactTimer;
+          jumpBufferTime = movementManager.jumpBufferTime;
           sprintFromDoubleTap = false;
           playSound("jump", 0.95);
         }
@@ -8286,6 +8290,17 @@
     };
 
     const updatePlayerPhysics = (dt) => {
+      const groundFriction = GameConfig.player.groundFriction;
+      const groundStopSpeed = GameConfig.player.stopSpeed;
+      const groundAccel = GameConfig.player.groundAccel;
+      const airAccel = GameConfig.player.airAccel;
+      const jumpVelocity = GameConfig.player.jumpVelocity;
+      const dashSpeed = GameConfig.player.dashSpeed;
+
+      const movementGroundAccelScale = 0.42;
+      const movementAirAccelScale = 0.88;
+      const movementGroundFrictionScale = 0.72;
+
       const wasGroundedAtFrameStart = isGrounded;
       const preGroundVerticalVelocity = velocity.y;
       dashVisualTimer = Math.max(0, dashVisualTimer - dt);
@@ -8295,8 +8310,15 @@
       landingBounceVelocity += (-landingBounceOffset * 64 - landingBounceVelocity * 11) * dt;
       landingBounceOffset += landingBounceVelocity * dt;
 
-      velocity.add(pendingImpulse);
+      // Pulse impulses to manager
+      movementManager.addImpulse(pendingImpulse);
+      movementManager.applyPendingImpulses();
+      velocity.x = movementManager.velocity.x;
+      velocity.y = movementManager.velocity.y;
+      velocity.z = movementManager.velocity.z;
+      
       pendingImpulse.set(0, 0, 0);
+
       jumpBufferTime = Math.max(0, jumpBufferTime - dt);
       autoJumpCooldown = Math.max(0, autoJumpCooldown - dt);
       dashCooldownTimer = Math.max(0, dashCooldownTimer - dt);
@@ -8325,6 +8347,23 @@
           player.position.y += movingGroundDelta;
         }
       }
+
+      // Update movement timers
+      movementManager.updateTimers(dt);
+      // Sync internal state to manager for logic
+      movementManager.velocity.x = velocity.x;
+      movementManager.velocity.y = velocity.y;
+      movementManager.velocity.z = velocity.z;
+      movementManager.isGrounded = isGrounded;
+      movementManager.dashTimer = dashTimer;
+      movementManager.dashCooldownTimer = dashCooldownTimer;
+      movementManager.wallJumpCharges = wallJumpCharges;
+      movementManager.wallContactTimer = wallContactTimer;
+      movementManager.jumpBufferTime = jumpBufferTime;
+      movementManager.autoJumpCooldown = autoJumpCooldown;
+      // Sync pending impulses back if changed elsewhere
+      movementManager.addImpulse(pendingImpulse);
+      pendingImpulse.set(0, 0, 0);
 
       updateWeaponStateTimers(dt);
       updateProjectileSystems(dt);
@@ -8382,8 +8421,13 @@
           dashDirection.y = 0;
           if (dashDirection.lengthSq() < 0.0001) dashDirection.set(0, 0, -1);
           dashDirection.normalize();
-          dashTimer = dashDuration;
-          dashCooldownTimer = dashCooldown;
+          
+          movementManager.startDash(dashDirection, dashSpeed, dashDuration, dashCooldown);
+          velocity.x = movementManager.velocity.x;
+          velocity.z = movementManager.velocity.z;
+          dashTimer = movementManager.dashTimer;
+          dashCooldownTimer = movementManager.dashCooldownTimer;
+
           dashVisualTimer = DASH_VISUAL_PULSE;
           addCameraShake(0.08);
           if (dashSpeedOverlay) dashSpeedOverlay.classList.remove("hidden");
@@ -8400,24 +8444,31 @@
       updateStatusHud(isDashing, isSprinting);
 
       if (isGrounded && !isDashing) {
-        applyGroundFriction(dt);
+        movementManager.applyGroundFriction(dt, groundFriction, groundStopSpeed);
+        velocity.x = movementManager.velocity.x;
+        velocity.z = movementManager.velocity.z;
       }
 
       if (isDashing) {
-        velocity.x = dashDirection.x * dashSpeed;
-        velocity.z = dashDirection.z * dashSpeed;
+        movementManager.velocity.x = velocity.x;
+        movementManager.velocity.z = velocity.z;
+        movementManager.startDash(dashDirection, dashSpeed, dashTimer, dashCooldownTimer);
+        velocity.x = movementManager.velocity.x;
+        velocity.z = movementManager.velocity.z;
         playSound("dash");
       } else if (hasMoveInput) {
         if (isGrounded) {
-          applyAcceleration(moveWish, targetSpeed, groundAccel * movementGroundAccelScale, dt);
+          movementManager.applyAcceleration(moveWish, targetSpeed, groundAccel * movementGroundAccelScale, dt);
         } else {
-          applyAcceleration(
+          movementManager.applyAcceleration(
             moveWish,
             Math.min(targetSpeed, maxAirWishSpeed),
             airAccel * movementAirAccelScale,
             dt
           );
         }
+        velocity.x = movementManager.velocity.x;
+        velocity.z = movementManager.velocity.z;
       }
 
       handleWallJump(isDashing, hasMoveInput, hasWallContact);
@@ -8431,7 +8482,8 @@
         }
       }
 
-      applyGravity(dt, isDashing);
+      movementManager.applyGravity(dt, gravity, isDashing);
+      velocity.y = movementManager.velocity.y;
       performSegmentedMove(dt);
       checkGroundCollisions();
       if (!wasGroundedAtFrameStart && isGrounded && preGroundVerticalVelocity < -2.2) {
@@ -8446,6 +8498,14 @@
         velocity.x *= scale;
         velocity.z *= scale;
       }
+
+      // Final push-back for variable consistency
+      dashTimer = movementManager.dashTimer;
+      dashCooldownTimer = movementManager.dashCooldownTimer;
+      wallJumpCharges = movementManager.wallJumpCharges;
+      wallContactTimer = movementManager.wallContactTimer;
+      jumpBufferTime = movementManager.jumpBufferTime;
+      autoJumpCooldown = movementManager.autoJumpCooldown;
 
       if (inputManager.isPressed("shoot") && getActiveWeapon().autoFire) {
         attemptFire();
