@@ -1,4 +1,4 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="es">
 <head>
   <meta charset="UTF-8" />
@@ -5566,19 +5566,21 @@
     };
 
     const attemptMeleePunch = (side) => {
-      if (!controls.isLocked || isPaused) return;
-      if (switchPhase !== "idle" || isReloading) return;
-      if (fireCooldown > 0) return;
+      if (!controls.isLocked || isPaused) return
+      if (switchPhase !== "idle" || isReloading) return
+      if (weaponManager.fireCooldown > 0) return;
 
-      const activeWeapon = getActiveWeapon();
-      if (activeWeapon.fireType !== "melee") return;
-      if (side !== -1 && side !== 1) return;
+      const activeWeapon = getActiveWeapon()
+      if (activeWeapon.fireType !== "melee") return
+      if (side !== -1 && side !== 1) return
 
-      fistPunchSide = side;
-      fistPunchTimer = fistPunchDuration;
-      fistPendingHit = true;
+      fistPunchSide = side
+      fistPunchTimer = fistPunchDuration
+      fistPendingHit = true
 
-      fireCooldown = activeWeapon.fireInterval;
+      // Melee usa el mismo cooldown global que el resto de armas
+      weaponManager.fireCooldown = activeWeapon.fireInterval
+      fireCooldown = weaponManager.fireCooldown
       camera.getWorldDirection(tempShootDir).normalize();
       applyWeaponRecoilImpulse(activeWeapon, tempShootDir);
       recoilBack = Math.min(recoilBack + (activeWeapon.recoilBack || 0) * 1.9 * recoilEffectScale, 0.62);
@@ -5942,9 +5944,9 @@
     };
 
     const attemptFire = () => {
-      if (!controls.isLocked || isPaused) return;
-      if (switchPhase !== "idle" || isReloading) return;
-      if (fireCooldown > 0) return;
+      if (!controls.isLocked || isPaused) return
+      if (switchPhase !== "idle" || isReloading) return
+      if (weaponManager.fireCooldown > 0) return;
 
       if (weaponManager.attemptFire()) {
         const activeWeapon = getActiveWeapon();
@@ -5995,10 +5997,11 @@
       lastForwardTapTime = -Infinity;
       dashQueued = false;
       inputManager.reset();
-      isReloading = false;
-      reloadTimer = 0;
-      reloadWeight = 0;
-      fireCooldown = 0;
+      isReloading = false
+      reloadTimer = 0
+      reloadWeight = 0
+      fireCooldown = 0
+      weaponManager.fireCooldown = 0
       switchPhase = "idle";
       switchTimer = 0;
       switchOffsetY = 0;
