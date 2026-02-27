@@ -987,7 +987,7 @@
         fixedStep: 1 / 60,
         maxSubsteps: 3,
         gravityY: -17.5,
-        playerOffset: 0.02
+        playerOffset: 0.06
       },
       renderer: {
         pixelWidth: 320,
@@ -1249,7 +1249,9 @@
     scene.background = dreamFogColor.clone();
     scene.fog = new THREE.Fog(dreamFogColor.getHex(), 15, 100);
 
-    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.05, 300);
+    const worldCamera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.02, 300);
+    worldCamera.updateProjectionMatrix();
+    const camera = worldCamera; // Aliased for legacy code compatibility
 
     const playerBody = new THREE.Object3D();
     const viewYaw = new THREE.Object3D();
@@ -1263,7 +1265,19 @@
     playerBody.add(viewYaw);
     viewYaw.add(viewRoll);
     viewRoll.add(viewKick);
-    viewKick.add(camera);
+    viewKick.add(worldCamera);
+    
+    // TASK: separate FOV for viewmodel
+    const viewmodelScene = new THREE.Scene();
+    const viewmodelCamera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 100);
+    viewmodelScene.add(viewmodelCamera);
+    
+    // Viewmodel lighting
+    const vmAmbient = new THREE.AmbientLight(0xffffff, 1.2);
+    viewmodelScene.add(vmAmbient);
+    const vmDir = new THREE.DirectionalLight(0xffffff, 2.0);
+    vmDir.position.set(2, 2, 2);
+    viewmodelScene.add(vmDir);
 
     const controls = new PointerLockControls(viewYaw, renderer.domElement);
 
@@ -2080,6 +2094,13 @@
     groundGlow.position.y = 0.004;
     scene.add(groundGlow);
 
+    // TASK A: Void Blocker (Sealing the world)
+    const voidBlockerGeom = new THREE.BoxGeometry(mapFloorSize * 1.5, 8, mapFloorSize * 1.5);
+    const voidBlockerMat = new THREE.MeshBasicMaterial({ color: 0x07090d }); // Seamless with fog
+    const voidBlocker = new THREE.Mesh(voidBlockerGeom, voidBlockerMat);
+    voidBlocker.position.set(0, -4.01, 0); // Directly below the map
+    scene.add(voidBlocker);
+
     const boxes = new THREE.Group();
     const boxColliders = [];
     const colliderSpatialCellSize = 6;
@@ -2283,19 +2304,19 @@
     );
 
     const platformMats = [
-      new THREE.MeshLambertMaterial({ color: 0x54627e }),
-      new THREE.MeshLambertMaterial({ color: 0x51746f }),
-      new THREE.MeshLambertMaterial({ color: 0x786255 }),
-      new THREE.MeshLambertMaterial({ color: 0x5f5479 }),
-      new THREE.MeshLambertMaterial({ color: 0x565664 }),
-      new THREE.MeshLambertMaterial({ color: 0x85804e })
+      new THREE.MeshLambertMaterial({ color: 0x54627e, side: THREE.DoubleSide }),
+      new THREE.MeshLambertMaterial({ color: 0x51746f, side: THREE.DoubleSide }),
+      new THREE.MeshLambertMaterial({ color: 0x786255, side: THREE.DoubleSide }),
+      new THREE.MeshLambertMaterial({ color: 0x5f5479, side: THREE.DoubleSide }),
+      new THREE.MeshLambertMaterial({ color: 0x565664, side: THREE.DoubleSide }),
+      new THREE.MeshLambertMaterial({ color: 0x85804e, side: THREE.DoubleSide })
     ];
     const neonGlowPresets = [
-      { baseColor: 0x445f73, emissiveColor: 0x67f6ff, emissiveIntensity: 0.34, lightColor: 0x85fbff, lightIntensity: 3.4, lightDistance: 19, lightDecay: 1.35 },
-      { baseColor: 0x5d4b7c, emissiveColor: 0xff6ce7, emissiveIntensity: 0.36, lightColor: 0xff92ef, lightIntensity: 3.3, lightDistance: 18, lightDecay: 1.35 },
-      { baseColor: 0x4a6a4f, emissiveColor: 0x88ff6f, emissiveIntensity: 0.32, lightColor: 0xa0ff8b, lightIntensity: 3.1, lightDistance: 18, lightDecay: 1.35 },
-      { baseColor: 0x6c5e47, emissiveColor: 0xffc45a, emissiveIntensity: 0.31, lightColor: 0xffd77f, lightIntensity: 3.0, lightDistance: 17, lightDecay: 1.35 },
-      { baseColor: 0x4a4f7d, emissiveColor: 0x7aa4ff, emissiveIntensity: 0.33, lightColor: 0x98b8ff, lightIntensity: 3.2, lightDistance: 18, lightDecay: 1.35 }
+      { baseColor: 0x445f73, emissiveColor: 0x67f6ff, emissiveIntensity: 0.34, lightColor: 0x85fbff, lightIntensity: 3.4, lightDistance: 19, lightDecay: 1.35, side: THREE.DoubleSide },
+      { baseColor: 0x5d4b7c, emissiveColor: 0xff6ce7, emissiveIntensity: 0.36, lightColor: 0xff92ef, lightIntensity: 3.3, lightDistance: 18, lightDecay: 1.35, side: THREE.DoubleSide },
+      { baseColor: 0x4a6a4f, emissiveColor: 0x88ff6f, emissiveIntensity: 0.32, lightColor: 0xa0ff8b, lightIntensity: 3.1, lightDistance: 18, lightDecay: 1.35, side: THREE.DoubleSide },
+      { baseColor: 0x6c5e47, emissiveColor: 0xffc45a, emissiveIntensity: 0.31, lightColor: 0xffd77f, lightIntensity: 3.0, lightDistance: 17, lightDecay: 1.35, side: THREE.DoubleSide },
+      { baseColor: 0x4a4f7d, emissiveColor: 0x7aa4ff, emissiveIntensity: 0.33, lightColor: 0x98b8ff, lightIntensity: 3.2, lightDistance: 18, lightDecay: 1.35, side: THREE.DoubleSide }
     ];
     const maxNeonGlowBlocks = 40;
     let neonGlowBlocksPlaced = 0;
@@ -3168,6 +3189,7 @@
         blockMat.color.setHex(glowPreset.baseColor);
         blockMat.emissive.setHex(glowPreset.emissiveColor);
         blockMat.emissiveIntensity = 3.5;
+        if (glowPreset.side !== undefined) blockMat.side = glowPreset.side;
       }
 
       const voxelGrid = buildVoxelGrid(sx, sy, sz, blockMat, shootable);
@@ -3490,7 +3512,7 @@
     weaponRig.position.copy(weaponHipPos);
     weaponRig.rotation.copy(weaponHipRot);
     const baseWeaponZ = weaponRig.position.z;
-    camera.add(weaponRig);
+    viewmodelScene.add(weaponRig);
 
     const armsGroup = new THREE.Group();
     const armMat = new THREE.MeshStandardMaterial({ color: 0xb18d74, roughness: 0.95, metalness: 0 });
@@ -3919,6 +3941,9 @@
     const tempExplosionDir = new THREE.Vector3();
     const tempExplosionClosestPoint = new THREE.Vector3();
     const tempWallContactCandidateNormal = new THREE.Vector3();
+    const tempCameraWorldPos = new THREE.Vector3();
+    const tempCameraPush = new THREE.Vector3();
+    const tempQuat = new THREE.Quaternion();
     const playerVelocity = velocity;
     const pendingImpulse = new THREE.Vector3();
     const impulsePhysicsEntities = [];
@@ -4265,6 +4290,10 @@
       renderer.setSize(window.innerWidth * renderScale, window.innerHeight * renderScale, false);
       renderer.domElement.style.width = "100%";
       renderer.domElement.style.height = "100%";
+      worldCamera.aspect = window.innerWidth / window.innerHeight;
+      worldCamera.updateProjectionMatrix();
+      viewmodelCamera.aspect = window.innerWidth / window.innerHeight;
+      viewmodelCamera.updateProjectionMatrix();
     };
 
     let runtimeParticleQualityScale = particleQualityScale;
@@ -6406,6 +6435,7 @@
     const right = new THREE.Vector3();
     const moveWish = new THREE.Vector3();
     const dashDirection = new THREE.Vector3();
+    let wallPushFactor = 0;
     const fixedDt = 1 / 60;
     const maxPhysicsSubsteps = GameConfig.physics.maxSubsteps;
     let physicsAccumulator = 0;
@@ -6472,7 +6502,8 @@
     const lastCapsuleWallNormal = new THREE.Vector3();
     let hasLastCapsuleWallNormal = false;
     const maxStepDistance = playerRadius * 0.8;
-    const skinWidth = playerRadius * 0.1;
+    const COLLISION_SKIN = GameConfig.physics.playerOffset;
+    const skinWidth = COLLISION_SKIN;
     const minMoveDistance = playerRadius * 0.005;
     const collisionVelocitySqThreshold = 0.0004;
     const maxNearbyColliderLimit = 96;
@@ -6559,7 +6590,8 @@
       const dy = segY - closestY;
       const dz = playerPosition.z - closestZ;
       const distSq = dx * dx + dy * dy + dz * dz;
-      const radiusSq = radius * radius;
+      const effectiveRadius = radius + collisionEpsilon;
+      const radiusSq = effectiveRadius * effectiveRadius;
       if (distSq >= radiusSq) return 0;
 
       let nx = 0;
@@ -6622,7 +6654,7 @@
     };
 
     const resolveCapsuleVsVoxel = (playerPosition, radius, capsuleHeight, axisMode = COLLISION_AXIS_XZ) => {
-      if (velocity.lengthSq() < 0.00001) return false;
+      // Remove velocity check to allow safety resolution even when idle
       const maxPenetrationPush = playerRadius * 0.3;
       hasLastCapsuleWallNormal = false;
       const capsuleSegMinY = playerPosition.y + radius;
@@ -6637,6 +6669,7 @@
       const nearbyCount = nearby.voxelBlocks.length + nearby.solidBoxes.length;
       if (nearbyCount === 0) return false;
       const useDistanceCull = nearbyCount > maxNearbyColliderLimit;
+      let hasHit = false;
 
       for (let i = 0; i < nearby.voxelBlocks.length; i++) {
         const blockState = nearby.voxelBlocks[i];
@@ -6748,7 +6781,8 @@
               lastCapsuleWallNormal.copy(tempWallContactCandidateNormal);
               hasLastCapsuleWallNormal = true;
             }
-            return true;
+            // Task C: Thorough resolution - don't return early, but mark hit
+            hasHit = true; 
           }
         }
       }
@@ -6811,10 +6845,10 @@
           lastCapsuleWallNormal.copy(tempWallContactCandidateNormal);
           hasLastCapsuleWallNormal = true;
         }
-        return true;
+        hasHit = true;
       }
 
-      return false;
+      return hasHit;
     };
 
     const resolveHorizontalCollisions = () => {
@@ -8211,54 +8245,72 @@
       let slideIterations = 0;
       currentPlayerPosBeforeMove.copy(player.position);
       deltaMovement.set(
-        currentPlayerPosBeforeMove.x - previousPlayerPosition.x + velocity.x * dt,
-        currentPlayerPosBeforeMove.y - previousPlayerPosition.y + velocity.y * dt,
-        currentPlayerPosBeforeMove.z - previousPlayerPosition.z + velocity.z * dt
+        velocity.x * dt,
+        velocity.y * dt,
+        velocity.z * dt
       );
-      previousPlayerPosition.copy(currentPlayerPosBeforeMove);
-
+      
       const deltaLengthSq = deltaMovement.lengthSq();
       const minMoveDistanceSq = minMoveDistance * minMoveDistance;
-      if (deltaLengthSq < minMoveDistanceSq) return;
+      if (deltaLengthSq < minMoveDistanceSq) {
+         previousPlayerPosition.copy(player.position);
+         return;
+      }
+      
       const sweepDistance = Math.sqrt(deltaLengthSq);
       let segmentCount = Math.ceil(sweepDistance / Math.max(0.0001, playerRadius * 0.75));
+      
+      // Task A: Conditional Substep for high speeds or recent explosions
+      if (deltaLengthSq > 0.08 || recentExplosionTimer > 0) {
+        segmentCount = Math.max(segmentCount, 4);
+      }
+      
       const stabilitySegmentCount = Math.ceil(sweepDistance / Math.max(0.0001, maxStepDistance));
       if (stabilitySegmentCount > segmentCount) segmentCount = stabilitySegmentCount;
       segmentCount = Math.max(1, segmentCount);
-      segmentCount = Math.min(segmentCount, 6);
+      segmentCount = Math.min(segmentCount, 8); 
+      
       const stepX = deltaMovement.x / segmentCount;
       const stepY = deltaMovement.y / segmentCount;
       const stepZ = deltaMovement.z / segmentCount;
 
       for (let moveStep = 0; moveStep < segmentCount; moveStep++) {
-        // 1) Apply gravity displacement (Y axis)
+        // Task B: Axis-Separated Movement. Resolve XZ FIRST.
+        
+        // 1) Apply horizontal displacement (XZ)
+        player.position.x += stepX;
+        player.position.z += stepZ;
+        
+        // 2) Resolve XZ axis
+        const hitWall = resolveCapsuleVsVoxel(player.position, playerRadius, capsuleHeight, COLLISION_AXIS_XZ);
+        if (hitWall && hasLastCapsuleWallNormal) {
+          if (slideIterations < 3) {
+            slideIterations++;
+            const intoWallSpeed = velocity.x * lastCapsuleWallNormal.x + velocity.z * lastCapsuleWallNormal.z;
+            if (intoWallSpeed < 0) {
+              velocity.x -= lastCapsuleWallNormal.x * intoWallSpeed;
+              velocity.z -= lastCapsuleWallNormal.z * intoWallSpeed;
+              velocity.x *= 0.998;
+              velocity.z *= 0.998;
+            }
+          }
+        }
+
+        // 3) Apply vertical displacement (Y)
         player.position.y += stepY;
-        // 2) Resolve Y axis
+        
+        // 4) Resolve Y axis
         const hitY = resolveCapsuleVsVoxel(player.position, playerRadius, capsuleHeight, COLLISION_AXIS_Y);
         if (hitY && ((stepY > 0 && velocity.y > 0) || (stepY < 0 && velocity.y < 0))) {
           velocity.y = 0;
         }
-        if (isGrounded && velocity.y <= 0) {
-          player.position.y -= 0.02;
+        if (isGrounded && velocity.y <= 0.001) {
+          const gy = findGroundY(player.position.y);
+          if (player.position.y < gy) player.position.y = gy;
+          velocity.y = 0;
         }
 
-        // 3) Apply horizontal displacement (XZ)
-        player.position.x += stepX;
-        player.position.z += stepZ;
-        // 4) Resolve XZ axis
-        const hitWall = resolveCapsuleVsVoxel(player.position, playerRadius, capsuleHeight, COLLISION_AXIS_XZ);
-        if (hitWall && hasLastCapsuleWallNormal) {
-          if (slideIterations > 2) break;
-          slideIterations++;
-          const intoWallSpeed = velocity.x * lastCapsuleWallNormal.x + velocity.z * lastCapsuleWallNormal.z;
-          if (intoWallSpeed < 0) {
-            velocity.x -= lastCapsuleWallNormal.x * intoWallSpeed;
-            velocity.z -= lastCapsuleWallNormal.z * intoWallSpeed;
-            velocity.x *= 0.999;
-            velocity.z *= 0.999;
-          }
-        }
-
+        // Map boundary clamping
         if (player.position.x < -mapClamp) {
           player.position.x = -mapClamp;
           velocity.x = Math.max(velocity.x, 0);
@@ -8275,16 +8327,20 @@
           velocity.z = Math.min(velocity.z, 0);
         }
       }
-      deltaMovement.subVectors(player.position, previousPlayerPosition);
+      
+      deltaMovement.subVectors(player.position, currentPlayerPosBeforeMove);
+      previousPlayerPosition.copy(player.position);
     };
 
     const checkGroundCollisions = () => {
       const feetY = player.position.y;
       const groundY = findGroundY(feetY);
+      const skin = COLLISION_SKIN;
+      const hysteresis = isGrounded ? (groundSnap + skin * 0.5) : groundSnap;
 
-      if (velocity.y <= 0 && feetY <= groundY + groundSnap) {
+      if (velocity.y <= 0.001 && feetY <= groundY + hysteresis) {
         player.position.y = groundY;
-        velocity.y = 0;
+        if (velocity.y < 0) velocity.y = 0;
         isGrounded = true;
         wallJumpCharges = wallJumpMaxCharges;
         wallContactTimer = 0;
@@ -8568,7 +8624,7 @@
       bobOffsetY = THREE.MathUtils.lerp(bobOffsetY, bobTargetY, bobLerp);
       viewKickBounceY = THREE.MathUtils.lerp(
         viewKickBounceY,
-        (bobOffsetY + landingBounceOffset) * cameraShakeScale,
+        THREE.MathUtils.clamp((bobOffsetY + landingBounceOffset) * cameraShakeScale, -0.4, 0.4),
         1 - Math.exp(-16 * dt)
       );
       viewKickStretchZ = THREE.MathUtils.lerp(
@@ -8674,6 +8730,64 @@
 
       if (activeWeapon.id === "fists") {
         updateFistAnimation(activeModel, dt);
+      }
+
+      // Camera Wall Safety Task (Guard Task)
+      camera.updateMatrixWorld();
+      tempCameraWorldPos.setFromMatrixPosition(camera.matrixWorld);
+      const prevCamX = tempCameraWorldPos.x;
+      const prevCamY = tempCameraWorldPos.y;
+      const prevCamZ = tempCameraWorldPos.z;
+      
+      const camSafeRadius = 0.16; 
+      let camCorrectionApplied = false;
+
+      // 1. Resolve Point Proximity (Eye pos)
+      if (resolveCapsuleVsVoxel(tempCameraWorldPos, camSafeRadius, 0.02, COLLISION_AXIS_XZ) || 
+          resolveCapsuleVsVoxel(tempCameraWorldPos, camSafeRadius, 0.02, COLLISION_AXIS_Y)) {
+        camCorrectionApplied = true;
+      }
+
+      // 2. Resolve Look Proximity (Raycast Guard)
+      camera.getWorldDirection(tempShootDir);
+      const lookGuardDist = 0.35;
+      tempTraceEnd.copy(tempCameraWorldPos).addScaledVector(tempShootDir, lookGuardDist);
+      if (resolveCapsuleVsVoxel(tempTraceEnd, 0.12, 0.02, COLLISION_AXIS_XZ) || 
+          resolveCapsuleVsVoxel(tempTraceEnd, 0.12, 0.02, COLLISION_AXIS_Y)) {
+          // Push camera slightly away from what it's looking at
+          tempCameraWorldPos.addScaledVector(tempShootDir, -0.06);
+          tempCameraWorldPos.y += 0.04; // Micro-lift
+          camCorrectionApplied = true;
+      }
+      
+      if (camCorrectionApplied) {
+        tempCameraPush.set(
+          tempCameraWorldPos.x - prevCamX, 
+          tempCameraWorldPos.y - prevCamY, 
+          tempCameraWorldPos.z - prevCamZ
+        );
+        camera.parent.getWorldQuaternion(tempQuat).invert();
+        tempCameraPush.applyQuaternion(tempQuat);
+        camera.position.add(tempCameraPush);
+      }
+
+      // Weapon Wall Avoidance (pull gun back and lower it if near a wall)
+      const weaponRayDist = 0.95;
+      tempTraceStart.setFromMatrixPosition(camera.matrixWorld);
+      camera.getWorldDirection(tempShootDir);
+      tempTraceEnd.copy(tempTraceStart).addScaledVector(tempShootDir, weaponRayDist);
+      
+      const isBlocked = resolveCapsuleVsVoxel(tempTraceEnd, 0.12, 0.02, COLLISION_AXIS_XZ) || 
+                       resolveCapsuleVsVoxel(tempTraceEnd, 0.12, 0.02, COLLISION_AXIS_Y);
+      
+      const wallPushTarget = isBlocked ? 1.0 : 0.0;
+      const wallPushSpeed = isBlocked ? 10 : 6;
+      wallPushFactor = THREE.MathUtils.lerp(wallPushFactor, wallPushTarget, 1 - Math.exp(-wallPushSpeed * dt));
+
+      if (wallPushFactor > 0.001) {
+        weaponRig.position.z += wallPushFactor * 0.38;
+        weaponRig.position.y -= wallPushFactor * 0.18;
+        weaponRig.rotation.x -= wallPushFactor * 0.15;
       }
 
       updateAmmoHud();
@@ -8879,8 +8993,23 @@
 
       // 7) RENDER
       renderer.setRenderTarget(renderTarget);
+      renderer.autoClear = false;
       renderer.clear();
-      renderer.render(scene, camera);
+      
+      // 1- Mundo (World)
+      renderer.render(scene, worldCamera);
+      
+      // 2- Profundidad limpia (Depth Clear)
+      renderer.clearDepth();
+      
+      // 3- Viewmodel (Separate POV)
+      // Sync viewmodel camera to world camera transform
+      worldCamera.updateMatrixWorld();
+      viewmodelCamera.position.copy(worldCamera.localToWorld(new THREE.Vector3(0,0,0)));
+      viewmodelCamera.quaternion.copy(worldCamera.getWorldQuaternion(new THREE.Quaternion()));
+      viewmodelCamera.updateMatrixWorld();
+      
+      renderer.render(viewmodelScene, viewmodelCamera);
 
       renderer.setRenderTarget(null);
       renderer.clear();
