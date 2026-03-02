@@ -1,0 +1,12 @@
+{
+  "name": "lucid-dreamfight",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "server": "node server/ws-server.js"
+  },
+  "dependencies": {
+    "ws": "^8.16.0",
+    "three": "^0.152.0"
+  }
+}
