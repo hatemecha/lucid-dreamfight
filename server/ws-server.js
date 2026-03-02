@@ -6,12 +6,13 @@
  * Server broadcasts: player states, fire events, hit events, kill events, respawn events.
  */
 
+const { performance } = require('node:perf_hooks');
 const { WebSocketServer } = require('ws');
 
 const PORT = 9001;
 const MAX_PLAYERS = 2;
 const RESPAWN_DELAY_MS = 3000;
-const STATE_BROADCAST_INTERVAL_MS = 50; // 20 Hz
+const STATE_BROADCAST_INTERVAL_MS = 33; // ~30 Hz
 const MAX_HP = 100;
 
 // Spawn points aligned with the current arena's fixed spawn platform.
@@ -30,7 +31,14 @@ const WEAPON_DAMAGE = {
     revolver: { damage: 34, fireType: 'hitscan', range: 170 },
     shotgun: { damage: 16, fireType: 'hitscan', range: 58, pellets: 9 },
     sniper: { damage: 125, fireType: 'hitscan', range: 260 },
-    bazooka: { damage: 120, fireType: 'projectile', range: 50, explosionRadius: 5.4 }
+    bazooka: {
+        damage: 120,
+        structureDamage: 260,
+        explosionImpulseForce: 23.0,
+        fireType: 'projectile',
+        range: 50,
+        explosionRadius: 5.4
+    }
 };
 
 // Player hitbox dimensions (capsule approximation as AABB)
@@ -131,6 +139,91 @@ function distSq3(ax, ay, az, bx, by, bz) {
     return dx * dx + dy * dy + dz * dz;
 }
 
+function sanitizeVec3(vec, fallback = null) {
+    if (!vec) return fallback ? { ...fallback } : null;
+    const x = Number(vec.x);
+    const y = Number(vec.y);
+    const z = Number(vec.z);
+
+    const safeX = Number.isFinite(x) ? x : fallback?.x;
+    const safeY = Number.isFinite(y) ? y : fallback?.y;
+    const safeZ = Number.isFinite(z) ? z : fallback?.z;
+    if (!Number.isFinite(safeX) || !Number.isFinite(safeY) || !Number.isFinite(safeZ)) {
+        return null;
+    }
+
+    return { x: safeX, y: safeY, z: safeZ };
+}
+
+function sanitizeRotation(rotation, fallback = null) {
+    if (!rotation) return fallback ? { ...fallback } : null;
+    const x = Number(rotation.x);
+    const y = Number(rotation.y);
+
+    const safeX = Number.isFinite(x)
+        ? Math.max(-Math.PI * 0.5, Math.min(Math.PI * 0.5, x))
+        : fallback?.x;
+    const safeY = Number.isFinite(y) ? y : fallback?.y;
+    if (!Number.isFinite(safeX) || !Number.isFinite(safeY)) {
+        return null;
+    }
+
+    return { x: safeX, y: safeY };
+}
+
+function broadcastProjectileExplosion(projectile, normal) {
+    if (!projectile) return;
+    const safeNormal = sanitizeVec3(normal, { x: 0, y: 1, z: 0 });
+    if (!safeNormal) return;
+
+    broadcast({
+        type: 'explosion',
+        attackerId: projectile.attackerId,
+        projectileId: projectile.clientProjectileId ?? null,
+        weaponId: projectile.weaponId,
+        position: { ...projectile.position },
+        normal: safeNormal,
+        radius: projectile.explosionRadius,
+        damage: projectile.damage,
+        structureDamage: projectile.structureDamage,
+        impulseForce: projectile.explosionImpulseForce || 0
+    });
+}
+
+function explodeProjectileAtIndex(index, positionOverride = null, normalOverride = null) {
+    const projectile = projectiles[index];
+    if (!projectile) return false;
+
+    const safePosition = sanitizeVec3(positionOverride, projectile.position);
+    if (safePosition) {
+        projectile.position.x = safePosition.x;
+        projectile.position.y = safePosition.y;
+        projectile.position.z = safePosition.z;
+    }
+
+    const radius = projectile.explosionRadius;
+    const radiusSq = radius * radius;
+    for (const target of players) {
+        if (!target || !target.alive) continue;
+        const centerX = target.position.x;
+        const centerY = target.position.y + PLAYER_HEIGHT * 0.5;
+        const centerZ = target.position.z;
+        const dSq = distSq3(projectile.position.x, projectile.position.y, projectile.position.z, centerX, centerY, centerZ);
+        if (dSq > radiusSq) continue;
+
+        const dist = Math.sqrt(dSq);
+        const falloff = 1 - Math.min(dist / radius, 1);
+        const damage = Math.round(projectile.damage * falloff);
+        if (damage > 0) {
+            applyDamage(projectile.attackerId, target.id, damage, projectile.weaponId);
+        }
+    }
+
+    broadcastProjectileExplosion(projectile, normalOverride);
+    projectiles.splice(index, 1);
+    return true;
+}
+
 // ─── Damage Application ────────────────────────────────────────
 
 function applyDamage(attackerId, victimId, damage, weaponId) {
@@ -201,6 +294,10 @@ function handleFire(attackerId, msg) {
     const dy = direction.y / len;
     const dz = direction.z / len;
     const dir = { x: dx, y: dy, z: dz };
+    const clientProjectileId =
+        Number.isInteger(msg.projectileId) && msg.projectileId >= 0
+            ? msg.projectileId
+            : null;
 
     broadcastExcept(attackerId, {
         type: 'fire',
@@ -208,7 +305,8 @@ function handleFire(attackerId, msg) {
         origin: { x: origin.x, y: origin.y, z: origin.z },
         direction: { ...dir },
         weaponId,
-        fireType: weaponDef.fireType
+        fireType: weaponDef.fireType,
+        projectileId: clientProjectileId
     });
 
     if (weaponDef.fireType === 'hitscan' || weaponDef.fireType === 'melee') {
@@ -231,15 +329,78 @@ function handleFire(attackerId, msg) {
         // Track projectile for explosion check
         projectiles.push({
             id: nextProjectileId++,
+            clientProjectileId,
             attackerId,
             weaponId,
             position: { x: origin.x, y: origin.y, z: origin.z },
             velocity: { x: dir.x * 36, y: dir.y * 36, z: dir.z * 36 },
             life: 4.2,
             explosionRadius: weaponDef.explosionRadius || 5.4,
+            explosionImpulseForce: weaponDef.explosionImpulseForce || 0,
+            structureDamage: weaponDef.structureDamage || weaponDef.damage,
             damage: weaponDef.damage
         });
     }
+}
+
+function handleProjectileImpact(attackerId, msg) {
+    const clientProjectileId =
+        Number.isInteger(msg?.projectileId) && msg.projectileId >= 0
+            ? msg.projectileId
+            : null;
+    if (clientProjectileId == null) return;
+
+    const position = sanitizeVec3(msg.position);
+    if (!position) return;
+    const normal = sanitizeVec3(msg.normal, { x: 0, y: 1, z: 0 });
+
+    for (let i = projectiles.length - 1; i >= 0; i--) {
+        const projectile = projectiles[i];
+        if (!projectile) continue;
+        if (projectile.attackerId !== attackerId) continue;
+        if (projectile.clientProjectileId !== clientProjectileId) continue;
+        explodeProjectileAtIndex(i, position, normal);
+        return;
+    }
+}
+
+function handleTerrainImpact(attackerId, msg) {
+    const attacker = players[attackerId];
+    if (!attacker || !attacker.alive) return;
+
+    const point = sanitizeVec3(msg?.point);
+    const normal = sanitizeVec3(msg?.normal, { x: 0, y: 1, z: 0 });
+    const direction = sanitizeVec3(msg?.direction, { x: 0, y: 0, z: 1 });
+    const damage = Number(msg?.damage);
+    const energy = Number(msg?.energy);
+    const blockId =
+        Number.isInteger(msg?.blockId) && msg.blockId >= 0
+            ? msg.blockId
+            : null;
+    const impactId =
+        Number.isInteger(msg?.impactId) && msg.impactId >= 0
+            ? msg.impactId
+            : null;
+    const weaponId =
+        typeof msg?.weaponId === 'string' && msg.weaponId.length > 0
+            ? msg.weaponId
+            : 'revolver';
+
+    if (!point || !normal || !direction) return;
+    if (!Number.isFinite(damage) || damage <= 0) return;
+
+    broadcast({
+        type: 'terrainImpact',
+        attackerId,
+        weaponId,
+        point,
+        normal,
+        direction,
+        blockId,
+        impactId,
+        damage,
+        energy: Number.isFinite(energy) && energy > 0 ? energy : 1
+    });
 }
 
 // ─── Server Tick ────────────────────────────────────────────────
@@ -278,25 +439,7 @@ function serverTick() {
         }
 
         if (explode) {
-            // Explosion damage to all players in radius
-            const radius = proj.explosionRadius;
-            const radiusSq = radius * radius;
-            for (const target of players) {
-                if (!target || !target.alive) continue;
-                const centerX = target.position.x;
-                const centerY = target.position.y + PLAYER_HEIGHT * 0.5;
-                const centerZ = target.position.z;
-                const dSq = distSq3(proj.position.x, proj.position.y, proj.position.z, centerX, centerY, centerZ);
-                if (dSq <= radiusSq) {
-                    const dist = Math.sqrt(dSq);
-                    const falloff = 1 - Math.min(dist / radius, 1);
-                    const damage = Math.round(proj.damage * falloff);
-                    if (damage > 0) {
-                        applyDamage(proj.attackerId, target.id, damage, proj.weaponId);
-                    }
-                }
-            }
-            projectiles.splice(i, 1);
+            explodeProjectileAtIndex(i);
         }
     }
 
@@ -316,7 +459,12 @@ function serverTick() {
     }
 
     if (statePlayers.length > 0) {
-        broadcast({ type: 'state', players: statePlayers });
+        broadcast({
+            type: 'state',
+            serverTimeMs: performance.now(),
+            serverTickMs: STATE_BROADCAST_INTERVAL_MS,
+            players: statePlayers
+        });
     }
 }
 
@@ -388,25 +536,32 @@ wss.on('connection', (ws) => {
 
         if (msg.type === 'state') {
             // Client state update
-            if (msg.position) {
-                playerState.position.x = msg.position.x;
-                playerState.position.y = msg.position.y;
-                playerState.position.z = msg.position.z;
+            const safePosition = sanitizeVec3(msg.position, playerState.position);
+            if (safePosition) {
+                playerState.position.x = safePosition.x;
+                playerState.position.y = safePosition.y;
+                playerState.position.z = safePosition.z;
             }
-            if (msg.rotation) {
-                playerState.rotation.x = msg.rotation.x;
-                playerState.rotation.y = msg.rotation.y;
+            const safeRotation = sanitizeRotation(msg.rotation, playerState.rotation);
+            if (safeRotation) {
+                playerState.rotation.x = safeRotation.x;
+                playerState.rotation.y = safeRotation.y;
             }
-            if (msg.velocity) {
-                playerState.velocity.x = msg.velocity.x;
-                playerState.velocity.y = msg.velocity.y;
-                playerState.velocity.z = msg.velocity.z;
+            const safeVelocity = sanitizeVec3(msg.velocity, playerState.velocity);
+            if (safeVelocity) {
+                playerState.velocity.x = safeVelocity.x;
+                playerState.velocity.y = safeVelocity.y;
+                playerState.velocity.z = safeVelocity.z;
             }
             if (msg.weaponId) {
                 playerState.weaponId = msg.weaponId;
             }
         } else if (msg.type === 'fire') {
             handleFire(assignedId, msg);
+        } else if (msg.type === 'projectileImpact') {
+            handleProjectileImpact(assignedId, msg);
+        } else if (msg.type === 'terrainImpact') {
+            handleTerrainImpact(assignedId, msg);
         }
     });
 

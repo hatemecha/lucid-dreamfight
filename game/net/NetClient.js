@@ -1,7 +1,7 @@
 /**
  * NetClient for Lucid Dreamfight 2-Player LAN.
  *
- * Handles WebSocket connection, state sending (20 Hz),
+ * Handles WebSocket connection, state sending (~30 Hz),
  * fire event sending, and server message dispatching.
  */
 export class NetClient {
@@ -9,7 +9,7 @@ export class NetClient {
     this.ws = null;
     this.playerId = -1;
     this.connected = false;
-    this._sendInterval = 50;
+    this._sendInterval = 33;
     this._lastSendTime = 0;
 
     this._onWelcome = null;
@@ -18,8 +18,10 @@ export class NetClient {
     this._onKill = null;
     this._onRespawn = null;
     this._onFire = null;
+    this._onExplosion = null;
     this._onPlayerJoined = null;
     this._onPlayerLeft = null;
+    this._onTerrainImpact = null;
     this._onError = null;
     this._onOpen = null;
     this._onClose = null;
@@ -94,16 +96,62 @@ export class NetClient {
     });
   }
 
-  sendFire(origin, direction, weaponId, fireType) {
+  sendFire(origin, direction, weaponId, fireType, projectileId = null) {
     if (!this.connected || !this.ws) return;
 
-    this._send({
+    const msg = {
       type: "fire",
       origin: { x: origin.x, y: origin.y, z: origin.z },
       direction: { x: direction.x, y: direction.y, z: direction.z },
       weaponId,
       fireType,
+    };
+    if (projectileId != null) {
+      msg.projectileId = projectileId;
+    }
+    this._send(msg);
+  }
+
+  sendProjectileImpact(projectileId, position, normal, weaponId) {
+    if (!this.connected || !this.ws) return;
+
+    this._send({
+      type: "projectileImpact",
+      projectileId,
+      position: { x: position.x, y: position.y, z: position.z },
+      normal: { x: normal.x, y: normal.y, z: normal.z },
+      weaponId,
     });
+  }
+
+  sendTerrainImpact(
+    point,
+    normal,
+    direction,
+    weaponId,
+    damage,
+    energy = 1,
+    blockId = null,
+    impactId = null,
+  ) {
+    if (!this.connected || !this.ws) return;
+
+    const msg = {
+      type: "terrainImpact",
+      point: { x: point.x, y: point.y, z: point.z },
+      normal: { x: normal.x, y: normal.y, z: normal.z },
+      direction: { x: direction.x, y: direction.y, z: direction.z },
+      weaponId,
+      damage,
+      energy,
+    };
+    if (Number.isInteger(blockId)) {
+      msg.blockId = blockId;
+    }
+    if (Number.isInteger(impactId)) {
+      msg.impactId = impactId;
+    }
+    this._send(msg);
   }
 
   onWelcome(cb) {
@@ -130,12 +178,20 @@ export class NetClient {
     this._onFire = cb;
   }
 
+  onExplosion(cb) {
+    this._onExplosion = cb;
+  }
+
   onPlayerJoined(cb) {
     this._onPlayerJoined = cb;
   }
 
   onPlayerLeft(cb) {
     this._onPlayerLeft = cb;
+  }
+
+  onTerrainImpact(cb) {
+    this._onTerrainImpact = cb;
   }
 
   onError(cb) {
@@ -164,7 +220,7 @@ export class NetClient {
         if (this._onWelcome) this._onWelcome(msg);
         break;
       case "state":
-        if (this._onState) this._onState(msg.players);
+        if (this._onState) this._onState(msg.players, msg);
         break;
       case "hit":
         if (this._onHit) this._onHit(msg);
@@ -178,11 +234,17 @@ export class NetClient {
       case "fire":
         if (this._onFire) this._onFire(msg);
         break;
+      case "explosion":
+        if (this._onExplosion) this._onExplosion(msg);
+        break;
       case "playerJoined":
         if (this._onPlayerJoined) this._onPlayerJoined(msg);
         break;
       case "playerLeft":
         if (this._onPlayerLeft) this._onPlayerLeft(msg);
+        break;
+      case "terrainImpact":
+        if (this._onTerrainImpact) this._onTerrainImpact(msg);
         break;
       case "error":
         console.warn("[NetClient] Server error:", msg.message);

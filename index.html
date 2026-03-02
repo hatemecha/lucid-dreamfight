@@ -5326,6 +5326,8 @@
             let fistPendingHit = false;
             const fistPunchDuration = GameConfig.input.fistPunchDuration;
             const projectiles = [];
+            let nextLocalProjectileId = 0;
+            let nextLocalTerrainImpactId = 1;
             const impactMarks = [];
             const hitFlashStates = [];
             const debrisChunks = [];
@@ -5333,6 +5335,8 @@
             const impactMarkPool = [];
             const debrisChunkPool = [];
             const detachedVoxelChunkPool = [];
+            const pendingLocalExplosionKeys = new Set();
+            const pendingLocalTerrainImpactKeys = new Set();
             const raycaster = new THREE.Raycaster();
             const bulletTargets = [boxes, boundaryWalls, ground];
             const impactUp = new THREE.Vector3(0, 0, 1);
@@ -5387,9 +5391,75 @@
                 if (projectile.inPool) return;
                 projectile.active = false;
                 projectile.life = 0;
+                projectile.networkProjectileId = null;
+                projectile.ownerPlayerId = -1;
+                projectile.syncExplosionFromNetwork = false;
+                projectile.reportNetworkImpact = false;
                 projectile.mesh.visible = false;
                 projectile.inPool = true;
                 projectilePool.push(projectile);
+            };
+
+            const getProjectileSyncKey = (ownerPlayerId, projectileId) =>
+                `${ownerPlayerId}:${projectileId}`;
+
+            const getTerrainImpactSyncKey = (ownerPlayerId, impactId) =>
+                `${ownerPlayerId}:${impactId}`;
+
+            const markPendingLocalExplosion = (ownerPlayerId, projectileId) => {
+                if (
+                    !Number.isInteger(ownerPlayerId) ||
+                    !Number.isInteger(projectileId)
+                ) {
+                    return;
+                }
+                pendingLocalExplosionKeys.add(
+                    getProjectileSyncKey(ownerPlayerId, projectileId),
+                );
+            };
+
+            const consumePendingLocalExplosion = (
+                ownerPlayerId,
+                projectileId,
+            ) => {
+                if (
+                    !Number.isInteger(ownerPlayerId) ||
+                    !Number.isInteger(projectileId)
+                ) {
+                    return false;
+                }
+                const key = getProjectileSyncKey(ownerPlayerId, projectileId);
+                if (!pendingLocalExplosionKeys.has(key)) return false;
+                pendingLocalExplosionKeys.delete(key);
+                return true;
+            };
+
+            const markPendingLocalTerrainImpact = (ownerPlayerId, impactId) => {
+                if (
+                    !Number.isInteger(ownerPlayerId) ||
+                    !Number.isInteger(impactId)
+                ) {
+                    return;
+                }
+                pendingLocalTerrainImpactKeys.add(
+                    getTerrainImpactSyncKey(ownerPlayerId, impactId),
+                );
+            };
+
+            const consumePendingLocalTerrainImpact = (
+                ownerPlayerId,
+                impactId,
+            ) => {
+                if (
+                    !Number.isInteger(ownerPlayerId) ||
+                    !Number.isInteger(impactId)
+                ) {
+                    return false;
+                }
+                const key = getTerrainImpactSyncKey(ownerPlayerId, impactId);
+                if (!pendingLocalTerrainImpactKeys.has(key)) return false;
+                pendingLocalTerrainImpactKeys.delete(key);
+                return true;
             };
 
             const disposeImpactMark = (mark) => {
@@ -7829,7 +7899,177 @@
                 return blockState.destroyed;
             };
 
-            const applyBlockHitDamage = (hit, weaponDef, impactDir) => {
+            const findClosestDestructibleBlockAtPoint = (
+                worldPoint,
+                searchRadius = 0.8,
+            ) => {
+                if (!worldPoint) return null;
+
+                let bestBlockState = null;
+                let bestDistSq = Number.POSITIVE_INFINITY;
+                for (const blockState of destructibleBlockStates) {
+                    if (
+                        !blockState ||
+                        blockState.destroyed ||
+                        blockState.aliveCount <= 0
+                    ) {
+                        continue;
+                    }
+
+                    const box = blockState.collider;
+                    tempClosest.set(
+                        THREE.MathUtils.clamp(
+                            worldPoint.x,
+                            box.min.x,
+                            box.max.x,
+                        ),
+                        THREE.MathUtils.clamp(
+                            worldPoint.y,
+                            box.min.y,
+                            box.max.y,
+                        ),
+                        THREE.MathUtils.clamp(
+                            worldPoint.z,
+                            box.min.z,
+                            box.max.z,
+                        ),
+                    );
+                    if (
+                        tempClosest.distanceToSquared(worldPoint) >
+                        searchRadius * searchRadius
+                    ) {
+                        continue;
+                    }
+
+                    const distSq = getClosestPointOnVoxelBlock(
+                        blockState,
+                        worldPoint,
+                        searchRadius,
+                        tempExplosionClosestPoint,
+                    );
+                    if (!Number.isFinite(distSq) || distSq > bestDistSq)
+                        continue;
+                    bestDistSq = distSq;
+                    bestBlockState = blockState;
+                }
+
+                return bestBlockState;
+            };
+
+            const getBlockStateById = (blockId) => {
+                if (!Number.isInteger(blockId)) return null;
+                for (const blockState of destructibleBlockStates) {
+                    if (!blockState || blockState.destroyed) continue;
+                    if (blockState.id === blockId) return blockState;
+                }
+                return null;
+            };
+
+            const applyReplicatedTerrainImpact = (msg) => {
+                const attackerId = Number.isInteger(msg?.attackerId)
+                    ? msg.attackerId
+                    : -1;
+                const impactId = Number.isInteger(msg?.impactId)
+                    ? msg.impactId
+                    : null;
+                if (consumePendingLocalTerrainImpact(attackerId, impactId)) {
+                    return true;
+                }
+
+                const px = Number(msg?.point?.x);
+                const py = Number(msg?.point?.y);
+                const pz = Number(msg?.point?.z);
+                if (
+                    !Number.isFinite(px) ||
+                    !Number.isFinite(py) ||
+                    !Number.isFinite(pz)
+                ) {
+                    return false;
+                }
+
+                const nx = Number(msg?.normal?.x);
+                const ny = Number(msg?.normal?.y);
+                const nz = Number(msg?.normal?.z);
+                const dx = Number(msg?.direction?.x);
+                const dy = Number(msg?.direction?.y);
+                const dz = Number(msg?.direction?.z);
+                const damage = Number(msg?.damage);
+                const energy = Number(msg?.energy);
+                if (!Number.isFinite(damage) || damage <= 0) return false;
+
+                tempOrigin.set(px, py, pz);
+                tempNormal.set(
+                    Number.isFinite(nx) ? nx : 0,
+                    Number.isFinite(ny) ? ny : 1,
+                    Number.isFinite(nz) ? nz : 0,
+                );
+                if (tempNormal.lengthSq() < 0.0001) {
+                    tempNormal.set(0, 1, 0);
+                } else {
+                    tempNormal.normalize();
+                }
+
+                tempShootDir.set(
+                    Number.isFinite(dx) ? dx : 0,
+                    Number.isFinite(dy) ? dy : 0,
+                    Number.isFinite(dz) ? dz : 1,
+                );
+                if (tempShootDir.lengthSq() < 0.0001) {
+                    tempShootDir.set(0, 0, 1);
+                } else {
+                    tempShootDir.normalize();
+                }
+
+                if (attackerId !== localPlayerId) {
+                    const weaponDef =
+                        weapons.find((weapon) => weapon.id === msg.weaponId) ||
+                        null;
+                    const markSize =
+                        weaponDef?.pellets && weaponDef.pellets > 1
+                            ? 0.065
+                            : weaponDef?.fireType === "melee"
+                              ? 0.12
+                              : 0.085;
+                    const markLife =
+                        weaponDef?.fireType === "melee" ? 0.2 : 0.32;
+                    const markColor =
+                        weaponDef?.fireType === "melee"
+                            ? 0xf4d49a
+                            : 0xffffff;
+                    createImpactMark(
+                        tempOrigin,
+                        tempNormal,
+                        markSize,
+                        markLife,
+                        markColor,
+                    );
+                }
+
+                const blockId = Number.isInteger(msg?.blockId)
+                    ? msg.blockId
+                    : null;
+                const blockState =
+                    getBlockStateById(blockId) ||
+                    findClosestDestructibleBlockAtPoint(tempOrigin, 1.25);
+                if (!blockState) return false;
+
+                applyDamageToBlockState(
+                    blockState,
+                    damage,
+                    tempOrigin,
+                    tempNormal,
+                    tempShootDir,
+                    Number.isFinite(energy) && energy > 0 ? energy : 1,
+                );
+                return true;
+            };
+
+            const applyBlockHitDamage = (
+                hit,
+                weaponDef,
+                impactDir,
+                blockDamageMode = "local",
+            ) => {
                 if (!weaponDef) return;
                 const blockState = getBlockStateFromObject(hit.object);
                 if (!blockState || blockState.destroyed) return;
@@ -7857,14 +8097,51 @@
                     tempNormal.copy(impactDir).multiplyScalar(-1).normalize();
                 }
 
+                const energy = 1.0 + damage / 180;
+                if (
+                    blockDamageMode === "network" &&
+                    netClient &&
+                    netClient.connected
+                ) {
+                    const terrainImpactId = nextLocalTerrainImpactId++;
+                    markPendingLocalTerrainImpact(
+                        localPlayerId,
+                        terrainImpactId,
+                    );
+                    netClient.sendTerrainImpact(
+                        hit.point,
+                        tempNormal,
+                        impactDir,
+                        weaponDef.id || "revolver",
+                        damage,
+                        energy,
+                        blockState.id,
+                        terrainImpactId,
+                    );
+                    applyDamageToBlockState(
+                        blockState,
+                        damage,
+                        hit.point,
+                        tempNormal,
+                        impactDir,
+                        energy,
+                    );
+                    return true;
+                }
+
+                if (blockDamageMode === "none") {
+                    return false;
+                }
+
                 applyDamageToBlockState(
                     blockState,
                     damage,
                     hit.point,
                     tempNormal,
                     impactDir,
-                    1.0 + damage / 180,
+                    energy,
                 );
+                return true;
             };
 
             const getClosestPointOnVoxelBlock = (
@@ -8102,6 +8379,7 @@
                 range,
                 weaponDef,
                 ignoredRoot = null,
+                blockDamageMode = "local",
             ) => {
                 const hit = findFirstBulletHit(
                     origin,
@@ -8122,7 +8400,12 @@
                 const markSize =
                     weaponDef?.pellets && weaponDef.pellets > 1 ? 0.065 : 0.085;
                 createImpactMark(hit.point, tempNormal, markSize, 0.32);
-                applyBlockHitDamage(hit, weaponDef, direction);
+                applyBlockHitDamage(
+                    hit,
+                    weaponDef,
+                    direction,
+                    blockDamageMode,
+                );
 
                 if (hit.object.userData.shootable) {
                     flashShootableMesh(hit.object);
@@ -8135,6 +8418,7 @@
                 originOverride = null,
                 directionOverride = null,
                 ignoredRoot = null,
+                blockDamageMode = "local",
             ) => {
                 if (originOverride) {
                     tempOrigin.copy(originOverride);
@@ -8168,6 +8452,7 @@
                     hit,
                     weaponDef || getActiveWeapon(),
                     tempDir,
+                    blockDamageMode,
                 );
                 if (hit.object.userData.shootable) {
                     flashShootableMesh(hit.object);
@@ -8267,6 +8552,10 @@
                         tempDir,
                         weaponDef.range,
                         weaponDef,
+                        null,
+                        netClient && netClient.connected && localPlayerAlive
+                            ? "network"
+                            : "local",
                     );
                 }
             };
@@ -8275,10 +8564,12 @@
                 weaponDef,
                 shootDir,
                 originOverride = null,
+                options = null,
             ) => {
                 const projectileState = acquirePooledProjectile();
                 if (!projectileState) return;
                 const projectileMesh = projectileState.mesh;
+                const spawnOptions = options || {};
 
                 if (originOverride) {
                     projectileMesh.position.copy(originOverride);
@@ -8301,6 +8592,19 @@
                 projectileState.structureDamage =
                     weaponDef.structureDamage || 210;
                 projectileState.damage = weaponDef.damage || 120;
+                projectileState.weaponId = weaponDef.id || "bazooka";
+                projectileState.ownerPlayerId = Number.isInteger(
+                    spawnOptions.ownerPlayerId,
+                )
+                    ? spawnOptions.ownerPlayerId
+                    : -1;
+                projectileState.networkProjectileId = Number.isInteger(
+                    spawnOptions.projectileId,
+                )
+                    ? spawnOptions.projectileId
+                    : null;
+                projectileState.syncExplosionFromNetwork = !!spawnOptions.syncExplosionFromNetwork;
+                projectileState.reportNetworkImpact = !!spawnOptions.reportNetworkImpact;
                 projectileState.prevPhysicsPos.copy(projectileMesh.position);
                 projectiles.push(projectileState);
                 if (
@@ -8311,29 +8615,96 @@
                 }
             };
 
-            const explodeProjectile = (projectile, normal = worldUp) => {
+            const applyProjectileExplosionAt = (
+                position,
+                normal,
+                radius,
+                structureDamage,
+                damage,
+                impulseForce,
+                impulseSource = null,
+            ) => {
                 createImpactMark(
-                    projectile.mesh.position,
+                    position,
                     normal,
                     0.28,
                     0.46,
                     0xff9f5a,
                 );
-                tempImpactDir.copy(projectile.velocity || normal).normalize();
+                tempImpactDir.copy(impulseSource || normal).normalize();
                 if (tempImpactDir.lengthSq() < 0.0001)
                     tempImpactDir.copy(normal).normalize();
                 applyExplosionBlockDamage(
-                    projectile.mesh.position,
-                    projectile.explosionRadius,
-                    projectile.structureDamage || projectile.damage || 120,
+                    position,
+                    radius,
+                    structureDamage || damage || 120,
                     tempImpactDir,
                 );
                 applyExplosionImpulse(
+                    position,
+                    radius,
+                    impulseForce || 0,
+                );
+            };
+
+            const explodeProjectile = (projectile, normal = worldUp) => {
+                if (!projectile) return;
+                const waitsForNetworkExplosion =
+                    projectile.reportNetworkImpact &&
+                    netClient &&
+                    netClient.connected &&
+                    Number.isInteger(projectile.networkProjectileId);
+
+                if (waitsForNetworkExplosion) {
+                    markPendingLocalExplosion(
+                        projectile.ownerPlayerId,
+                        projectile.networkProjectileId,
+                    );
+                    netClient.sendProjectileImpact(
+                        projectile.networkProjectileId,
+                        projectile.mesh.position,
+                        normal,
+                        projectile.weaponId || "bazooka",
+                    );
+                }
+
+                if (waitsForNetworkExplosion) {
+                    disposeProjectile(projectile);
+                    return;
+                }
+
+                applyProjectileExplosionAt(
                     projectile.mesh.position,
+                    normal,
                     projectile.explosionRadius,
-                    projectile.explosionImpulseForce || 0,
+                    projectile.structureDamage,
+                    projectile.damage,
+                    projectile.explosionImpulseForce,
+                    projectile.velocity,
                 );
                 disposeProjectile(projectile);
+            };
+
+            const disposeSyncedProjectile = (ownerPlayerId, projectileId) => {
+                if (
+                    !Number.isInteger(ownerPlayerId) ||
+                    !Number.isInteger(projectileId)
+                ) {
+                    return false;
+                }
+
+                for (let i = projectiles.length - 1; i >= 0; i--) {
+                    const projectile = projectiles[i];
+                    if (!projectile?.active) continue;
+                    if (projectile.ownerPlayerId !== ownerPlayerId) continue;
+                    if (projectile.networkProjectileId !== projectileId)
+                        continue;
+                    disposeProjectile(projectile);
+                    projectiles.splice(i, 1);
+                    return true;
+                }
+
+                return false;
             };
 
             const sampleVoxelImpactNormal = (
@@ -8857,7 +9228,16 @@
 
                 if (fistPendingHit && strike >= 0.62) {
                     const activeWeapon = getActiveWeapon();
-                    doMeleeStrike(activeWeapon.range, activeWeapon);
+                    doMeleeStrike(
+                        activeWeapon.range,
+                        activeWeapon,
+                        null,
+                        null,
+                        null,
+                        netClient && netClient.connected && localPlayerAlive
+                            ? "network"
+                            : "local",
+                    );
                     fistPendingHit = false;
                 }
             };
@@ -8869,6 +9249,7 @@
 
                 if (weaponManager.attemptFire()) {
                     const activeWeapon = getActiveWeapon();
+                    let projectileId = null;
 
                     // Visuals/Sound
                     if (activeWeapon.fireType === "melee") {
@@ -8878,7 +9259,18 @@
                         if (activeWeapon.fireType === "hitscan") {
                             fireHitscanWeapon(activeWeapon, tempShootDir);
                         } else if (activeWeapon.fireType === "projectile") {
-                            spawnBazookaProjectile(activeWeapon, tempShootDir);
+                            projectileId = nextLocalProjectileId++;
+                            spawnBazookaProjectile(
+                                activeWeapon,
+                                tempShootDir,
+                                null,
+                                {
+                                    ownerPlayerId: localPlayerId,
+                                    projectileId,
+                                    reportNetworkImpact:
+                                        !!(netClient && netClient.connected),
+                                },
+                            );
                         }
                         playWeaponFireSound(
                             activeWeapon.id,
@@ -8914,6 +9306,7 @@
                             tempShootDir,
                             activeWeapon.id,
                             activeWeapon.fireType,
+                            projectileId,
                         );
                     }
                 } else {
@@ -10671,8 +11064,53 @@
                 return true;
             };
 
+            const getSyncedDynamicTileY = (tile, timeMs) => {
+                if (!tile || tile.travelRange <= 0.01) {
+                    return tile?.minY ?? 0;
+                }
+
+                const lowFactor =
+                    terrainHash(tile.syncHashX, tile.syncHashZ, 1601) * 0.2;
+                const highFactor =
+                    0.72 +
+                    terrainHash(tile.syncHashX, tile.syncHashZ, 1619) * 0.28;
+                const speed =
+                    0.45 +
+                    terrainHash(tile.syncHashX, tile.syncHashZ, 1637) * 0.75;
+                const phase =
+                    terrainHash(tile.syncHashX, tile.syncHashZ, 1653) *
+                    Math.PI *
+                    2;
+                const wave =
+                    0.5 + 0.5 * Math.sin(timeMs * 0.001 * speed + phase);
+                const eased = wave * wave * (3 - 2 * wave);
+                const travelFactor = THREE.MathUtils.lerp(
+                    lowFactor,
+                    highFactor,
+                    eased,
+                );
+                return tile.minY + tile.travelRange * travelFactor;
+            };
+
             const updateDynamicTerrain = (dt) => {
                 if (dynamicTerrainTiles.length === 0) return;
+
+                if (netClient && netClient.connected && serverClockSynced) {
+                    const syncedTimeMs = getSynchronizedServerTimeMs();
+                    const firstSyncedFrame = !dynamicTerrainSyncedMotion;
+                    dynamicTerrainSyncedMotion = true;
+                    for (const tile of dynamicTerrainTiles) {
+                        const nextY = getSyncedDynamicTileY(tile, syncedTimeMs);
+                        tile.mesh.position.y = nextY;
+                        tile.deltaY = firstSyncedFrame ? 0 : nextY - tile.lastY;
+                        tile.lastY = nextY;
+                        syncBlockCollider(tile.blockState);
+                    }
+                    return;
+                }
+
+                dynamicTerrainSyncedMotion = false;
+
                 const maxDeltaPerStep = 0.018;
                 const tileMotionNoise = (tile, seedOffset) =>
                     terrainHash(
@@ -11823,7 +12261,11 @@
                     const projectile = projectiles[i];
                     projectile.life -= dt;
                     if (projectile.life <= 0) {
-                        explodeProjectile(projectile, worldUp);
+                        if (projectile.syncExplosionFromNetwork) {
+                            disposeProjectile(projectile);
+                        } else {
+                            explodeProjectile(projectile, worldUp);
+                        }
                         projectiles.splice(i, 1);
                         continue;
                     }
@@ -11859,10 +12301,14 @@
                         projectile.mesh.position.copy(
                             tempProjectileImpactPoint,
                         );
-                        explodeProjectile(
-                            projectile,
-                            tempProjectileImpactNormal,
-                        );
+                        if (projectile.syncExplosionFromNetwork) {
+                            disposeProjectile(projectile);
+                        } else {
+                            explodeProjectile(
+                                projectile,
+                                tempProjectileImpactNormal,
+                            );
+                        }
                         projectiles.splice(i, 1);
                     }
                 }
@@ -13301,69 +13747,564 @@
                 color: 0xffd2c2,
                 emissive: 0x241412,
             });
-            const remoteWeaponMat = new THREE.MeshLambertMaterial({
-                color: 0x2b223b,
-                emissive: 0x140d1f,
-            });
+            const createRemoteWeaponModel = (weaponId) => {
+                const model = makeWeaponModel(weaponId);
+                const profile =
+                    {
+                        revolver: {
+                            scale: 0.9,
+                            pos: [0.0, -0.02, 0.02],
+                            rot: [0.0, Math.PI, 0.0],
+                        },
+                        shotgun: {
+                            scale: 0.86,
+                            pos: [0.0, -0.02, 0.04],
+                            rot: [0.0, Math.PI, 0.0],
+                        },
+                        sniper: {
+                            scale: 0.82,
+                            pos: [0.0, 0.0, 0.06],
+                            rot: [0.0, Math.PI, 0.0],
+                        },
+                        bazooka: {
+                            scale: 0.92,
+                            pos: [0.0, 0.02, 0.08],
+                            rot: [0.0, Math.PI, 0.0],
+                        },
+                    }[weaponId] || {
+                        scale: 0.74,
+                        pos: [0, 0, 0],
+                        rot: [0, 0, 0],
+                    };
+
+                model.visible = false;
+                model.scale.setScalar(profile.scale);
+                model.position.set(
+                    profile.pos[0],
+                    profile.pos[1],
+                    profile.pos[2],
+                );
+                model.rotation.set(
+                    profile.rot[0],
+                    profile.rot[1],
+                    profile.rot[2],
+                );
+
+                if (model.userData.muzzleFlash) {
+                    model.userData.muzzleFlash.visible = false;
+                }
+                model.traverse((child) => {
+                    if (!child.isMesh) return;
+                    child.castShadow = false;
+                    child.receiveShadow = false;
+                });
+
+                return model;
+            };
+
+            const remoteLowerBodyGroup = new THREE.Group();
+            remotePlayerGroup.add(remoteLowerBodyGroup);
+
+            const remoteUpperBodyGroup = new THREE.Group();
+            remotePlayerGroup.add(remoteUpperBodyGroup);
+
+            const remoteLeftLegPivot = new THREE.Group();
+            remoteLeftLegPivot.position.set(-0.14, 0.72, 0);
+            remoteLowerBodyGroup.add(remoteLeftLegPivot);
 
             const remoteLeftLeg = new THREE.Mesh(
                 new THREE.BoxGeometry(0.2, 0.72, 0.2),
                 remoteLimbMat,
             );
-            remoteLeftLeg.position.set(-0.14, 0.36, 0);
-            remotePlayerGroup.add(remoteLeftLeg);
+            remoteLeftLeg.position.set(0, -0.36, 0);
+            remoteLeftLegPivot.add(remoteLeftLeg);
+
+            const remoteRightLegPivot = new THREE.Group();
+            remoteRightLegPivot.position.set(0.14, 0.72, 0);
+            remoteLowerBodyGroup.add(remoteRightLegPivot);
 
             const remoteRightLeg = new THREE.Mesh(
                 new THREE.BoxGeometry(0.2, 0.72, 0.2),
                 remoteLimbMat,
             );
-            remoteRightLeg.position.set(0.14, 0.36, 0);
-            remotePlayerGroup.add(remoteRightLeg);
+            remoteRightLeg.position.set(0, -0.36, 0);
+            remoteRightLegPivot.add(remoteRightLeg);
 
             const remoteTorso = new THREE.Mesh(
                 new THREE.BoxGeometry(0.58, 0.7, 0.28),
                 remoteBodyMat,
             );
             remoteTorso.position.set(0, 1.02, 0);
-            remotePlayerGroup.add(remoteTorso);
+            remoteUpperBodyGroup.add(remoteTorso);
 
-            const remoteLeftArm = new THREE.Mesh(
-                new THREE.BoxGeometry(0.16, 0.56, 0.16),
-                remoteLimbMat,
-            );
-            remoteLeftArm.position.set(-0.38, 1.04, 0.04);
-            remotePlayerGroup.add(remoteLeftArm);
-
-            const remoteRightArm = new THREE.Mesh(
-                new THREE.BoxGeometry(0.16, 0.56, 0.16),
-                remoteLimbMat,
-            );
-            remoteRightArm.position.set(0.38, 1.04, 0.04);
-            remotePlayerGroup.add(remoteRightArm);
+            const remoteHeadPivot = new THREE.Group();
+            remoteHeadPivot.position.set(0, 1.38, 0.04);
+            remoteUpperBodyGroup.add(remoteHeadPivot);
 
             const remoteHead = new THREE.Mesh(
                 new THREE.SphereGeometry(0.2, 12, 10),
                 remoteHeadMat,
             );
-            remoteHead.position.set(0, 1.55, 0.02);
-            remotePlayerGroup.add(remoteHead);
+            remoteHead.position.set(0, 0.18, 0);
+            remoteHeadPivot.add(remoteHead);
 
-            const remoteWeapon = new THREE.Mesh(
-                new THREE.BoxGeometry(0.46, 0.08, 0.12),
-                remoteWeaponMat,
+            const remoteLeftArmPivot = new THREE.Group();
+            remoteLeftArmPivot.position.set(-0.31, 1.23, 0.08);
+            remoteUpperBodyGroup.add(remoteLeftArmPivot);
+
+            const remoteLeftUpperArm = new THREE.Mesh(
+                new THREE.BoxGeometry(0.16, 0.34, 0.16),
+                remoteLimbMat,
             );
-            remoteWeapon.position.set(0.18, 1.06, 0.22);
-            remoteWeapon.rotation.y = Math.PI * 0.04;
-            remotePlayerGroup.add(remoteWeapon);
+            remoteLeftUpperArm.position.set(0, -0.17, 0.03);
+            remoteLeftArmPivot.add(remoteLeftUpperArm);
+
+            const remoteLeftElbowPivot = new THREE.Group();
+            remoteLeftElbowPivot.position.set(0, -0.32, 0.06);
+            remoteLeftArmPivot.add(remoteLeftElbowPivot);
+
+            const remoteLeftForearm = new THREE.Mesh(
+                new THREE.BoxGeometry(0.14, 0.32, 0.14),
+                remoteLimbMat,
+            );
+            remoteLeftForearm.position.set(0, -0.15, 0.08);
+            remoteLeftElbowPivot.add(remoteLeftForearm);
+
+            const remoteLeftHand = new THREE.Mesh(
+                new THREE.BoxGeometry(0.12, 0.12, 0.12),
+                remoteLimbMat,
+            );
+            remoteLeftHand.position.set(0, -0.31, 0.14);
+            remoteLeftElbowPivot.add(remoteLeftHand);
+
+            const remoteRightArmPivot = new THREE.Group();
+            remoteRightArmPivot.position.set(0.31, 1.23, 0.08);
+            remoteUpperBodyGroup.add(remoteRightArmPivot);
+
+            const remoteRightUpperArm = new THREE.Mesh(
+                new THREE.BoxGeometry(0.16, 0.34, 0.16),
+                remoteLimbMat,
+            );
+            remoteRightUpperArm.position.set(0, -0.17, 0.03);
+            remoteRightArmPivot.add(remoteRightUpperArm);
+
+            const remoteRightElbowPivot = new THREE.Group();
+            remoteRightElbowPivot.position.set(0, -0.32, 0.06);
+            remoteRightArmPivot.add(remoteRightElbowPivot);
+
+            const remoteRightForearm = new THREE.Mesh(
+                new THREE.BoxGeometry(0.14, 0.32, 0.14),
+                remoteLimbMat,
+            );
+            remoteRightForearm.position.set(0, -0.15, 0.08);
+            remoteRightElbowPivot.add(remoteRightForearm);
+
+            const remoteRightHand = new THREE.Mesh(
+                new THREE.BoxGeometry(0.12, 0.12, 0.12),
+                remoteLimbMat,
+            );
+            remoteRightHand.position.set(0, -0.31, 0.14);
+            remoteRightElbowPivot.add(remoteRightHand);
+
+            const remoteWeaponMount = new THREE.Group();
+            remoteWeaponMount.position.set(0.15, 1.09, 0.24);
+            remoteUpperBodyGroup.add(remoteWeaponMount);
+
+            const remoteWeaponModels = new Map();
+            for (const remoteWeaponId of [
+                "revolver",
+                "shotgun",
+                "sniper",
+                "bazooka",
+            ]) {
+                const model = createRemoteWeaponModel(remoteWeaponId);
+                model.visible = false;
+                remoteWeaponMount.add(model);
+                remoteWeaponModels.set(remoteWeaponId, model);
+            }
 
             // Add remote player to bullet targets so local hitscan visually hits it
             bulletTargets.push(remotePlayerGroup);
 
             // Remote player state for interpolation
             let remoteTargetPos = new THREE.Vector3();
+            let remoteTargetVel = new THREE.Vector3();
             let remoteTargetRotY = 0;
+            let remoteTargetRotX = 0;
             let remoteTargetVelY = 0;
+            let remoteTargetWeaponId = "revolver";
+            let remoteDisplayedWeaponId = "";
+            let remoteAnimTime = 0;
+            let remoteFireKick = 0;
+            const remoteVisualYawOffset = Math.PI;
             let remoteConnected = false;
+            let remoteSnapshotBackTimeMs = 100;
+            const remoteMaxExtrapolationMs = 120;
+            const remoteSnapshotBufferLimit = 24;
+            let remoteClockOffsetMs = 0;
+            const remoteSnapshotBuffer = [];
+            const tempRemoteInterpolatedPos = new THREE.Vector3();
+            const tempRemoteInterpolatedVel = new THREE.Vector3();
+            const tempRemoteDisplayPos = new THREE.Vector3();
+            let serverClockOffsetMs = 0;
+            let serverClockSynced = false;
+            let dynamicTerrainSyncedMotion = false;
+
+            const updateServerClockSync = (serverTimeMs) => {
+                if (!Number.isFinite(serverTimeMs)) return;
+                const offsetSample = performance.now() - serverTimeMs;
+                serverClockOffsetMs = serverClockSynced
+                    ? THREE.MathUtils.lerp(
+                          serverClockOffsetMs,
+                          offsetSample,
+                          0.12,
+                      )
+                    : offsetSample;
+                serverClockSynced = true;
+            };
+
+            const getSynchronizedServerTimeMs = () =>
+                serverClockSynced
+                    ? performance.now() - serverClockOffsetMs
+                    : performance.now();
+
+            const clearRemoteSnapshotBuffer = () => {
+                remoteSnapshotBuffer.length = 0;
+                remoteClockOffsetMs = 0;
+            };
+
+            const applyRemoteStateSample = (sample) => {
+                if (!sample) return;
+
+                remoteTargetPos.copy(sample.position);
+                remoteTargetVel.copy(sample.velocity);
+                remoteTargetRotX = sample.rotationX;
+                remoteTargetRotY = sample.rotationY;
+                remoteTargetVelY = sample.velocityY;
+                remoteTargetWeaponId = sample.weaponId;
+                remotePlayerGroup.visible = sample.alive;
+                remoteConnected = true;
+            };
+
+            const lerpAngle = (from, to, alpha) =>
+                from +
+                Math.atan2(
+                    Math.sin(to - from),
+                    Math.cos(to - from),
+                ) *
+                    alpha;
+
+            const seedRemoteSnapshot = (
+                positionLike,
+                velocityLike,
+                rotationX,
+                rotationY,
+                weaponId,
+                alive = true,
+            ) => {
+                clearRemoteSnapshotBuffer();
+
+                const snapshot = {
+                    timeMs: performance.now(),
+                    position: new THREE.Vector3(
+                        Number(positionLike?.x) || 0,
+                        Number(positionLike?.y) || 0,
+                        Number(positionLike?.z) || 0,
+                    ),
+                    velocity: new THREE.Vector3(
+                        Number(velocityLike?.x) || 0,
+                        Number(velocityLike?.y) || 0,
+                        Number(velocityLike?.z) || 0,
+                    ),
+                    rotationX: Number(rotationX) || 0,
+                    rotationY: Number(rotationY) || 0,
+                    velocityY: Number(velocityLike?.y) || 0,
+                    weaponId:
+                        typeof weaponId === "string" ? weaponId : "revolver",
+                    alive: alive !== false,
+                };
+
+                remoteSnapshotBuffer.push(snapshot);
+                applyRemoteStateSample(snapshot);
+                remotePlayerGroup.position.copy(snapshot.position);
+            };
+
+            const queueRemoteSnapshot = (playerState, serverTimeMs) => {
+                if (!playerState) return;
+
+                const arrivalTimeMs = performance.now();
+                if (Number.isFinite(serverTimeMs)) {
+                    const offsetSample = arrivalTimeMs - serverTimeMs;
+                    remoteClockOffsetMs =
+                        remoteSnapshotBuffer.length === 0
+                            ? offsetSample
+                            : THREE.MathUtils.lerp(
+                                  remoteClockOffsetMs,
+                                  offsetSample,
+                                  0.12,
+                              );
+                }
+
+                const fallbackPos =
+                    remoteSnapshotBuffer.length > 0
+                        ? remoteSnapshotBuffer[
+                              remoteSnapshotBuffer.length - 1
+                          ].position
+                        : remoteTargetPos;
+                const remoteSpawn = normalizeLanWorldPosition(
+                    playerState.position,
+                    fallbackPos,
+                    playerState.id,
+                );
+                const targetTimeMs = Number.isFinite(serverTimeMs)
+                    ? serverTimeMs + remoteClockOffsetMs
+                    : arrivalTimeMs;
+                const previousTimeMs =
+                    remoteSnapshotBuffer.length > 0
+                        ? remoteSnapshotBuffer[
+                              remoteSnapshotBuffer.length - 1
+                          ].timeMs
+                        : Number.NEGATIVE_INFINITY;
+
+                remoteSnapshotBuffer.push({
+                    timeMs: Math.max(targetTimeMs, previousTimeMs + 0.001),
+                    position: new THREE.Vector3(
+                        remoteSpawn.x,
+                        remoteSpawn.y,
+                        remoteSpawn.z,
+                    ),
+                    velocity: new THREE.Vector3(
+                        Number(playerState.velocity?.x) || 0,
+                        Number(playerState.velocity?.y) || 0,
+                        Number(playerState.velocity?.z) || 0,
+                    ),
+                    rotationX: Number(playerState.rotation?.x) || 0,
+                    rotationY: Number(playerState.rotation?.y) || 0,
+                    velocityY: Number(playerState.velocity?.y) || 0,
+                    weaponId:
+                        typeof playerState.weaponId === "string"
+                            ? playerState.weaponId
+                            : remoteTargetWeaponId,
+                    alive: playerState.alive !== false,
+                });
+
+                if (remoteSnapshotBuffer.length > remoteSnapshotBufferLimit) {
+                    remoteSnapshotBuffer.shift();
+                }
+
+                if (remoteSnapshotBuffer.length === 1) {
+                    applyRemoteStateSample(remoteSnapshotBuffer[0]);
+                    remotePlayerGroup.position.copy(remoteTargetPos);
+                }
+            };
+
+            const sampleRemoteState = () => {
+                if (remoteSnapshotBuffer.length === 0) return null;
+
+                const renderTimeMs = performance.now() - remoteSnapshotBackTimeMs;
+                while (
+                    remoteSnapshotBuffer.length > 2 &&
+                    remoteSnapshotBuffer[1].timeMs <= renderTimeMs
+                ) {
+                    remoteSnapshotBuffer.shift();
+                }
+
+                if (remoteSnapshotBuffer.length === 1) {
+                    const source = remoteSnapshotBuffer[0];
+                    const extrapolationSec =
+                        THREE.MathUtils.clamp(
+                            renderTimeMs - source.timeMs,
+                            0,
+                            remoteMaxExtrapolationMs,
+                        ) / 1000;
+                    tempRemoteInterpolatedPos
+                        .copy(source.position)
+                        .addScaledVector(source.velocity, extrapolationSec);
+                    tempRemoteInterpolatedVel.copy(source.velocity);
+                    return {
+                        position: tempRemoteInterpolatedPos,
+                        velocity: tempRemoteInterpolatedVel,
+                        rotationX: source.rotationX,
+                        rotationY: source.rotationY,
+                        velocityY: source.velocityY,
+                        weaponId: source.weaponId,
+                        alive: source.alive,
+                    };
+                }
+
+                const older = remoteSnapshotBuffer[0];
+                const newer = remoteSnapshotBuffer[1];
+                if (renderTimeMs <= older.timeMs) {
+                    return older;
+                }
+
+                if (renderTimeMs >= newer.timeMs) {
+                    const extrapolationSec =
+                        THREE.MathUtils.clamp(
+                            renderTimeMs - newer.timeMs,
+                            0,
+                            remoteMaxExtrapolationMs,
+                        ) / 1000;
+                    tempRemoteInterpolatedPos
+                        .copy(newer.position)
+                        .addScaledVector(newer.velocity, extrapolationSec);
+                    tempRemoteInterpolatedVel.copy(newer.velocity);
+                    return {
+                        position: tempRemoteInterpolatedPos,
+                        velocity: tempRemoteInterpolatedVel,
+                        rotationX: newer.rotationX,
+                        rotationY: newer.rotationY,
+                        velocityY: newer.velocityY,
+                        weaponId: newer.weaponId,
+                        alive: newer.alive,
+                    };
+                }
+
+                const alpha = THREE.MathUtils.clamp(
+                    (renderTimeMs - older.timeMs) /
+                        Math.max(0.001, newer.timeMs - older.timeMs),
+                    0,
+                    1,
+                );
+                tempRemoteInterpolatedPos
+                    .copy(older.position)
+                    .lerp(newer.position, alpha);
+                tempRemoteInterpolatedVel
+                    .copy(older.velocity)
+                    .lerp(newer.velocity, alpha);
+                return {
+                    position: tempRemoteInterpolatedPos,
+                    velocity: tempRemoteInterpolatedVel,
+                    rotationX: THREE.MathUtils.lerp(
+                        older.rotationX,
+                        newer.rotationX,
+                        alpha,
+                    ),
+                    rotationY: lerpAngle(
+                        older.rotationY,
+                        newer.rotationY,
+                        alpha,
+                    ),
+                    velocityY: THREE.MathUtils.lerp(
+                        older.velocityY,
+                        newer.velocityY,
+                        alpha,
+                    ),
+                    weaponId: alpha < 0.5 ? older.weaponId : newer.weaponId,
+                    alive: alpha < 0.5 ? older.alive : newer.alive,
+                };
+            };
+            const remoteWeaponPoseProfiles = {
+                fists: {
+                    mountPos: [0.04, 1.06, 0.18],
+                    mountRot: [-0.18, 0.0, 0.0],
+                    shoulderPitch: [-1.16, -1.16],
+                    shoulderRoll: [0.34, -0.34],
+                    elbowPitch: [-0.72, -0.72],
+                    elbowRoll: [0.14, -0.14],
+                    recoilPush: 0.015,
+                    recoilPitch: 0.06,
+                    aimPitch: 0.34,
+                    headPitch: 0.56,
+                    bob: 0.32,
+                    strafeRoll: 0.08,
+                    upperYaw: 0.04,
+                    headYaw: 0.05,
+                    armSwing: 0.24,
+                    weaponSwing: 0.04,
+                },
+                revolver: {
+                    mountPos: [0.15, 1.09, 0.24],
+                    mountRot: [-0.08, 0.02, 0.0],
+                    shoulderPitch: [-0.98, -1.26],
+                    shoulderRoll: [0.2, -0.08],
+                    elbowPitch: [-0.82, -1.02],
+                    elbowRoll: [0.08, -0.04],
+                    recoilPush: 0.055,
+                    recoilPitch: 0.18,
+                    aimPitch: 0.28,
+                    headPitch: 0.5,
+                    bob: 0.42,
+                    strafeRoll: 0.07,
+                    upperYaw: 0.05,
+                    headYaw: 0.06,
+                    armSwing: 0.08,
+                    weaponSwing: 0.035,
+                },
+                shotgun: {
+                    mountPos: [0.05, 1.1, 0.3],
+                    mountRot: [-0.03, -0.02, 0.0],
+                    shoulderPitch: [-1.08, -1.34],
+                    shoulderRoll: [0.14, -0.16],
+                    elbowPitch: [-0.94, -1.16],
+                    elbowRoll: [0.04, -0.08],
+                    recoilPush: 0.065,
+                    recoilPitch: 0.14,
+                    aimPitch: 0.24,
+                    headPitch: 0.44,
+                    bob: 0.3,
+                    strafeRoll: 0.06,
+                    upperYaw: 0.04,
+                    headYaw: 0.05,
+                    armSwing: 0.05,
+                    weaponSwing: 0.026,
+                },
+                sniper: {
+                    mountPos: [0.03, 1.12, 0.35],
+                    mountRot: [-0.04, -0.03, 0.0],
+                    shoulderPitch: [-1.0, -1.28],
+                    shoulderRoll: [0.12, -0.14],
+                    elbowPitch: [-0.86, -1.08],
+                    elbowRoll: [0.02, -0.07],
+                    recoilPush: 0.05,
+                    recoilPitch: 0.1,
+                    aimPitch: 0.22,
+                    headPitch: 0.38,
+                    bob: 0.22,
+                    strafeRoll: 0.05,
+                    upperYaw: 0.03,
+                    headYaw: 0.04,
+                    armSwing: 0.03,
+                    weaponSwing: 0.018,
+                },
+                bazooka: {
+                    mountPos: [0.02, 1.16, 0.32],
+                    mountRot: [-0.09, -0.05, 0.0],
+                    shoulderPitch: [-0.96, -1.16],
+                    shoulderRoll: [0.1, -0.2],
+                    elbowPitch: [-0.7, -0.94],
+                    elbowRoll: [0.0, -0.08],
+                    recoilPush: 0.04,
+                    recoilPitch: 0.08,
+                    aimPitch: 0.16,
+                    headPitch: 0.3,
+                    bob: 0.18,
+                    strafeRoll: 0.04,
+                    upperYaw: 0.02,
+                    headYaw: 0.03,
+                    armSwing: 0.02,
+                    weaponSwing: 0.016,
+                },
+            };
+            const getRemoteWeaponPoseProfile = (weaponId) =>
+                remoteWeaponPoseProfiles[weaponId] ||
+                remoteWeaponPoseProfiles.revolver;
+
+            const setRemoteWeaponVisual = (weaponId) => {
+                const nextWeaponId =
+                    weaponId === "fists" || remoteWeaponModels.has(weaponId)
+                        ? weaponId
+                        : "revolver";
+                if (nextWeaponId === remoteDisplayedWeaponId) return;
+
+                remoteDisplayedWeaponId = nextWeaponId;
+                remoteWeaponMount.visible = nextWeaponId !== "fists";
+                for (const [id, model] of remoteWeaponModels) {
+                    model.visible = id === nextWeaponId;
+                }
+            };
+
+            setRemoteWeaponVisual(remoteTargetWeaponId);
 
             // ── Kill Feed ──
             const killFeedEntries = [];
@@ -13460,24 +14401,10 @@
                 );
 
                 if (weaponDef.fireType === "melee") {
-                    doMeleeStrike(
-                        weaponDef.range,
-                        weaponDef,
-                        tempOrigin,
-                        tempShootDir,
-                        remotePlayerGroup,
-                    );
                     return;
                 }
 
                 if (weaponDef.fireType === "hitscan") {
-                    doHitscanRay(
-                        tempOrigin,
-                        tempShootDir,
-                        weaponDef.range,
-                        weaponDef,
-                        remotePlayerGroup,
-                    );
                     return;
                 }
 
@@ -13486,6 +14413,13 @@
                         weaponDef,
                         tempShootDir,
                         tempOrigin,
+                        {
+                            ownerPlayerId: msg.attackerId,
+                            projectileId: Number.isInteger(msg.projectileId)
+                                ? msg.projectileId
+                                : null,
+                            syncExplosionFromNetwork: true,
+                        },
                     );
                 }
             };
@@ -13598,15 +14532,16 @@
                             getStableArenaSpawn(enemy.id),
                             enemy.id,
                         );
-                        remoteTargetPos.set(
-                            enemySpawn.x,
-                            enemySpawn.y,
-                            enemySpawn.z,
+                        seedRemoteSnapshot(
+                            enemySpawn,
+                            enemy.velocity,
+                            Number(enemy.rotation?.x) || 0,
+                            Number(enemy.rotation?.y) || 0,
+                            typeof enemy.weaponId === "string"
+                                ? enemy.weaponId
+                                : remoteTargetWeaponId,
+                            enemy.alive !== false,
                         );
-                        remoteTargetVelY = Number(enemy.velocity?.y) || 0;
-                        remotePlayerGroup.position.copy(remoteTargetPos);
-                        remotePlayerGroup.visible = enemy.alive !== false;
-                        remoteConnected = true;
                     }
                 });
 
@@ -13616,49 +14551,119 @@
                         msg.spawnPos,
                         msg.playerId,
                     );
-                    remoteTargetPos.set(
-                        enemySpawn.x,
-                        enemySpawn.y,
-                        enemySpawn.z,
+                    remoteTargetWeaponId = "revolver";
+                    seedRemoteSnapshot(
+                        enemySpawn,
+                        null,
+                        0,
+                        0,
+                        remoteTargetWeaponId,
+                        true,
                     );
-                    remoteTargetVelY = 0;
-                    remotePlayerGroup.position.copy(remoteTargetPos);
-                    remotePlayerGroup.visible = true;
-                    remoteConnected = true;
                 });
 
                 netClient.onPlayerLeft((msg) => {
                     console.log(`[Net] Enemy Player ${msg.playerId} left`);
+                    clearRemoteSnapshotBuffer();
                     remotePlayerGroup.visible = false;
+                    remoteTargetVel.set(0, 0, 0);
+                    remoteTargetRotX = 0;
+                    remoteTargetRotY = 0;
+                    remoteTargetVelY = 0;
                     remoteConnected = false;
                 });
 
                 netClient.onFire((msg) => {
+                    if (
+                        msg &&
+                        msg.attackerId !== localPlayerId &&
+                        typeof msg.weaponId === "string"
+                    ) {
+                        remoteTargetWeaponId = msg.weaponId;
+                        remoteFireKick = 1;
+                    }
                     playRemoteFireEffect(msg);
                 });
 
-                netClient.onState((players) => {
+                netClient.onExplosion((msg) => {
+                    const attackerId = Number.isInteger(msg?.attackerId)
+                        ? msg.attackerId
+                        : -1;
+                    const projectileId = Number.isInteger(msg?.projectileId)
+                        ? msg.projectileId
+                        : null;
+                    consumePendingLocalExplosion(
+                        attackerId,
+                        projectileId,
+                    );
+
+                    if (projectileId != null) {
+                        disposeSyncedProjectile(attackerId, projectileId);
+                    }
+
+                    const px = Number(msg?.position?.x);
+                    const py = Number(msg?.position?.y);
+                    const pz = Number(msg?.position?.z);
+                    if (
+                        !Number.isFinite(px) ||
+                        !Number.isFinite(py) ||
+                        !Number.isFinite(pz)
+                    ) {
+                        return;
+                    }
+
+                    const nx = Number(msg?.normal?.x);
+                    const ny = Number(msg?.normal?.y);
+                    const nz = Number(msg?.normal?.z);
+                    tempOrigin.set(px, py, pz);
+                    tempNormal.set(
+                        Number.isFinite(nx) ? nx : 0,
+                        Number.isFinite(ny) ? ny : 1,
+                        Number.isFinite(nz) ? nz : 0,
+                    );
+                    if (tempNormal.lengthSq() < 0.0001) {
+                        tempNormal.set(0, 1, 0);
+                    } else {
+                        tempNormal.normalize();
+                    }
+
+                    applyProjectileExplosionAt(
+                        tempOrigin,
+                        tempNormal,
+                        Math.max(0.1, Number(msg?.radius) || 0),
+                        Number(msg?.structureDamage) || Number(msg?.damage) || 0,
+                        Number(msg?.damage) || 0,
+                        Number(msg?.impulseForce) || 0,
+                        tempNormal,
+                    );
+                });
+
+                netClient.onTerrainImpact((msg) => {
+                    applyReplicatedTerrainImpact(msg);
+                });
+
+                netClient.onState((players, stateMsg) => {
+                    const stateServerTimeMs = Number(stateMsg?.serverTimeMs);
+                    const stateServerTickMs = Number(stateMsg?.serverTickMs);
+                    updateServerClockSync(stateServerTimeMs);
+                    if (Number.isFinite(stateServerTickMs) && stateServerTickMs > 0) {
+                        remoteSnapshotBackTimeMs = THREE.MathUtils.clamp(
+                            stateServerTickMs * 2.5,
+                            80,
+                            140,
+                        );
+                    }
+
                     for (const p of players) {
                         if (p.id === localPlayerId) {
                             // Server-authoritative HP sync
                             localPlayerHp = p.hp;
                             setLocalAliveState(p.alive);
                         } else {
-                            // Remote player position update
-                            const remoteSpawn = normalizeLanWorldPosition(
-                                p.position,
-                                remoteTargetPos,
-                                p.id,
+                            queueRemoteSnapshot(
+                                p,
+                                stateServerTimeMs,
                             );
-                            remoteTargetPos.set(
-                                remoteSpawn.x,
-                                remoteSpawn.y,
-                                remoteSpawn.z,
-                            );
-                            remoteTargetVelY = Number(p.velocity?.y) || 0;
-                            remoteTargetRotY = p.rotation.y || 0;
-                            remotePlayerGroup.visible = p.alive;
-                            remoteConnected = true;
                         }
                     }
                 });
@@ -13681,6 +14686,11 @@
                     if (msg.victimId === localPlayerId) {
                         setLocalAliveState(false);
                         localPlayerHp = 0;
+                    } else {
+                        clearRemoteSnapshotBuffer();
+                        remotePlayerGroup.visible = false;
+                        remoteTargetVel.set(0, 0, 0);
+                        remoteTargetVelY = 0;
                     }
                 });
 
@@ -13701,19 +14711,27 @@
                             msg.spawnPos,
                             msg.playerId,
                         );
-                        remoteTargetPos.set(
-                            enemySpawn.x,
-                            enemySpawn.y,
-                            enemySpawn.z,
+                        seedRemoteSnapshot(
+                            enemySpawn,
+                            null,
+                            0,
+                            0,
+                            remoteTargetWeaponId,
+                            true,
                         );
-                        remoteTargetVelY = 0;
-                        remotePlayerGroup.position.copy(remoteTargetPos);
-                        remotePlayerGroup.visible = true;
                     }
                 });
 
                 netClient.onClose(() => {
+                    pendingLocalExplosionKeys.clear();
+                    pendingLocalTerrainImpactKeys.clear();
+                    clearRemoteSnapshotBuffer();
+                    serverClockSynced = false;
+                    dynamicTerrainSyncedMotion = false;
                     remotePlayerGroup.visible = false;
+                    remoteTargetVel.set(0, 0, 0);
+                    remoteTargetRotX = 0;
+                    remoteTargetRotY = 0;
                     remoteTargetVelY = 0;
                     remoteConnected = false;
                 });
@@ -13736,59 +14754,282 @@
             const updateNetworkFrame = (dt) => {
                 if (!netClient || !netClient.connected) return;
 
-                // Interpolate remote player position
+                // Sample buffered remote player state
                 if (remoteConnected && remotePlayerGroup.visible) {
+                    const remoteSample = sampleRemoteState();
+                    if (remoteSample) {
+                        applyRemoteStateSample(remoteSample);
+                    }
+
+                    if (remoteDisplayedWeaponId !== remoteTargetWeaponId) {
+                        setRemoteWeaponVisual(remoteTargetWeaponId);
+                    }
+
+                    tempRemoteDisplayPos.copy(remoteTargetPos);
                     const remoteGroundDelta = getEntityMovingGroundDelta(
-                        remotePlayerGroup.position,
+                        tempRemoteDisplayPos,
                         remoteSupportRadius,
-                        remotePlayerGroup.position.y,
+                        tempRemoteDisplayPos.y,
                     );
                     if (Math.abs(remoteGroundDelta) > 0.00001) {
-                        remotePlayerGroup.position.y += remoteGroundDelta;
-                        remoteTargetPos.y += remoteGroundDelta;
+                        tempRemoteDisplayPos.y += remoteGroundDelta;
                     }
 
                     const remoteGroundY = findEntityGroundY(
-                        remotePlayerGroup.position,
+                        tempRemoteDisplayPos,
                         remoteSupportRadius,
-                        remotePlayerGroup.position.y,
+                        tempRemoteDisplayPos.y,
                     );
                     const remoteShouldPlantFeet =
                         Math.abs(remoteTargetVelY) <= 1.35 &&
-                        remoteTargetPos.y <= remoteGroundY + 0.42;
+                        tempRemoteDisplayPos.y <= remoteGroundY + 0.42;
                     if (remoteShouldPlantFeet) {
-                        remotePlayerGroup.position.y = Math.max(
-                            remotePlayerGroup.position.y,
-                            remoteGroundY,
-                        );
-                        remoteTargetPos.y = Math.max(
-                            remoteTargetPos.y,
-                            remoteGroundY,
-                        );
+                        tempRemoteDisplayPos.y = remoteGroundY;
                     }
 
-                    const horizontalLerpFactor = 1 - Math.exp(-12 * dt);
-                    const verticalLerpFactor = 1 - Math.exp(-22 * dt);
-                    remotePlayerGroup.position.x = THREE.MathUtils.lerp(
-                        remotePlayerGroup.position.x,
-                        remoteTargetPos.x,
-                        horizontalLerpFactor,
+                    remotePlayerGroup.position.copy(tempRemoteDisplayPos);
+                    remotePlayerGroup.rotation.y =
+                        remoteTargetRotY + remoteVisualYawOffset;
+
+                    const poseLerp = 1 - Math.exp(-16 * dt);
+                    const remoteHorizontalSpeed = Math.hypot(
+                        remoteTargetVel.x,
+                        remoteTargetVel.z,
                     );
-                    remotePlayerGroup.position.y = THREE.MathUtils.lerp(
-                        remotePlayerGroup.position.y,
-                        remoteTargetPos.y,
-                        verticalLerpFactor,
+                    remoteFireKick = Math.max(0, remoteFireKick - dt * 8.5);
+                    const remoteRecoil = remoteFireKick * remoteFireKick;
+                    const remoteMoveBlend = THREE.MathUtils.clamp(
+                        remoteHorizontalSpeed /
+                            Math.max(0.001, sprintGroundSpeed),
+                        0,
+                        1,
                     );
-                    remotePlayerGroup.position.z = THREE.MathUtils.lerp(
-                        remotePlayerGroup.position.z,
-                        remoteTargetPos.z,
-                        horizontalLerpFactor,
+                    remoteAnimTime += dt * (2.4 + remoteHorizontalSpeed * 0.85);
+                    const stride =
+                        Math.sin(remoteAnimTime) *
+                        (0.62 + remoteMoveBlend * 0.08) *
+                        remoteMoveBlend;
+                    const bodyBob =
+                        Math.abs(Math.sin(remoteAnimTime * 2)) *
+                        0.035 *
+                        remoteMoveBlend;
+                    const poseProfile = getRemoteWeaponPoseProfile(
+                        remoteDisplayedWeaponId,
                     );
-                    // Rotate remote player body to face their look direction
-                    remotePlayerGroup.rotation.y = THREE.MathUtils.lerp(
-                        remotePlayerGroup.rotation.y,
-                        remoteTargetRotY,
-                        horizontalLerpFactor,
+                    const remoteFacingYaw = remotePlayerGroup.rotation.y;
+                    const remoteForwardX = Math.sin(remoteFacingYaw);
+                    const remoteForwardZ = Math.cos(remoteFacingYaw);
+                    const remoteRightX = Math.cos(remoteFacingYaw);
+                    const remoteRightZ = -Math.sin(remoteFacingYaw);
+                    const forwardBlend = THREE.MathUtils.clamp(
+                        (remoteTargetVel.x * remoteForwardX +
+                            remoteTargetVel.z * remoteForwardZ) /
+                            Math.max(0.001, sprintGroundSpeed),
+                        -1,
+                        1,
+                    );
+                    const strafeBlend = THREE.MathUtils.clamp(
+                        (remoteTargetVel.x * remoteRightX +
+                            remoteTargetVel.z * remoteRightZ) /
+                            Math.max(0.001, sprintGroundSpeed),
+                        -1,
+                        1,
+                    );
+                    const upperPitch = THREE.MathUtils.clamp(
+                        -remoteTargetRotX * poseProfile.aimPitch,
+                        -0.28,
+                        0.32,
+                    );
+                    const headPitch = THREE.MathUtils.clamp(
+                        -remoteTargetRotX * poseProfile.headPitch,
+                        -0.42,
+                        0.48,
+                    );
+                    const bodyRoll =
+                        Math.sin(remoteAnimTime) * 0.032 * remoteMoveBlend +
+                        strafeBlend * poseProfile.strafeRoll;
+                    const upperYaw =
+                        -strafeBlend * poseProfile.upperYaw +
+                        forwardBlend * 0.02 * remoteMoveBlend;
+                    const headYaw = -strafeBlend * poseProfile.headYaw;
+                    const legSplay = 0.035 + Math.abs(strafeBlend) * 0.04;
+                    const isMeleePose = remoteDisplayedWeaponId === "fists";
+
+                    remoteLeftLegPivot.rotation.x = THREE.MathUtils.lerp(
+                        remoteLeftLegPivot.rotation.x,
+                        stride,
+                        poseLerp,
+                    );
+                    remoteRightLegPivot.rotation.x = THREE.MathUtils.lerp(
+                        remoteRightLegPivot.rotation.x,
+                        -stride,
+                        poseLerp,
+                    );
+                    remoteLeftLegPivot.rotation.z = THREE.MathUtils.lerp(
+                        remoteLeftLegPivot.rotation.z,
+                        legSplay,
+                        poseLerp,
+                    );
+                    remoteRightLegPivot.rotation.z = THREE.MathUtils.lerp(
+                        remoteRightLegPivot.rotation.z,
+                        -legSplay,
+                        poseLerp,
+                    );
+                    remoteUpperBodyGroup.position.y = THREE.MathUtils.lerp(
+                        remoteUpperBodyGroup.position.y,
+                        bodyBob * poseProfile.bob,
+                        poseLerp,
+                    );
+                    remoteUpperBodyGroup.rotation.x = THREE.MathUtils.lerp(
+                        remoteUpperBodyGroup.rotation.x,
+                        upperPitch,
+                        poseLerp,
+                    );
+                    remoteUpperBodyGroup.rotation.y = THREE.MathUtils.lerp(
+                        remoteUpperBodyGroup.rotation.y,
+                        upperYaw,
+                        poseLerp,
+                    );
+                    remoteUpperBodyGroup.rotation.z = THREE.MathUtils.lerp(
+                        remoteUpperBodyGroup.rotation.z,
+                        bodyRoll,
+                        poseLerp,
+                    );
+                    remoteHeadPivot.rotation.x = THREE.MathUtils.lerp(
+                        remoteHeadPivot.rotation.x,
+                        headPitch,
+                        poseLerp,
+                    );
+                    remoteHeadPivot.rotation.y = THREE.MathUtils.lerp(
+                        remoteHeadPivot.rotation.y,
+                        headYaw,
+                        poseLerp,
+                    );
+                    remoteHeadPivot.rotation.z = THREE.MathUtils.lerp(
+                        remoteHeadPivot.rotation.z,
+                        -bodyRoll * 0.65,
+                        poseLerp,
+                    );
+
+                    const armSwing = stride * poseProfile.armSwing;
+                    let leftArmTargetX =
+                        poseProfile.shoulderPitch[0] -
+                        upperPitch * 0.32 -
+                        armSwing;
+                    let rightArmTargetX =
+                        poseProfile.shoulderPitch[1] -
+                        upperPitch * 0.22 +
+                        armSwing * 0.35;
+                    let leftArmTargetZ =
+                        poseProfile.shoulderRoll[0] + bodyRoll * 0.4;
+                    let rightArmTargetZ =
+                        poseProfile.shoulderRoll[1] + bodyRoll * 0.4;
+                    let leftElbowTargetX =
+                        poseProfile.elbowPitch[0] -
+                        upperPitch * 0.18 -
+                        remoteRecoil * poseProfile.recoilPitch * 0.2;
+                    let rightElbowTargetX =
+                        poseProfile.elbowPitch[1] -
+                        upperPitch * 0.18 -
+                        remoteRecoil * poseProfile.recoilPitch * 0.35;
+                    let leftElbowTargetZ =
+                        poseProfile.elbowRoll[0] + strafeBlend * 0.03;
+                    let rightElbowTargetZ =
+                        poseProfile.elbowRoll[1] + strafeBlend * 0.03;
+                    let weaponMountTargetX =
+                        poseProfile.mountPos[0] -
+                        strafeBlend * poseProfile.weaponSwing;
+                    let weaponMountTargetY =
+                        poseProfile.mountPos[1] + bodyBob * poseProfile.bob;
+                    let weaponMountTargetZ =
+                        poseProfile.mountPos[2] -
+                        remoteRecoil * poseProfile.recoilPush +
+                        Math.max(0, -forwardBlend) * 0.01 * remoteMoveBlend;
+                    let weaponRotX =
+                        poseProfile.mountRot[0] -
+                        upperPitch * 0.32 -
+                        remoteRecoil * poseProfile.recoilPitch;
+                    let weaponRotY =
+                        poseProfile.mountRot[1] -
+                        strafeBlend * poseProfile.upperYaw * 0.8;
+                    let weaponRotZ =
+                        poseProfile.mountRot[2] - bodyRoll * 0.55;
+
+                    if (isMeleePose) {
+                        leftElbowTargetX -= stride * 0.24;
+                        rightElbowTargetX += stride * 0.24;
+                        weaponMountTargetY -= 0.03;
+                    }
+
+                    remoteLeftArmPivot.rotation.x = THREE.MathUtils.lerp(
+                        remoteLeftArmPivot.rotation.x,
+                        leftArmTargetX,
+                        poseLerp,
+                    );
+                    remoteRightArmPivot.rotation.x = THREE.MathUtils.lerp(
+                        remoteRightArmPivot.rotation.x,
+                        rightArmTargetX,
+                        poseLerp,
+                    );
+                    remoteLeftArmPivot.rotation.z = THREE.MathUtils.lerp(
+                        remoteLeftArmPivot.rotation.z,
+                        leftArmTargetZ,
+                        poseLerp,
+                    );
+                    remoteRightArmPivot.rotation.z = THREE.MathUtils.lerp(
+                        remoteRightArmPivot.rotation.z,
+                        rightArmTargetZ,
+                        poseLerp,
+                    );
+                    remoteLeftElbowPivot.rotation.x = THREE.MathUtils.lerp(
+                        remoteLeftElbowPivot.rotation.x,
+                        leftElbowTargetX,
+                        poseLerp,
+                    );
+                    remoteRightElbowPivot.rotation.x = THREE.MathUtils.lerp(
+                        remoteRightElbowPivot.rotation.x,
+                        rightElbowTargetX,
+                        poseLerp,
+                    );
+                    remoteLeftElbowPivot.rotation.z = THREE.MathUtils.lerp(
+                        remoteLeftElbowPivot.rotation.z,
+                        leftElbowTargetZ,
+                        poseLerp,
+                    );
+                    remoteRightElbowPivot.rotation.z = THREE.MathUtils.lerp(
+                        remoteRightElbowPivot.rotation.z,
+                        rightElbowTargetZ,
+                        poseLerp,
+                    );
+                    remoteWeaponMount.position.x = THREE.MathUtils.lerp(
+                        remoteWeaponMount.position.x,
+                        weaponMountTargetX,
+                        poseLerp,
+                    );
+                    remoteWeaponMount.position.y = THREE.MathUtils.lerp(
+                        remoteWeaponMount.position.y,
+                        weaponMountTargetY,
+                        poseLerp,
+                    );
+                    remoteWeaponMount.position.z = THREE.MathUtils.lerp(
+                        remoteWeaponMount.position.z,
+                        weaponMountTargetZ,
+                        poseLerp,
+                    );
+                    remoteWeaponMount.rotation.x = THREE.MathUtils.lerp(
+                        remoteWeaponMount.rotation.x,
+                        weaponRotX,
+                        poseLerp,
+                    );
+                    remoteWeaponMount.rotation.y = THREE.MathUtils.lerp(
+                        remoteWeaponMount.rotation.y,
+                        weaponRotY,
+                        poseLerp,
+                    );
+                    remoteWeaponMount.rotation.z = THREE.MathUtils.lerp(
+                        remoteWeaponMount.rotation.z,
+                        weaponRotZ,
+                        poseLerp,
                     );
                 }
 
